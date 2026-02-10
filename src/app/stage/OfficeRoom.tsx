@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { useTimeOfDay, useInterval, useSystemStats } from './hooks';
+import { AGENTS } from '@/lib/agents';
 
 // ─── Types ───
 
@@ -31,27 +32,42 @@ interface OfficeAgent {
 const CANVAS_W = 800;
 const CANVAS_H = 320;
 
+// Skin tones for visual variety
+const SKIN_TONES: Record<string, string> = {
+    chora: '#f0d0b0',
+    subrosa: '#e8c8a0',
+    thaum: '#d4a880',
+    praxis: '#e8d0a0',
+};
+
 const AGENT_CONFIGS = [
     {
-        id: 'opus',
-        name: 'Opus',
-        color: '#a78bfa',
-        skinColor: '#f0d0b0',
-        startX: 160,
+        id: 'chora',
+        name: AGENTS.chora.displayName,
+        color: AGENTS.chora.color,
+        skinColor: SKIN_TONES.chora,
+        startX: 120,
     },
     {
-        id: 'brain',
-        name: 'Brain',
-        color: '#22d3ee',
-        skinColor: '#e8c8a0',
-        startX: 400,
+        id: 'subrosa',
+        name: AGENTS.subrosa.displayName,
+        color: AGENTS.subrosa.color,
+        skinColor: SKIN_TONES.subrosa,
+        startX: 360,
     },
     {
-        id: 'observer',
-        name: 'Observer',
-        color: '#fbbf24',
-        skinColor: '#d4a880',
-        startX: 620,
+        id: 'thaum',
+        name: AGENTS.thaum.displayName,
+        color: AGENTS.thaum.color,
+        skinColor: SKIN_TONES.thaum,
+        startX: 540,
+    },
+    {
+        id: 'praxis',
+        name: AGENTS.praxis.displayName,
+        color: AGENTS.praxis.color,
+        skinColor: SKIN_TONES.praxis,
+        startX: 720,
     },
 ];
 
@@ -296,7 +312,7 @@ function OfficeFurniture({ period }: { period: 'day' | 'dusk' | 'night' }) {
             />
 
             {/* Desks */}
-            {[130, 370, 590].map((dx, i) => (
+            {[90, 330, 510, 750].map((dx, i) => (
                 <g key={i}>
                     <rect
                         x={dx - 25}
@@ -363,7 +379,7 @@ function OfficeFurniture({ period }: { period: 'day' | 'dusk' | 'night' }) {
             <circle cx={730} cy={248} r={2} fill='#ff6644' opacity={0.6} />
 
             {/* Ceiling lights */}
-            {[200, 400, 600].map(lx => (
+            {[150, 350, 550, 750].map(lx => (
                 <g key={lx}>
                     <rect
                         x={lx - 15}

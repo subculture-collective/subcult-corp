@@ -1,6 +1,0 @@
-py-clob-client
-requests
-rich
-typer
-questionary
-web3

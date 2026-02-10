@@ -1,9 +1,8 @@
-// Seed roundtable policy — conversation schedule and controls
+// Seed roundtable policy — conversation schedule and controls for OpenClaw agents
 // Run: node scripts/go-live/seed-roundtable-policy.mjs
 //
-// This seeds/updates the roundtable_policy in ops_policy
-// with conservative defaults. The roundtable system starts DISABLED.
-// Enable it once the heartbeat + workers loop is healthy.
+// Configures the roundtable conversation system for: Chora, Subrosa, Thaum, Praxis (+ Mux coordination)
+// The roundtable system starts DISABLED. Enable once heartbeat + workers loop is healthy.
 
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';

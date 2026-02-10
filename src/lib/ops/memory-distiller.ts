@@ -240,7 +240,7 @@ Respond with a JSON object (no markdown, no explanation):
 {
   "memories": [
     {
-      "agent_id": "opus",
+      "agent_id": "chora",
       "type": "insight",
       "content": "Brief description of the insight",
       "confidence": 0.75,
@@ -249,7 +249,7 @@ Respond with a JSON object (no markdown, no explanation):
   ],
   "pairwise_drift": [
     {
-      "agent_a": "brain",
+      "agent_a": "chora",
       "agent_b": "opus",
       "drift": 0.01,
       "reason": "aligned on priorities"

@@ -3,7 +3,8 @@
 
 import { useState, useCallback } from 'react';
 import { useMissionEvents } from './hooks';
-import type { AgentEvent } from '@/lib/types';
+import type { AgentEvent, AgentId } from '@/lib/types';
+import { AGENTS } from '@/lib/agents';
 
 const PLAYBACK_SPEED_MS = 2000;
 
@@ -35,20 +36,6 @@ function usePlaybackTimer(
     }, [playing, step, total]);
 }
 
-const AGENT_COLORS: Record<string, string> = {
-    opus: 'border-violet-400/40 bg-violet-400/5',
-    brain: 'border-cyan-400/40 bg-cyan-400/5',
-    observer: 'border-amber-400/40 bg-amber-400/5',
-    system: 'border-zinc-600 bg-zinc-800/50',
-};
-
-const AGENT_TEXT: Record<string, string> = {
-    opus: 'text-violet-400',
-    brain: 'text-cyan-400',
-    observer: 'text-amber-400',
-    system: 'text-zinc-400',
-};
-
 function formatTime(dateStr: string): string {
     return new Date(dateStr).toLocaleTimeString('en-US', {
         hour: '2-digit',
@@ -71,8 +58,9 @@ function Timeline({
             {events.map((event, i) => {
                 const isActive = i === current;
                 const isPast = i < current;
+                const agentId = event.agent_id as AgentId;
                 const agentColor =
-                    AGENT_TEXT[event.agent_id] ?? 'text-zinc-500';
+                    AGENTS[agentId]?.tailwindTextColor ?? 'text-zinc-500';
 
                 return (
                     <button
@@ -104,8 +92,10 @@ function Timeline({
 }
 
 function StepDetail({ event }: { event: AgentEvent }) {
-    const borderColor = AGENT_COLORS[event.agent_id] ?? AGENT_COLORS.system;
-    const textColor = AGENT_TEXT[event.agent_id] ?? AGENT_TEXT.system;
+    const agentId = event.agent_id as AgentId;
+    const borderColor =
+        AGENTS[agentId]?.tailwindBorderBg ?? 'border-zinc-600 bg-zinc-800/50';
+    const textColor = AGENTS[agentId]?.tailwindTextColor ?? 'text-zinc-400';
 
     return (
         <div className={`rounded-lg border p-4 transition-all ${borderColor}`}>

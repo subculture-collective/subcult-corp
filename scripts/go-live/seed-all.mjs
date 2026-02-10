@@ -11,6 +11,7 @@ import { existsSync } from 'fs';
 const SCRIPTS_DIR = new URL('./', import.meta.url).pathname;
 
 const scripts = [
+    { file: 'seed-agent-registry.mjs', desc: 'Agent registry (OpenClaw personalities)' },
     { file: 'seed-ops-policy.mjs', desc: 'Core policies' },
     {
         file: 'seed-trigger-rules.mjs',

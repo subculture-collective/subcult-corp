@@ -1,7 +1,7 @@
 // Seed agent relationships into ops_agent_relationships
 // Run: node scripts/go-live/seed-relationships.mjs
 //
-// 3 agents = 3 pairwise relationships
+// 5 OpenClaw agents = 10 pairwise relationships (Chora, Subrosa, Thaum, Praxis, Mux)
 // agent_a < agent_b (alphabetical) — enforced by CHECK constraint
 
 import { createClient } from '@supabase/supabase-js';
@@ -14,9 +14,28 @@ const sb = createClient(
 );
 
 const relationships = [
+    // ─── Chora (analyst) relationships ───
     {
-        agent_a: 'brain', // alphabetical: brain < opus
-        agent_b: 'opus',
+        agent_a: 'chora',
+        agent_b: 'mux',
+        affinity: 0.7,
+        total_interactions: 0,
+        positive_interactions: 0,
+        negative_interactions: 0,
+        drift_log: [],
+    },
+    {
+        agent_a: 'chora',
+        agent_b: 'praxis',
+        affinity: 0.85,
+        total_interactions: 0,
+        positive_interactions: 0,
+        negative_interactions: 0,
+        drift_log: [],
+    },
+    {
+        agent_a: 'chora',
+        agent_b: 'subrosa',
         affinity: 0.8,
         total_interactions: 0,
         positive_interactions: 0,
@@ -24,18 +43,69 @@ const relationships = [
         drift_log: [],
     },
     {
-        agent_a: 'brain', // alphabetical: brain < observer
-        agent_b: 'observer',
-        affinity: 0.8,
+        agent_a: 'chora',
+        agent_b: 'thaum',
+        affinity: 0.7,
+        total_interactions: 0,
+        positive_interactions: 0,
+        negative_interactions: 0,
+        drift_log: [],
+    },
+
+    // ─── Subrosa (protector) relationships ───
+    {
+        agent_a: 'mux',
+        agent_b: 'subrosa',
+        affinity: 0.75,
         total_interactions: 0,
         positive_interactions: 0,
         negative_interactions: 0,
         drift_log: [],
     },
     {
-        agent_a: 'observer', // alphabetical: observer < opus
-        agent_b: 'opus',
-        affinity: 0.5,
+        agent_a: 'praxis',
+        agent_b: 'subrosa',
+        affinity: 0.9,
+        total_interactions: 0,
+        positive_interactions: 0,
+        negative_interactions: 0,
+        drift_log: [],
+    },
+    {
+        agent_a: 'subrosa',
+        agent_b: 'thaum',
+        affinity: 0.6,
+        total_interactions: 0,
+        positive_interactions: 0,
+        negative_interactions: 0,
+        drift_log: [],
+    },
+
+    // ─── Thaum (innovator) relationships ───
+    {
+        agent_a: 'mux',
+        agent_b: 'thaum',
+        affinity: 0.65,
+        total_interactions: 0,
+        positive_interactions: 0,
+        negative_interactions: 0,
+        drift_log: [],
+    },
+    {
+        agent_a: 'praxis',
+        agent_b: 'thaum',
+        affinity: 0.75,
+        total_interactions: 0,
+        positive_interactions: 0,
+        negative_interactions: 0,
+        drift_log: [],
+    },
+
+    // ─── Praxis (executor) / Mux (dispatcher) ───
+    {
+        agent_a: 'mux',
+        agent_b: 'praxis',
+        affinity: 0.8,
         total_interactions: 0,
         positive_interactions: 0,
         negative_interactions: 0,
@@ -44,9 +114,13 @@ const relationships = [
 ];
 
 // Backstory context (for reference — not stored in DB):
-// brain ↔ opus:     0.80 — most trusted advisor, tight coordination
-// brain ↔ observer: 0.80 — research partners, closest allies
-// observer ↔ opus:  0.50 — neutral, coordinator vs. monitor dynamic
+// Chora ↔ Praxis:    0.85 — legibility → action (core pipeline)
+// Praxis ↔ Subrosa:  0.90 — execution requires safety approval
+// Chora ↔ Subrosa:   0.80 — analysis informs risk assessment
+// Thaum ↔ Praxis:    0.75 — disruption → owned action
+// Thaum ↔ Subrosa:   0.60 — tension: innovation vs. safety
+// Chora ↔ Thaum:     0.70 — analysis can become stagnant
+// Mux:               0.65–0.80 — dispatcher coordinates all, neutral stance
 
 async function seed() {
     console.log('Seeding agent relationships...\n');

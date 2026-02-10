@@ -3,14 +3,10 @@
 
 import { useSystemStats, type SystemStats } from './hooks';
 import { StatsBarSkeleton } from './StageSkeletons';
+import { AGENTS } from '@/lib/agents';
+import type { AgentId } from '@/lib/types';
 
 export type ViewMode = 'feed' | 'missions' | 'office';
-
-const AGENT_COLORS: Record<string, string> = {
-    opus: 'text-violet-400',
-    brain: 'text-cyan-400',
-    observer: 'text-amber-400',
-};
 
 function StatCard({ label, value }: { label: string; value: number | string }) {
     return (
@@ -94,14 +90,20 @@ function StatsBar({ stats }: { stats: SystemStats }) {
                 </div>
                 <div className='flex gap-3 mt-1'>
                     {Object.entries(stats.agentMemories).map(
-                        ([agent, count]) => (
-                            <span
-                                key={agent}
-                                className={`text-xs font-medium ${AGENT_COLORS[agent] ?? 'text-zinc-400'}`}
-                            >
-                                {agent}: {count}
-                            </span>
-                        ),
+                        ([agent, count]) => {
+                            const agentId = agent as AgentId;
+                            const color =
+                                AGENTS[agentId]?.tailwindTextColor ??
+                                'text-zinc-400';
+                            return (
+                                <span
+                                    key={agent}
+                                    className={`text-xs font-medium ${color}`}
+                                >
+                                    {agent}: {count}
+                                </span>
+                            );
+                        },
                     )}
                     {Object.keys(stats.agentMemories).length === 0 && (
                         <span className='text-xs text-zinc-500'>None yet</span>

@@ -2,13 +2,19 @@
 
 // ─── Agent Types ───
 
-export type AgentId = 'opus' | 'brain' | 'observer';
+export type AgentId = 'chora' | 'subrosa' | 'thaum' | 'praxis' | 'mux';
 
 export interface AgentConfig {
     id: AgentId;
     displayName: string;
     role: string;
     description: string;
+    color: string;
+    avatarKey: string;
+    pixelSpriteKey: string;
+    tailwindTextColor: string;
+    tailwindBgColor: string;
+    tailwindBorderBg: string;
 }
 
 // ─── Proposal Types ───
@@ -75,16 +81,30 @@ export interface Mission {
 // ─── Step Types ───
 
 export type StepKind =
-    | 'draft_tweet'
-    | 'post_tweet'
-    | 'crawl'
-    | 'analyze'
-    | 'write_content'
-    | 'research'
-    | 'deploy'
-    | 'review'
-    | 'summarize'
-    | 'scan_signals';
+    | 'analyze_discourse'
+    | 'scan_signals'
+    | 'research_topic'
+    | 'distill_insight'
+    | 'classify_pattern'
+    | 'trace_incentive'
+    | 'identify_assumption'
+    | 'draft_thread'
+    | 'draft_essay'
+    | 'critique_content'
+    | 'refine_narrative'
+    | 'prepare_statement'
+    | 'write_issue'
+    | 'audit_system'
+    | 'review_policy'
+    | 'consolidate_memory'
+    | 'map_dependency'
+    | 'patch_code'
+    | 'document_lesson'
+    | 'log_event'
+    | 'tag_memory'
+    | 'escalate_risk'
+    | 'convene_roundtable'
+    | 'propose_workflow';
 
 export type StepStatus =
     | 'queued'

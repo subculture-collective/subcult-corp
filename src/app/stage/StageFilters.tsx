@@ -19,12 +19,6 @@ const EVENT_KINDS = [
     { value: 'step_completed', label: 'Steps' },
 ];
 
-const AGENT_DOT_COLORS: Record<string, string> = {
-    opus: 'bg-violet-400',
-    brain: 'bg-cyan-400',
-    observer: 'bg-amber-400',
-};
-
 export function StageFilters({
     filters,
     onChange,
@@ -42,18 +36,23 @@ export function StageFilters({
                 >
                     All agents
                 </FilterButton>
-                {(Object.keys(AGENTS) as AgentId[]).map(id => (
-                    <FilterButton
-                        key={id}
-                        active={filters.agentId === id}
-                        onClick={() => onChange({ ...filters, agentId: id })}
-                    >
-                        <span
-                            className={`inline-block h-2 w-2 rounded-full ${AGENT_DOT_COLORS[id] ?? 'bg-zinc-500'}`}
-                        />
-                        {AGENTS[id].displayName}
-                    </FilterButton>
-                ))}
+                {(Object.keys(AGENTS) as AgentId[]).map(id => {
+                    const color = AGENTS[id]?.tailwindBgColor ?? 'bg-zinc-500';
+                    return (
+                        <FilterButton
+                            key={id}
+                            active={filters.agentId === id}
+                            onClick={() =>
+                                onChange({ ...filters, agentId: id })
+                            }
+                        >
+                            <span
+                                className={`inline-block h-2 w-2 rounded-full ${color}`}
+                            />
+                            {AGENTS[id].displayName}
+                        </FilterButton>
+                    );
+                })}
             </div>
 
             {/* Event kind filter */}

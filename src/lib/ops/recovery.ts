@@ -112,7 +112,7 @@ export async function maybeFinalializeMission(
 
     // Write memory from mission outcome
     if (mission) {
-        const agentId = (mission.agent_id as string) ?? 'brain';
+        const agentId = (mission.agent_id as string) ?? 'chora';
         const title = (mission.title as string) ?? 'Unknown mission';
 
         if (newStatus === 'succeeded') {

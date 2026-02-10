@@ -5,14 +5,8 @@ import { useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEvents } from './hooks';
 import { SignalFeedSkeleton } from './StageSkeletons';
-import type { AgentEvent } from '@/lib/types';
-
-const AGENT_COLORS: Record<string, string> = {
-    opus: 'text-violet-400 bg-violet-400/10 border-violet-400/20',
-    brain: 'text-cyan-400 bg-cyan-400/10 border-cyan-400/20',
-    observer: 'text-amber-400 bg-amber-400/10 border-amber-400/20',
-    system: 'text-zinc-400 bg-zinc-400/10 border-zinc-400/20',
-};
+import type { AgentEvent, AgentId } from '@/lib/types';
+import { AGENTS } from '@/lib/agents';
 
 const KIND_ICONS: Record<string, string> = {
     conversation_turn: '💬',
@@ -42,13 +36,16 @@ function formatRelativeTime(dateStr: string): string {
 }
 
 function EventRow({ event }: { event: AgentEvent }) {
-    const colorClass = AGENT_COLORS[event.agent_id] ?? AGENT_COLORS.system;
+    const agentId = event.agent_id as AgentId;
+    const textColor = AGENTS[agentId]?.tailwindTextColor ?? 'text-zinc-400';
+    const borderBg =
+        AGENTS[agentId]?.tailwindBorderBg ??
+        'border-zinc-400/20 bg-zinc-400/10';
     const icon = KIND_ICONS[event.kind] ?? KIND_ICONS.default;
-    const [textColor, bgColor, borderColor] = colorClass.split(' ');
 
     return (
         <div
-            className={`flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-zinc-800/30 ${borderColor} ${bgColor}`}
+            className={`flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-zinc-800/30 ${borderBg}`}
         >
             {/* Agent badge */}
             <div className='flex flex-col items-center gap-1 pt-0.5'>
