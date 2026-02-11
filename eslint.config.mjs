@@ -13,6 +13,24 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  // ── Structured Logging Enforcement ────────────────────────────────
+  // Ban console.* methods to enforce structured logging via @/lib/logger
+  // or scripts/lib/logger.mjs. Use logger.info(), logger.error(), etc.
+  // instead of console.log(), console.error(), etc.
+  {
+    files: ["src/**/*.{ts,tsx,js,jsx,mjs}"],
+    rules: {
+      "no-console": "error",
+    },
+  },
+  // Scripts directory: warn during transition period, will upgrade to error
+  // once all console.* calls are migrated to the logger.
+  {
+    files: ["scripts/**/*.{ts,tsx,js,jsx,mjs}"],
+    rules: {
+      "no-console": "warn",
+    },
+  },
 ]);
 
 export default eslintConfig;
