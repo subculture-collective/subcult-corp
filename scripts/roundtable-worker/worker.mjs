@@ -110,12 +110,21 @@ async function ollamaGenerate(messages, temperature, model) {
             OLLAMA_TIMEOUT_MS,
         );
 
+        // Append /no_think to last user message — disables qwen3 reasoning chain
+        // for short dialogue turns (faster, avoids empty-after-strip responses)
+        const ollamaMessages = messages.map((m, i) => {
+            if (m.role === 'user' && i === messages.length - 1) {
+                return { ...m, content: m.content + ' /no_think' };
+            }
+            return m;
+        });
+
         const response = await fetch(`${OLLAMA_BASE_URL}/v1/chat/completions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 model,
-                messages,
+                messages: ollamaMessages,
                 temperature,
                 max_tokens: 250,
             }),
