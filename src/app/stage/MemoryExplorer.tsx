@@ -408,7 +408,10 @@ function MemoryCard({
                                     </span>
                                     <button
                                         onClick={() => {
-                                            navigator.clipboard.writeText(memory.source_trace_id!);
+                                            navigator.clipboard.writeText(memory.source_trace_id!).catch(() => {
+                                                // Fallback: select the text for manual copy if clipboard API fails
+                                                // In non-secure contexts, just ignore the error silently
+                                            });
                                         }}
                                         className='text-accent-blue hover:text-accent-blue/80 font-mono text-[10px] break-all text-left underline decoration-dotted'
                                         title='Click to copy trace ID'
