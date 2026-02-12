@@ -32,6 +32,14 @@ const KIND_ICONS: Record<string, string> = {
     initiative_queued: '🧠',
     memory_stored: '🧬',
     heartbeat: '💓',
+    // OpenClaw event kinds
+    skill_execution: '🔧',
+    action_run: '▶️',
+    cron_run: '⏱️',
+    model_fallback: '⚠️',
+    alert_sent: '🔔',
+    agent_session: '🟢',
+    health_check: '🩺',
     default: '📡',
 };
 
@@ -51,6 +59,14 @@ const KIND_LABELS: Record<string, string> = {
     initiative_queued: 'Initiative Queued',
     memory_stored: 'Memory Stored',
     heartbeat: 'Heartbeat',
+    // OpenClaw event kinds
+    skill_execution: 'Skill Execution',
+    action_run: 'Action Run',
+    cron_run: 'Cron Run',
+    model_fallback: 'Model Fallback',
+    alert_sent: 'Alert Sent',
+    agent_session: 'Agent Session',
+    health_check: 'Health Check',
 };
 
 // ─── Helpers ───
@@ -88,6 +104,7 @@ function getKindSeverity(
     kind: string,
 ): 'info' | 'success' | 'warning' | 'error' {
     if (kind.includes('failed') || kind.includes('rejected')) return 'error';
+    if (kind === 'model_fallback' || kind === 'alert_sent') return 'warning';
     if (kind.includes('completed') || kind.includes('approved'))
         return 'success';
     if (kind.includes('fired') || kind.includes('started')) return 'warning';
@@ -347,7 +364,7 @@ function SessionCard({
 
 // ─── Filter Bar ───
 
-type FeedTab = 'all' | 'conversations' | 'missions' | 'system';
+type FeedTab = 'all' | 'conversations' | 'missions' | 'system' | 'openclaw';
 
 const TAB_FILTERS: Record<FeedTab, string[] | null> = {
     all: null,
@@ -376,6 +393,16 @@ const TAB_FILTERS: Record<FeedTab, string[] | null> = {
         'memory_stored',
         'memory_consolidated',
         'heartbeat',
+        'health_check',
+    ],
+    openclaw: [
+        'skill_execution',
+        'action_run',
+        'cron_run',
+        'model_fallback',
+        'alert_sent',
+        'agent_session',
+        'health_check',
     ],
 };
 
@@ -391,6 +418,7 @@ function FeedTabs({
         { key: 'conversations', label: 'Conversations', icon: '💬' },
         { key: 'missions', label: 'Missions', icon: '🎯' },
         { key: 'system', label: 'System', icon: '⚙️' },
+        { key: 'openclaw', label: 'OpenClaw', icon: '🐾' },
     ];
 
     return (
