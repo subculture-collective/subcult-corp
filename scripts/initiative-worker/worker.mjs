@@ -370,9 +370,43 @@ const VALID_STEP_KINDS = [
     'tag_memory',
 ];
 
+// ─── LLM Usage Tracking ───
+
+/**
+ * Track LLM usage to the ops_llm_usage table.
+ * Fire-and-forget: errors are logged but don't affect the caller.
+ */
+async function trackUsage(model, usage, durationMs, trackingContext) {
+    try {
+        const agentId = trackingContext?.agentId ?? 'unknown';
+        const context = trackingContext?.context ?? 'unknown';
+        const sessionId = trackingContext?.sessionId ?? null;
+
+        await sql`
+            INSERT INTO ops_llm_usage (
+                model, prompt_tokens, completion_tokens, total_tokens,
+                cost_usd, agent_id, context, session_id, duration_ms
+            ) VALUES (
+                ${model},
+                ${usage?.inputTokens ?? null},
+                ${usage?.outputTokens ?? null},
+                ${usage?.totalTokens ?? null},
+                ${usage?.cost ?? null},
+                ${agentId},
+                ${context},
+                ${sessionId},
+                ${durationMs}
+            )
+        `;
+    } catch (error) {
+        log.error('Failed to track LLM usage', { error, model, trackingContext });
+    }
+}
+
 // ─── LLM Client ───
 
-async function llmGenerate(messages, temperature = 0.7, tools = null) {
+async function llmGenerate(messages, temperature = 0.7, tools = null, trackingContext = null) {
+    const startTime = Date.now();
     const systemMessage = messages.find(m => m.role === 'system');
     const conversationMessages = messages.filter(m => m.role !== 'system');
 
@@ -397,6 +431,20 @@ async function llmGenerate(messages, temperature = 0.7, tools = null) {
     const result = openrouter.callModel(callOptions);
 
     const text = await result.getText();
+
+    // Track usage after successful getText
+    if (trackingContext) {
+        const durationMs = Date.now() - startTime;
+        try {
+            const response = await result.getResponse();
+            const usedModel = response.model || LLM_MODEL;
+            const usage = response.usage;
+            void trackUsage(usedModel, usage, durationMs, trackingContext);
+        } catch {
+            // getResponse may fail — don't break the main flow
+        }
+    }
+
     return text?.trim() ?? '';
 }
 
@@ -477,6 +525,7 @@ async function processInitiative(entry) {
             ],
             0.7,
             agentTools.length > 0 ? agentTools : null,
+            { agentId, context: 'initiative' },
         );
     } catch (err) {
         log.error('LLM generation failed', { error: err });

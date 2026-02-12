@@ -952,6 +952,39 @@ function getInteractionType(affinity) {
     }
 }
 
+// ─── LLM Usage Tracking ───
+
+/**
+ * Track LLM usage to the ops_llm_usage table.
+ * Fire-and-forget: errors are logged but don't affect the caller.
+ */
+async function trackUsage(model, usage, durationMs, trackingContext) {
+    try {
+        const agentId = trackingContext?.agentId ?? 'unknown';
+        const context = trackingContext?.context ?? 'unknown';
+        const sessionId = trackingContext?.sessionId ?? null;
+
+        await sql`
+            INSERT INTO ops_llm_usage (
+                model, prompt_tokens, completion_tokens, total_tokens,
+                cost_usd, agent_id, context, session_id, duration_ms
+            ) VALUES (
+                ${model},
+                ${usage?.inputTokens ?? null},
+                ${usage?.outputTokens ?? null},
+                ${usage?.totalTokens ?? null},
+                ${usage?.cost ?? null},
+                ${agentId},
+                ${context},
+                ${sessionId},
+                ${durationMs}
+            )
+        `;
+    } catch (error) {
+        log.error('Failed to track LLM usage', { error, model, trackingContext });
+    }
+}
+
 // ─── LLM ───
 
 const MAX_LLM_RETRIES = 2;
@@ -963,8 +996,10 @@ async function llmGenerate(
     tools = null,
     models = null,
     maxTokens = 250,
+    trackingContext = null,
 ) {
     const effectiveModels = models ?? LLM_MODELS;
+    const startTime = Date.now();
     const systemMessage = messages.find(m => m.role === 'system');
     const conversationMessages = messages.filter(m => m.role !== 'system');
 
@@ -1000,6 +1035,20 @@ async function llmGenerate(
         const result = openrouter.callModel(buildCallOptions(spec));
         const text = await result.getText();
         const trimmed = text?.trim() ?? '';
+
+        // Track usage after successful getText
+        if (trackingContext) {
+            const durationMs = Date.now() - startTime;
+            try {
+                const response = await result.getResponse();
+                const usedModel = response.model || 'unknown';
+                const usage = response.usage;
+                void trackUsage(usedModel, usage, durationMs, trackingContext);
+            } catch {
+                // getResponse may fail — don't break the main flow
+            }
+        }
+
         if (trimmed.length > 0) return trimmed;
         log.warn('OpenRouter returned empty', {
             models: Array.isArray(spec) ? spec.join(',') : spec,
@@ -1451,6 +1500,9 @@ async function orchestrateSession(session) {
                 ],
                 formatConfig.temperature,
                 speakerTools.length > 0 ? speakerTools : null,
+                null, // models (use default)
+                250,  // maxTokens
+                { agentId: speaker, context: 'roundtable', sessionId: session.id },
             );
         } catch (err) {
             // LLM failed after retries — end conversation gracefully with what we have
@@ -1644,6 +1696,7 @@ Respond with JSON only:
             null, // no tools
             DISTILL_MODELS, // models optimized for JSON extraction
             1024, // higher token limit for structured JSON output
+            { agentId: 'system', context: 'distillation', sessionId },
         );
     } catch (err) {
         log.error('LLM extraction failed', { error: err.message });

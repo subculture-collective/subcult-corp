@@ -8,6 +8,7 @@ import { MissionPlayback } from './MissionPlayback';
 import { OfficeRoom } from './OfficeRoom';
 import { EventLogFeed } from './EventLogFeed';
 import { SystemLogs } from './SystemLogs';
+import { CostTracker } from './CostTracker';
 import { StageErrorBoundary, SectionErrorBoundary } from './StageErrorBoundary';
 import {
     MissionsListSkeleton,
@@ -81,6 +82,13 @@ export default function StagePage() {
                             <Suspense fallback={<SystemLogsSkeleton />}>
                                 <SystemLogs />
                             </Suspense>
+                        </SectionErrorBoundary>
+                    )}
+
+                    {/* ── Costs View ── */}
+                    {view === 'costs' && (
+                        <SectionErrorBoundary label='Cost Tracker'>
+                            <CostTracker />
                         </SectionErrorBoundary>
                     )}
 

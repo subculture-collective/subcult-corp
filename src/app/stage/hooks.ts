@@ -287,6 +287,60 @@ export function useSystemStats() {
     return { stats, loading };
 }
 
+// ─── useCosts — fetch LLM cost/usage data ───
+
+export interface CostBreakdown {
+    key: string;
+    cost: number;
+    tokens: number;
+    calls: number;
+}
+
+export interface CostData {
+    totalCost: number;
+    totalTokens: number;
+    totalCalls: number;
+    period: string;
+    groupBy: string;
+    breakdown: CostBreakdown[];
+}
+
+export function useCosts(params?: { period?: string; groupBy?: string }) {
+    const [costs, setCosts] = useState<CostData | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [refreshKey, setRefreshKey] = useState(0);
+
+    const period = params?.period ?? 'all';
+    const groupBy = params?.groupBy ?? 'agent';
+
+    const fetchCosts = useCallback(async () => {
+        try {
+            const qp = new URLSearchParams();
+            qp.set('period', period);
+            qp.set('group_by', groupBy);
+            const data = await fetchJson<CostData>(
+                `/api/ops/costs?${qp}`,
+            );
+            setCosts(data);
+            setError(null);
+        } catch (err) {
+            setError((err as Error).message);
+        } finally {
+            setLoading(false);
+        }
+    }, [period, groupBy]);
+
+    useEffect(() => {
+        setLoading(true);
+        fetchCosts();
+    }, [fetchCosts, refreshKey]);
+
+    const refetch = useCallback(() => setRefreshKey(k => k + 1), []);
+
+    return { costs, loading, error, refetch };
+}
+
 // ─── useTimeOfDay — for OfficeRoom sky color ───
 
 export function useTimeOfDay() {

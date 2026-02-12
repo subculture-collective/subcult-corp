@@ -284,6 +284,11 @@ export async function orchestrateConversation(
                 model: session.model ?? format.defaultModel ?? undefined,
                 tools: speakerTools.length > 0 ? speakerTools : undefined,
                 maxToolRounds: 2,
+                trackingContext: {
+                    agentId: speaker,
+                    context: 'roundtable',
+                    sessionId: session.id,
+                },
             });
         } catch (err) {
             log.error('LLM failed during conversation', {
