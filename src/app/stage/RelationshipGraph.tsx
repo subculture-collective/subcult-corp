@@ -42,9 +42,8 @@ const ITERATIONS = 150;
 // ─── Edge Colors by Affinity ───
 
 function affinityColor(affinity: number): string {
-    if (affinity >= 0.7) return '#a6e3a1'; // green
-    if (affinity >= 0.5) return '#f9e2af'; // yellow
-    if (affinity >= 0.3) return '#fab387'; // orange/peach
+    if (affinity > 0.6) return '#a6e3a1'; // green
+    if (affinity >= 0.3) return '#f9e2af'; // yellow
     return '#f38ba8'; // red
 }
 
@@ -164,13 +163,11 @@ function EdgeDetailPanel({
     const recentDrifts = driftLog.slice(-5).reverse();
 
     const affinityLabel =
-        affinity >= 0.7
+        affinity > 0.6
             ? 'Strong'
-            : affinity >= 0.5
+            : affinity >= 0.3
                 ? 'Neutral'
-                : affinity >= 0.3
-                    ? 'Tense'
-                    : 'Hostile';
+                : 'Hostile';
 
     return (
         <div className='rounded-lg border border-zinc-700/50 bg-zinc-800/80 p-4 space-y-3'>
@@ -438,6 +435,7 @@ function GraphCanvas({
     onSelectNode,
     onSelectEdge,
     onDrag,
+    onClearSelection,
 }: {
     positions: Map<AgentId, { x: number; y: number }>;
     edges: Edge[];
@@ -445,6 +443,7 @@ function GraphCanvas({
     onSelectNode: (id: AgentId) => void;
     onSelectEdge: (source: AgentId, target: AgentId) => void;
     onDrag: (id: AgentId, x: number, y: number) => void;
+    onClearSelection: () => void;
 }) {
     const svgRef = useRef<SVGSVGElement>(null);
     const dragging = useRef<AgentId | null>(null);
@@ -457,14 +456,25 @@ function GraphCanvas({
     const handleMouseMove = (e: React.MouseEvent) => {
         if (!dragging.current || !svgRef.current) return;
         const rect = svgRef.current.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        const localX = e.clientX - rect.left;
+        const localY = e.clientY - rect.top;
+        const scaleX = WIDTH / rect.width;
+        const scaleY = HEIGHT / rect.height;
+        const x = localX * scaleX;
+        const y = localY * scaleY;
         onDrag(dragging.current, x, y);
     };
 
     const handleMouseUp = () => {
         if (dragging.current) {
             dragging.current = null;
+        }
+    };
+
+    const handleSvgClick = (e: React.MouseEvent) => {
+        // Only clear selection if clicking on the background (svg element itself)
+        if (e.target === e.currentTarget) {
+            onClearSelection();
         }
     };
 
@@ -476,6 +486,7 @@ function GraphCanvas({
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
+            onClick={handleSvgClick}
         >
             {/* Edges */}
             {edges.map(edge => {
@@ -660,6 +671,10 @@ export function RelationshipGraph() {
         });
     }, []);
 
+    const handleClearSelection = useCallback(() => {
+        setSelection(null);
+    }, []);
+
     // Find selected relationship
     const selectedRelationship =
         selection?.type === 'edge'
@@ -790,7 +805,7 @@ export function RelationshipGraph() {
                                 style={{ backgroundColor: '#a6e3a1' }}
                             />
                             <span className='text-zinc-500'>
-                                Strong (≥70%)
+                                Strong (&gt;60%)
                             </span>
                         </span>
                         <span className='flex items-center gap-1 text-[10px]'>
@@ -799,16 +814,7 @@ export function RelationshipGraph() {
                                 style={{ backgroundColor: '#f9e2af' }}
                             />
                             <span className='text-zinc-500'>
-                                Neutral (50-69%)
-                            </span>
-                        </span>
-                        <span className='flex items-center gap-1 text-[10px]'>
-                            <span
-                                className='inline-block h-2 w-4 rounded'
-                                style={{ backgroundColor: '#fab387' }}
-                            />
-                            <span className='text-zinc-500'>
-                                Tense (30-49%)
+                                Neutral (30-60%)
                             </span>
                         </span>
                         <span className='flex items-center gap-1 text-[10px]'>
@@ -832,6 +838,7 @@ export function RelationshipGraph() {
                             onSelectNode={handleSelectNode}
                             onSelectEdge={handleSelectEdge}
                             onDrag={handleDrag}
+                            onClearSelection={handleClearSelection}
                         />
                     ) : (
                         <div className='h-[400px] flex items-center justify-center text-zinc-500 text-sm'>
