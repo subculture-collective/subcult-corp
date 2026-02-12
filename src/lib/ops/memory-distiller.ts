@@ -91,6 +91,11 @@ Rules:
             messages: [{ role: 'user', content: prompt }],
             temperature: 0.3,
             maxTokens: 1500,
+            trackingContext: {
+                agentId: 'system',
+                context: 'distillation',
+                sessionId,
+            },
         });
 
         // Extract JSON from response
