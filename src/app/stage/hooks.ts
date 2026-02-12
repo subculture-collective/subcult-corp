@@ -253,6 +253,232 @@ export function useConversationTurns(sessionId: string | null) {
     };
 }
 
+// ─── Connection Status Type ───
+
+export type ConnectionStatus = 'connected' | 'reconnecting' | 'polling';
+
+// ─── useEventStream — SSE-powered real-time event feed ───
+
+export function useEventStream(filters?: {
+    agent_id?: string;
+    kind?: string;
+    limit?: number;
+}) {
+    const [events, setEvents] = useState<AgentEvent[]>([]);
+    const [connectionStatus, setConnectionStatus] =
+        useState<ConnectionStatus>('connected');
+    const [error, setError] = useState<string | null>(null);
+    const [loading, setLoading] = useState(true);
+    const eventSourceRef = useRef<EventSource | null>(null);
+    const reconnectAttemptsRef = useRef(0);
+    const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+        null,
+    );
+    const maxCap = filters?.limit ?? 500;
+    const agentId = filters?.agent_id;
+    const kind = filters?.kind;
+
+    // Stable polling fallback
+    const pollFallback = useCallback(async () => {
+        try {
+            const params = new URLSearchParams();
+            params.set('limit', String(maxCap));
+            if (agentId) params.set('agent_id', agentId);
+            if (kind) params.set('kind', kind);
+            const data = await fetchJson<{ events: AgentEvent[] }>(
+                `/api/ops/events?${params}`,
+            );
+            setEvents(data.events);
+            setError(null);
+        } catch (err) {
+            setError((err as Error).message);
+        } finally {
+            setLoading(false);
+        }
+    }, [maxCap, agentId, kind]);
+
+    useEffect(() => {
+        let isMounted = true;
+
+        function connect() {
+            // Build SSE URL
+            const params = new URLSearchParams();
+            if (agentId) params.set('agent_id', agentId);
+            if (kind) params.set('kind', kind);
+            const url = `/api/ops/events/stream${params.toString() ? `?${params}` : ''}`;
+
+            const es = new EventSource(url);
+            eventSourceRef.current = es;
+
+            es.addEventListener('event', (e: MessageEvent) => {
+                if (!isMounted) return;
+                try {
+                    const parsed = JSON.parse(e.data) as AgentEvent;
+                    setEvents(prev => {
+                        const next = [parsed, ...prev];
+                        return next.length > maxCap ?
+                                next.slice(0, maxCap)
+                            :   next;
+                    });
+                    setLoading(false);
+                    setError(null);
+                } catch {
+                    // Ignore malformed data
+                }
+            });
+
+            es.onopen = () => {
+                if (!isMounted) return;
+                reconnectAttemptsRef.current = 0;
+                setConnectionStatus('connected');
+                setLoading(false);
+            };
+
+            es.onerror = () => {
+                if (!isMounted) return;
+                es.close();
+                eventSourceRef.current = null;
+
+                reconnectAttemptsRef.current += 1;
+
+                if (reconnectAttemptsRef.current > 3) {
+                    // Fall back to polling
+                    setConnectionStatus('polling');
+                    pollFallback();
+                } else {
+                    // Exponential backoff: 1s, 2s, 4s
+                    setConnectionStatus('reconnecting');
+                    const delay = Math.min(
+                        1000 * Math.pow(2, reconnectAttemptsRef.current - 1),
+                        30000,
+                    );
+                    reconnectTimerRef.current = setTimeout(connect, delay);
+                }
+            };
+        }
+
+        connect();
+
+        // Initial data load via HTTP (SSE only gets new events)
+        pollFallback();
+
+        return () => {
+            isMounted = false;
+            eventSourceRef.current?.close();
+            eventSourceRef.current = null;
+            if (reconnectTimerRef.current) {
+                clearTimeout(reconnectTimerRef.current);
+            }
+        };
+    }, [agentId, kind, maxCap, pollFallback]);
+
+    // If in polling mode, keep polling every 5s
+    useInterval(
+        () => {
+            if (connectionStatus === 'polling') pollFallback();
+        },
+        connectionStatus === 'polling' ? 5000 : null,
+    );
+
+    return { events, loading, error, connectionStatus };
+}
+
+// ─── useTurnStream — SSE-powered live turn streaming ───
+
+export function useTurnStream(sessionId: string | null) {
+    const [turns, setTurns] = useState<RoundtableTurn[]>([]);
+    const [isLive, setIsLive] = useState(false);
+    const [isComplete, setIsComplete] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const eventSourceRef = useRef<EventSource | null>(null);
+
+    useEffect(() => {
+        if (!sessionId) {
+            setTurns([]);
+            setIsLive(false);
+            setIsComplete(false);
+            return;
+        }
+
+        let isMounted = true;
+        setLoading(true);
+
+        // First, fetch existing turns via HTTP
+        async function fetchExisting() {
+            try {
+                const data = await fetchJson<{ turns: RoundtableTurn[] }>(
+                    `/api/ops/turns?session_id=${sessionId}`,
+                );
+                if (isMounted) {
+                    setTurns(data.turns);
+                    setLoading(false);
+                }
+            } catch {
+                if (isMounted) setLoading(false);
+            }
+        }
+        fetchExisting();
+
+        // Then connect SSE for new turns
+        const url = `/api/ops/roundtable/stream?session_id=${sessionId}`;
+        const es = new EventSource(url);
+        eventSourceRef.current = es;
+
+        es.addEventListener('turn', (e: MessageEvent) => {
+            if (!isMounted) return;
+            try {
+                const turn = JSON.parse(e.data) as RoundtableTurn;
+                setTurns(prev => {
+                    // Avoid duplicates — check turn_number
+                    if (prev.some(t => t.turn_number === turn.turn_number)) {
+                        return prev;
+                    }
+                    return [...prev, turn].sort(
+                        (a, b) => a.turn_number - b.turn_number,
+                    );
+                });
+            } catch {
+                // Ignore
+            }
+        });
+
+        es.addEventListener('session_complete', (e: MessageEvent) => {
+            if (!isMounted) return;
+            try {
+                const data = JSON.parse(e.data);
+                setIsComplete(true);
+                setIsLive(false);
+                // If there's status info, we could use it
+                void data;
+            } catch {
+                setIsComplete(true);
+                setIsLive(false);
+            }
+            es.close();
+        });
+
+        es.onopen = () => {
+            if (!isMounted) return;
+            setIsLive(true);
+        };
+
+        es.onerror = () => {
+            if (!isMounted) return;
+            setIsLive(false);
+            es.close();
+            // Fall back — turns are already loaded via HTTP fetch above
+        };
+
+        return () => {
+            isMounted = false;
+            es.close();
+            eventSourceRef.current = null;
+        };
+    }, [sessionId]);
+
+    return { turns, isLive, isComplete, loading };
+}
+
 // ─── useSystemStats — aggregate counts for the header ───
 
 export interface SystemStats {
