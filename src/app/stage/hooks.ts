@@ -386,8 +386,9 @@ export function useEventStream(filters?: {
                 // Then connect SSE stream to continue from snapshot
                 if (isMounted) connect();
             })
-            .catch(() => {
-                // If initial fetch fails, still try to connect SSE
+            .catch(err => {
+                // Log error but still try to connect SSE
+                console.warn('Initial event fetch failed, connecting SSE anyway:', err);
                 if (isMounted) connect();
             });
 
