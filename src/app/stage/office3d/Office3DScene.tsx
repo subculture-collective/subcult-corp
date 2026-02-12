@@ -241,7 +241,12 @@ export function Office3DScene() {
             </div>
 
             {/* 3D Canvas */}
-            <div className='relative' style={{ height: 'min(420px, 60vh)' }}>
+            <div
+                className='relative'
+                style={{ height: 'min(420px, 60vh)' }}
+                role='region'
+                aria-label='Interactive 3D office scene showing agent desks, behaviors, and operational stats'
+            >
                 {(() => {
                     // Detect WebGL support before attempting to render the 3D canvas.
                     if (typeof window === 'undefined') {
@@ -286,7 +291,6 @@ export function Office3DScene() {
                                 style={{ background: COLORS.crust }}
                                 gl={{ antialias: true, alpha: false }}
                                 dpr={[1, 2]}
-                                aria-label='Interactive 3D office scene showing agent desks, behaviors, and operational stats'
                             >
                                 <OfficeSceneContent period={period} state={state} />
                             </Canvas>
