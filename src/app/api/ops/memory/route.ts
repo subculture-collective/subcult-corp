@@ -6,6 +6,8 @@ import { logger } from '@/lib/logger';
 
 const log = logger.child({ module: 'api:memory' });
 
+export const dynamic = 'force-dynamic';
+
 const VALID_TYPES = new Set<MemoryType>([
     'insight',
     'pattern',
@@ -22,11 +24,26 @@ export async function GET(req: NextRequest) {
         const minConfidence = searchParams.get('min_confidence');
         const tagsParam = searchParams.get('tags');
         const search = searchParams.get('search');
-        const limit = Math.min(
-            Number(searchParams.get('limit') ?? 100),
-            500,
-        );
-        const offset = Number(searchParams.get('offset') ?? 0);
+        const activeOnly = searchParams.get('active_only') !== 'false'; // default true
+        
+        const limitParam = searchParams.get('limit');
+        let limit = 100;
+        if (limitParam !== null) {
+            const parsedLimit = parseInt(limitParam, 10);
+            if (!Number.isNaN(parsedLimit) && parsedLimit > 0) {
+                limit = parsedLimit;
+            }
+        }
+        limit = Math.min(limit, 500);
+
+        const offsetParam = searchParams.get('offset');
+        let offset = 0;
+        if (offsetParam !== null) {
+            const parsedOffset = parseInt(offsetParam, 10);
+            if (!Number.isNaN(parsedOffset) && parsedOffset >= 0) {
+                offset = parsedOffset;
+            }
+        }
 
         // Build dynamic conditions
         const conditions: ReturnType<typeof sql>[] = [];
@@ -61,7 +78,9 @@ export async function GET(req: NextRequest) {
         }
 
         // Only show active (non-superseded) memories by default
-        conditions.push(sql`superseded_by IS NULL`);
+        if (activeOnly) {
+            conditions.push(sql`superseded_by IS NULL`);
+        }
 
         const whereClause =
             conditions.length > 0
