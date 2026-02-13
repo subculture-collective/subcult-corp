@@ -438,6 +438,7 @@ function GraphCanvas({
     onSelectNode,
     onSelectEdge,
     onDrag,
+    onClearSelection,
 }: {
     positions: Map<AgentId, { x: number; y: number }>;
     edges: Edge[];
@@ -445,6 +446,7 @@ function GraphCanvas({
     onSelectNode: (id: AgentId) => void;
     onSelectEdge: (source: AgentId, target: AgentId) => void;
     onDrag: (id: AgentId, x: number, y: number) => void;
+    onClearSelection: () => void;
 }) {
     const svgRef = useRef<SVGSVGElement>(null);
     const dragging = useRef<AgentId | null>(null);
@@ -457,14 +459,25 @@ function GraphCanvas({
     const handleMouseMove = (e: React.MouseEvent) => {
         if (!dragging.current || !svgRef.current) return;
         const rect = svgRef.current.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        const localX = e.clientX - rect.left;
+        const localY = e.clientY - rect.top;
+        const scaleX = WIDTH / rect.width;
+        const scaleY = HEIGHT / rect.height;
+        const x = localX * scaleX;
+        const y = localY * scaleY;
         onDrag(dragging.current, x, y);
     };
 
     const handleMouseUp = () => {
         if (dragging.current) {
             dragging.current = null;
+        }
+    };
+
+    const handleSvgClick = (e: React.MouseEvent) => {
+        // Only clear selection if clicking on the background (svg element itself)
+        if (e.target === e.currentTarget) {
+            onClearSelection();
         }
     };
 
@@ -476,6 +489,7 @@ function GraphCanvas({
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
+            onClick={handleSvgClick}
         >
             {/* Edges */}
             {edges.map(edge => {
@@ -660,6 +674,10 @@ export function RelationshipGraph() {
         });
     }, []);
 
+    const handleClearSelection = useCallback(() => {
+        setSelection(null);
+    }, []);
+
     // Find selected relationship
     const selectedRelationship =
         selection?.type === 'edge'
@@ -832,6 +850,7 @@ export function RelationshipGraph() {
                             onSelectNode={handleSelectNode}
                             onSelectEdge={handleSelectEdge}
                             onDrag={handleDrag}
+                            onClearSelection={handleClearSelection}
                         />
                     ) : (
                         <div className='h-[400px] flex items-center justify-center text-zinc-500 text-sm'>

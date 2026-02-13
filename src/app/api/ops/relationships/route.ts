@@ -6,6 +6,8 @@ import { logger } from '@/lib/logger';
 
 const log = logger.child({ module: 'api:relationships' });
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
     try {
         const relationships = await sql<AgentRelationship[]>`
