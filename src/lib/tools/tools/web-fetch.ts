@@ -37,7 +37,7 @@ export const webFetchTool: NativeTool = {
         // Use curl + html2text in toolbox for conversion
         const escapedUrl = url.replace(/'/g, "'\\''");
         // Convert maxLength to string safely to prevent injection
-        const safemaxLength = Math.floor(maxLength).toString();
+        const safeMaxLength = Math.floor(maxLength).toString();
         const command = `curl -sL --max-time 15 --max-filesize 5242880 '${escapedUrl}' | python3 -c "
 import sys
 try:
@@ -47,14 +47,14 @@ try:
     h.ignore_images = True
     h.body_width = 0
     content = sys.stdin.read()
-    print(h.handle(content)[:${safemaxLength}])
+    print(h.handle(content)[:${safeMaxLength}])
 except Exception as e:
     # Fallback: strip tags manually
     import re
     content = sys.stdin.read()
     text = re.sub(r'<[^>]+>', ' ', content)
     text = re.sub(r'\\s+', ' ', text).strip()
-    print(text[:${safemaxLength}])
+    print(text[:${safeMaxLength}])
 "`;
 
         const result = await execInToolbox(command, 20_000);
