@@ -11,6 +11,7 @@ import { getPolicy } from '@/lib/ops/policy';
 import { checkScheduleAndEnqueue } from '@/lib/roundtable/orchestrator';
 import { learnFromOutcomes } from '@/lib/ops/outcome-learner';
 import { checkAndQueueInitiatives } from '@/lib/ops/initiative';
+import { checkArtifactFreshness } from '@/lib/ops/artifact-health';
 import { logger } from '@/lib/logger';
 import { withRequestContext } from '@/middleware';
 
@@ -108,6 +109,14 @@ export async function GET(req: NextRequest) {
         } catch (err) {
             results.expired_proposals = { error: (err as Error).message };
             log.error('Stale proposal expiry failed', { error: err });
+        }
+
+        // ── Phase 8: Artifact freshness check ──
+        try {
+            results.artifacts = await checkArtifactFreshness();
+        } catch (err) {
+            results.artifacts = { error: (err as Error).message };
+            log.error('Artifact freshness check failed', { error: err });
         }
 
         const durationMs = Date.now() - startTime;

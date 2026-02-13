@@ -3,7 +3,7 @@
 'use client';
 'use no memo';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useMemories, type MemoryFilters } from './hooks';
 import { AGENTS } from '@/lib/agents';
 import type { AgentId, MemoryType, MemoryEntry } from '@/lib/types';
@@ -406,9 +406,18 @@ function MemoryCard({
                                     <span className='text-zinc-500 shrink-0 w-24'>
                                         Source:
                                     </span>
-                                    <span className='text-zinc-400 font-mono text-[10px] break-all'>
+                                    <button
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(memory.source_trace_id!).catch(() => {
+                                                // Fallback: select the text for manual copy if clipboard API fails
+                                                // In non-secure contexts, just ignore the error silently
+                                            });
+                                        }}
+                                        className='text-accent-blue hover:text-accent-blue/80 font-mono text-[10px] break-all text-left underline decoration-dotted'
+                                        title='Click to copy trace ID'
+                                    >
                                         {memory.source_trace_id}
-                                    </span>
+                                    </button>
                                 </div>
                             )}
                             {memory.superseded_by && (
@@ -536,18 +545,25 @@ export function MemoryExplorer() {
 
     // Debounced search
     const [debouncedSearch, setDebouncedSearch] = useState('');
-    const searchTimerRef = useState<ReturnType<typeof setTimeout> | null>(null);
+    const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const handleSearchChange = useCallback(
         (value: string) => {
             setSearchQuery(value);
-            if (searchTimerRef[0]) clearTimeout(searchTimerRef[0]);
-            searchTimerRef[0] = setTimeout(() => {
+            if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+            searchTimerRef.current = setTimeout(() => {
                 setDebouncedSearch(value);
             }, 300);
         },
-        [searchTimerRef],
+        [],
     );
+
+    // Cleanup timer on unmount
+    useEffect(() => {
+        return () => {
+            if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+        };
+    }, []);
 
     // Build filters
     const filters: MemoryFilters = useMemo(
