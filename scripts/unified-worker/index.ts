@@ -254,7 +254,11 @@ async function finalizeMissionSteps(): Promise<boolean> {
 
     let finalized = 0;
     for (const step of steps) {
-        const sessionId = (step.result as { agent_session_id: string }).agent_session_id;
+        // Validate result structure before accessing
+        if (!step.result || typeof step.result !== 'object') continue;
+        
+        const sessionId = (step.result as { agent_session_id?: string }).agent_session_id;
+        if (!sessionId) continue;
         
         // Check if the agent session has completed
         const [session] = await sql<[{ status: string; error: string | null }?]>`

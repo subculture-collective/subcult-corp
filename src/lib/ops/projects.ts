@@ -156,7 +156,7 @@ export async function updateProject(
             lead_agent = COALESCE(${updates.lead_agent ?? null}, lead_agent),
             participants = COALESCE(${updates.participants ?? null}, participants),
             prime_directive = COALESCE(${updates.prime_directive ?? null}, prime_directive),
-            metadata = COALESCE(${updates.metadata === undefined ? null : sql.json(updates.metadata as Record<string, never>)}, metadata),
+            metadata = COALESCE(${updates.metadata === undefined ? null : sql.json(updates.metadata as never)}, metadata),
             updated_at = NOW()
         WHERE slug = ${slug}
         RETURNING *
