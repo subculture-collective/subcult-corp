@@ -47,6 +47,14 @@ const SPAWN_COLORS = [
     '#f9e2af', // yellow
 ];
 
+// Default personality values (matches agent-designer.ts)
+const DEFAULT_PERSONALITY: AgentPersonality = {
+    tone: 'neutral',
+    traits: [],
+    speaking_style: 'direct',
+    emoji: undefined,
+};
+
 // ─── Validation helpers ───
 
 /**
@@ -58,31 +66,25 @@ function validateAndNormalizePersonality(
 ): AgentPersonality {
     // For malformed or missing personality data, fall back to safe defaults
     if (!personality || typeof personality !== 'object') {
-        return {
-            tone: 'neutral',
-            traits: [],
-            speaking_style: 'direct',
-            emoji: undefined,
-        };
+        return DEFAULT_PERSONALITY;
     }
 
     const p = personality as Record<string, unknown>;
 
     // Validate and extract required fields with defaults
-    // Defaults match agent-designer.ts for consistency
     const tone =
         (typeof p.tone === 'string' ? p.tone.trim() : '') ||
-        'neutral';
+        DEFAULT_PERSONALITY.tone;
 
     const traits = Array.isArray(p.traits)
         ? p.traits
               .map((t) => (typeof t === 'string' ? t.trim() : ''))
               .filter((t) => t.length > 0)
-        : [];
+        : DEFAULT_PERSONALITY.traits;
 
     const speaking_style =
         (typeof p.speaking_style === 'string' ? p.speaking_style.trim() : '') ||
-        'direct';
+        DEFAULT_PERSONALITY.speaking_style;
 
     const emoji =
         (typeof p.emoji === 'string' ? p.emoji.trim() : '') || undefined;
@@ -220,7 +222,10 @@ export async function prepareSpawn(proposalId: string): Promise<SpawnPreview> {
     const soulMarkdown = await generateSoulMarkdown(proposal, personality);
 
     // Build system directive from personality
-    const systemDirective = `You are ${nameCapitalized}, ${proposal.agent_role.toLowerCase()} of the SubCult collective. ${personality.tone}. You communicate in a ${personality.speaking_style} manner. Your key traits: ${personality.traits.join(', ')}.`;
+    const traitsText = personality.traits.length > 0 
+        ? ` Your key traits: ${personality.traits.join(', ')}.`
+        : '';
+    const systemDirective = `You are ${nameCapitalized}, ${proposal.agent_role.toLowerCase()} of the SubCult collective. ${personality.tone}. You communicate in a ${personality.speaking_style} manner.${traitsText}`;
 
     const workspaceFiles = [
         `workspace/agents/${proposal.agent_name}/IDENTITY-${nameUpper}.md`,
