@@ -241,7 +241,6 @@ export async function GET(req: NextRequest) {
                             resolved: true,
                         });
                     } else {
-                        // Still rebelling — try to enqueue a cross-exam if none pending
                         const sessionId = await enqueueRebellionCrossExam(
                             rebel.agentId,
                         );

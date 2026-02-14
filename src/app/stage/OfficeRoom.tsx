@@ -1252,12 +1252,7 @@ function AgentStatusBar({
 
 /** Meeting table positions: agents gather near center during replay */
 const MEETING_POSITIONS: Record<string, number> = {
-    chora: 280,
-    subrosa: 340,
-    thaum: 400,
-    primus: 460,
-    mux: 520,
-    praxis: 580,
+    chora: 280, subrosa: 340, thaum: 400, primus: 460, mux: 520, praxis: 580,
 };
 
 function truncateDialogue(text: string, maxLen = 80): string {
@@ -1270,10 +1265,7 @@ function truncateDialogue(text: string, maxLen = 80): string {
     if (cleaned.length <= maxLen) return cleaned;
     const truncated = cleaned.slice(0, maxLen);
     const lastSpace = truncated.lastIndexOf(' ');
-    return (
-        (lastSpace > maxLen * 0.6 ? truncated.slice(0, lastSpace) : truncated) +
-        '…'
-    );
+    return (lastSpace > maxLen * 0.6 ? truncated.slice(0, lastSpace) : truncated) + '…';
 }
 
 // ─── Main Component ───
@@ -1286,12 +1278,7 @@ export interface OfficeRoomProps {
     isReplaying?: boolean;
 }
 
-export function OfficeRoom({
-    replaySession,
-    replayTurns,
-    currentTurnIndex,
-    isReplaying,
-}: OfficeRoomProps) {
+export function OfficeRoom({ replaySession, replayTurns, currentTurnIndex, isReplaying }: OfficeRoomProps) {
     const period = useTimeOfDay();
     const { stats } = useSystemStats();
     const { sessions } = useConversations(5);
@@ -1305,10 +1292,8 @@ export function OfficeRoom({
     );
 
     // Current replay turn
-    const currentReplayTurn =
-        isReplaying && replayTurns && currentTurnIndex !== undefined ?
-            replayTurns[currentTurnIndex]
-        :   undefined;
+    const currentReplayTurn = isReplaying && replayTurns && currentTurnIndex !== undefined
+        ? replayTurns[currentTurnIndex] : undefined;
 
     const [agents, setAgents] = useState<OfficeAgent[]>(() =>
         AGENT_CONFIGS.map(cfg => ({
@@ -1337,17 +1322,13 @@ export function OfficeRoom({
 
                 const meetingX = MEETING_POSITIONS[agent.id] ?? agent.x;
                 const isSpeaker = currentReplayTurn?.speaker === agent.id;
-                const behavior: AgentBehavior =
-                    isSpeaker ? 'chatting' : 'thinking';
+                const behavior: AgentBehavior = isSpeaker ? 'chatting' : 'thinking';
 
                 // Show speech bubble for current speaker
                 let speechBubble: string | undefined;
                 let speechTick = 0;
                 if (isSpeaker && currentReplayTurn) {
-                    speechBubble = truncateDialogue(
-                        currentReplayTurn.dialogue,
-                        80,
-                    );
+                    speechBubble = truncateDialogue(currentReplayTurn.dialogue, 80);
                     speechTick = 999; // Keep showing until turn changes
                 }
 
@@ -1363,9 +1344,7 @@ export function OfficeRoom({
     }, [isReplaying, currentTurnIndex, currentReplayTurn, replayParticipants]);
 
     // Fetch recent conversation turns for speech bubbles (normal mode only)
-    const [recentTurns, setRecentTurns] = useState<
-        { speaker: string; dialogue: string }[]
-    >([]);
+    const [recentTurns, setRecentTurns] = useState<{ speaker: string; dialogue: string }[]>([]);
 
     useEffect(() => {
         if (isReplaying) return; // Skip in replay mode
@@ -1490,15 +1469,11 @@ export function OfficeRoom({
                 if (isReplaying && replayParticipants.has(agent.id)) {
                     const dx = agent.targetX - agent.x;
                     if (Math.abs(dx) > 1) {
-                        newX =
-                            agent.x + Math.sign(dx) * Math.min(Math.abs(dx), 3);
+                        newX = agent.x + Math.sign(dx) * Math.min(Math.abs(dx), 3);
                     }
                 }
                 // Auto-clear speech bubbles (skip in replay — managed by replay effect)
-                const newSpeechTick =
-                    isReplaying ? agent.speechTick
-                    : agent.speechTick > 0 ? agent.speechTick - 1
-                    : 0;
+                const newSpeechTick = isReplaying ? agent.speechTick : (agent.speechTick > 0 ? agent.speechTick - 1 : 0);
                 return {
                     ...agent,
                     x: newX,
@@ -1529,7 +1504,7 @@ export function OfficeRoom({
                     The Office
                 </span>
                 <div className='flex items-center gap-3'>
-                    {isReplaying ?
+                    {isReplaying ? (
                         <span className='flex items-center gap-1.5 text-[10px] text-accent-blue font-medium'>
                             <span className='relative flex h-1.5 w-1.5'>
                                 <span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-accent-blue opacity-75' />
@@ -1537,7 +1512,8 @@ export function OfficeRoom({
                             </span>
                             Replay — {replaySession?.format.replace(/_/g, ' ')}
                         </span>
-                    :   <>
+                    ) : (
+                        <>
                             {rebellingAgentIds.size > 0 && (
                                 <span className='flex items-center gap-1 text-[10px] text-red-400 font-medium'>
                                     <span className='relative flex h-1.5 w-1.5'>
@@ -1548,21 +1524,13 @@ export function OfficeRoom({
                                 </span>
                             )}
                             <span className='text-[10px] text-zinc-600'>
-                                {period === 'day' ?
-                                    'Day'
-                                : period === 'dusk' ?
-                                    'Dusk'
-                                :   'Night'}
+                                {period === 'day' ? 'Day' : period === 'dusk' ? 'Dusk' : 'Night'}
                             </span>
                             <span className='text-[10px] text-zinc-700'>
-                                {
-                                    agents.filter(a => a.behavior !== 'working')
-                                        .length
-                                }{' '}
-                                agents active
+                                {agents.filter(a => a.behavior !== 'working').length} agents active
                             </span>
                         </>
-                    }
+                    )}
                 </div>
             </div>
             <svg
