@@ -365,16 +365,16 @@ function formatContext(ctx) {
 }
 function createLoggerInternal(bindings) {
   const write = IS_PRODUCTION ? writeJson : writePretty;
-  function log17(level, msg, ctx) {
+  function log18(level, msg, ctx) {
     if (LEVEL_VALUES[level] < MIN_LEVEL) return;
     write(level, msg, bindings, normalizeContext(ctx));
   }
   return {
-    debug: (msg, ctx) => log17("debug", msg, ctx),
-    info: (msg, ctx) => log17("info", msg, ctx),
-    warn: (msg, ctx) => log17("warn", msg, ctx),
-    error: (msg, ctx) => log17("error", msg, ctx),
-    fatal: (msg, ctx) => log17("fatal", msg, ctx),
+    debug: (msg, ctx) => log18("debug", msg, ctx),
+    info: (msg, ctx) => log18("info", msg, ctx),
+    warn: (msg, ctx) => log18("warn", msg, ctx),
+    error: (msg, ctx) => log18("error", msg, ctx),
+    fatal: (msg, ctx) => log18("fatal", msg, ctx),
     child: (childBindings) => createLoggerInternal({ ...bindings, ...childBindings })
   };
 }
@@ -509,37 +509,134 @@ function getClient() {
   }
   return _client;
 }
+function getOllamaModels() {
+  const models = [];
+  if (OLLAMA_API_KEY) {
+    models.push(
+      { model: "deepseek-v3.2:cloud", baseUrl: OLLAMA_CLOUD_URL, apiKey: OLLAMA_API_KEY },
+      { model: "kimi-k2.5:cloud", baseUrl: OLLAMA_CLOUD_URL, apiKey: OLLAMA_API_KEY },
+      { model: "gemini-3-flash-preview:latest", baseUrl: OLLAMA_CLOUD_URL, apiKey: OLLAMA_API_KEY }
+    );
+  }
+  if (OLLAMA_LOCAL_URL) {
+    models.push(
+      { model: "qwen3-coder:30b", baseUrl: OLLAMA_LOCAL_URL },
+      { model: "llama3.2:latest", baseUrl: OLLAMA_LOCAL_URL }
+    );
+  }
+  return models;
+}
 function stripThinking(text) {
   return text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
 }
-async function ollamaGenerate(messages, temperature, model = OLLAMA_MODEL) {
-  if (!OLLAMA_BASE_URL) return null;
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(
-      () => controller.abort(),
-      OLLAMA_TIMEOUT_MS
+async function ollamaChat(messages, temperature, options) {
+  const models = getOllamaModels();
+  if (models.length === 0) return null;
+  const maxTokens = options?.maxTokens ?? 250;
+  const tools = options?.tools;
+  const maxToolRounds = options?.maxToolRounds ?? 3;
+  const openaiTools = tools && tools.length > 0 ? tools.map((t) => ({
+    type: "function",
+    function: {
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters
+    }
+  })) : void 0;
+  for (const spec of models) {
+    const result = await ollamaChatWithModel(
+      spec,
+      messages,
+      temperature,
+      maxTokens,
+      tools,
+      openaiTools,
+      maxToolRounds
     );
-    const response = await fetch(`${OLLAMA_BASE_URL}/v1/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature,
-        max_tokens: 250
-      }),
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
-    if (!response.ok) return null;
-    const data = await response.json();
-    const raw = data.choices?.[0]?.message?.content ?? "";
-    const text = stripThinking(raw).trim();
-    return text.length > 0 ? text : null;
-  } catch {
-    return null;
+    if (result) return result;
   }
+  return null;
+}
+async function ollamaChatWithModel(spec, messages, temperature, maxTokens, tools, openaiTools, maxToolRounds) {
+  const { model, baseUrl, apiKey } = spec;
+  const toolCallRecords = [];
+  const headers = { "Content-Type": "application/json" };
+  if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+  const workingMessages = messages.map((m) => ({
+    role: m.role,
+    content: m.content
+  }));
+  for (let round = 0; round <= maxToolRounds; round++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT_MS);
+      const body = {
+        model,
+        messages: workingMessages,
+        temperature,
+        max_tokens: maxTokens
+      };
+      if (openaiTools && round < maxToolRounds) {
+        body.tools = openaiTools;
+      }
+      const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      if (!response.ok) {
+        log.debug("Ollama model failed", { model, baseUrl, status: response.status });
+        return null;
+      }
+      const data = await response.json();
+      const msg = data.choices?.[0]?.message;
+      if (!msg) return null;
+      const pendingToolCalls = msg.tool_calls;
+      if (!pendingToolCalls || pendingToolCalls.length === 0) {
+        const raw = msg.content ?? "";
+        const text = stripThinking(raw).trim();
+        if (text.length === 0 && toolCallRecords.length === 0) return null;
+        return { text, toolCalls: toolCallRecords, model };
+      }
+      workingMessages.push({
+        role: "assistant",
+        content: msg.content ?? null,
+        tool_calls: pendingToolCalls
+      });
+      for (const tc of pendingToolCalls) {
+        const tool = tools?.find((t) => t.name === tc.function.name);
+        let resultStr;
+        if (tool?.execute) {
+          let args;
+          try {
+            args = JSON.parse(tc.function.arguments);
+          } catch {
+            args = {};
+          }
+          const result = await tool.execute(args);
+          toolCallRecords.push({
+            name: tool.name,
+            arguments: args,
+            result
+          });
+          resultStr = typeof result === "string" ? result : JSON.stringify(result);
+        } else {
+          resultStr = `Tool ${tc.function.name} not available`;
+        }
+        workingMessages.push({
+          role: "tool",
+          tool_call_id: tc.id,
+          content: resultStr
+        });
+      }
+    } catch (err) {
+      log.debug("Ollama chat error", { model, error: err.message });
+      return null;
+    }
+  }
+  return { text: "", toolCalls: toolCallRecords, model };
 }
 function jsonSchemaPropToZod(prop) {
   const enumValues = prop.enum;
@@ -640,9 +737,21 @@ async function llmGenerate(options) {
   const startTime = Date.now();
   const systemMessage = messages.find((m) => m.role === "system");
   const conversationMessages = messages.filter((m) => m.role !== "system");
-  if (OLLAMA_BASE_URL && (!tools || tools.length === 0)) {
-    const text = await ollamaGenerate(messages, temperature);
-    if (text) return text;
+  if (OLLAMA_API_KEY || OLLAMA_LOCAL_URL) {
+    const ollamaResult = await ollamaChat(messages, temperature, {
+      maxTokens,
+      tools,
+      maxToolRounds: options.maxToolRounds
+    });
+    if (ollamaResult?.text) {
+      void trackUsage(
+        `ollama/${ollamaResult.model}`,
+        null,
+        Date.now() - startTime,
+        trackingContext
+      );
+      return ollamaResult.text;
+    }
   }
   const resolved = model ? [normalizeModel(model)] : await resolveModelsWithEnv(trackingContext?.context);
   const modelList = resolved.slice(0, MAX_MODELS_ARRAY);
@@ -718,8 +827,24 @@ async function llmGenerateWithTools(options) {
     maxToolRounds = 3,
     trackingContext
   } = options;
-  const client = getClient();
   const startTime = Date.now();
+  if (OLLAMA_API_KEY || OLLAMA_LOCAL_URL) {
+    const ollamaResult = await ollamaChat(messages, temperature, {
+      maxTokens,
+      tools,
+      maxToolRounds
+    });
+    if (ollamaResult?.text) {
+      void trackUsage(
+        `ollama/${ollamaResult.model}`,
+        null,
+        Date.now() - startTime,
+        trackingContext
+      );
+      return { text: ollamaResult.text, toolCalls: ollamaResult.toolCalls };
+    }
+  }
+  const client = getClient();
   const resolved = model ? [normalizeModel(model)] : await resolveModelsWithEnv(trackingContext?.context);
   const modelList = resolved.slice(0, MAX_MODELS_ARRAY);
   const systemMessage = messages.find((m) => m.role === "system");
@@ -802,7 +927,7 @@ function sanitizeDialogue(text, maxLength = 120) {
   }
   return cleaned;
 }
-var import_sdk, import_v4, log, OPENROUTER_API_KEY, MAX_MODELS_ARRAY, LLM_MODEL_ENV, _client, OLLAMA_BASE_URL, OLLAMA_TIMEOUT_MS, OLLAMA_MODEL;
+var import_sdk, import_v4, log, OPENROUTER_API_KEY, MAX_MODELS_ARRAY, LLM_MODEL_ENV, _client, OLLAMA_LOCAL_URL, OLLAMA_CLOUD_URL, OLLAMA_API_KEY, OLLAMA_TIMEOUT_MS;
 var init_client = __esm({
   "src/lib/llm/client.ts"() {
     "use strict";
@@ -820,9 +945,10 @@ var init_client = __esm({
       return normalizeModel(envModel);
     })();
     _client = null;
-    OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL ?? "";
-    OLLAMA_TIMEOUT_MS = 45e3;
-    OLLAMA_MODEL = "qwen3:32b";
+    OLLAMA_LOCAL_URL = process.env.OLLAMA_BASE_URL ?? "";
+    OLLAMA_CLOUD_URL = "https://ollama.com";
+    OLLAMA_API_KEY = process.env.OLLAMA_API_KEY ?? "";
+    OLLAMA_TIMEOUT_MS = 6e4;
   }
 });
 
@@ -1649,6 +1775,305 @@ var init_roundtable = __esm({
   }
 });
 
+// src/lib/ops/content-pipeline.ts
+var content_pipeline_exports = {};
+__export(content_pipeline_exports, {
+  extractContentFromSession: () => extractContentFromSession,
+  processReviewSession: () => processReviewSession
+});
+async function extractContentFromSession(sessionId) {
+  const [existing] = await sql`
+        SELECT id FROM ops_content_drafts WHERE source_session_id = ${sessionId} LIMIT 1
+    `;
+  if (existing) {
+    log16.info("Draft already exists for session, skipping", {
+      sessionId,
+      draftId: existing.id
+    });
+    return null;
+  }
+  const [session] = await sql`
+        SELECT format, participants, topic FROM ops_roundtable_sessions WHERE id = ${sessionId}
+    `;
+  if (!session) {
+    log16.warn("Session not found", { sessionId });
+    return null;
+  }
+  const turns = await sql`
+        SELECT speaker, dialogue, turn_number
+        FROM ops_roundtable_turns
+        WHERE session_id = ${sessionId}
+        ORDER BY turn_number ASC
+    `;
+  if (turns.length === 0) {
+    log16.warn("No turns found for session", { sessionId });
+    return null;
+  }
+  const transcript = turns.map((t) => `[${t.speaker}]: ${t.dialogue}`).join("\n\n");
+  const extractionPrompt = `You are analyzing a creative writing session transcript. Extract the creative content that was produced during this session.
+
+Session topic: ${session.topic}
+Participants: ${session.participants.join(", ")}
+
+TRANSCRIPT:
+${transcript}
+
+INSTRUCTIONS:
+1. Separate the actual creative work (the content being written) from the meta-discussion about the work
+2. If multiple pieces of creative content exist, extract the primary/most complete one
+3. Determine the content type based on the form and structure
+
+Respond ONLY with valid JSON (no markdown fencing):
+{
+    "title": "Title of the creative work",
+    "body": "The full creative content text",
+    "contentType": "essay|thread|statement|poem|manifesto",
+    "hasContent": true
+}
+
+If no extractable creative content exists, respond with:
+{ "hasContent": false }`;
+  try {
+    const result = await llmGenerate({
+      messages: [
+        {
+          role: "system",
+          content: "You are a content extraction engine. Output only valid JSON."
+        },
+        { role: "user", content: extractionPrompt }
+      ],
+      temperature: 0.3,
+      maxTokens: 4e3,
+      trackingContext: {
+        context: "content_extraction"
+      }
+    });
+    const jsonMatch = result.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      log16.warn("No JSON found in extraction result", { sessionId });
+      return null;
+    }
+    const parsed = JSON.parse(jsonMatch[0]);
+    if (!parsed.hasContent || !parsed.title || !parsed.body) {
+      log16.info("No extractable content found", { sessionId });
+      return null;
+    }
+    const validTypes = [
+      "essay",
+      "thread",
+      "statement",
+      "poem",
+      "manifesto"
+    ];
+    const contentType = validTypes.includes(parsed.contentType) ? parsed.contentType : "essay";
+    const authorAgent = session.participants[0] ?? "mux";
+    const [draft] = await sql`
+            INSERT INTO ops_content_drafts (
+                author_agent, content_type, title, body, status,
+                source_session_id, metadata
+            ) VALUES (
+                ${authorAgent},
+                ${contentType},
+                ${parsed.title},
+                ${parsed.body},
+                'draft',
+                ${sessionId},
+                ${jsonb({ extractedFrom: "writing_room", topic: session.topic })}
+            )
+            RETURNING id
+        `;
+    log16.info("Content draft created", {
+      draftId: draft.id,
+      sessionId,
+      contentType,
+      author: authorAgent,
+      titlePreview: parsed.title.slice(0, 60)
+    });
+    await emitEvent({
+      agent_id: authorAgent,
+      kind: "content_draft_created",
+      title: `Content draft created: ${parsed.title}`,
+      summary: `${contentType} by ${authorAgent} extracted from writing_room session`,
+      tags: ["content", "draft", contentType],
+      metadata: {
+        draftId: draft.id,
+        sessionId,
+        contentType,
+        titlePreview: parsed.title.slice(0, 100)
+      }
+    });
+    return draft.id;
+  } catch (err) {
+    log16.error("Content extraction failed", {
+      error: err,
+      sessionId
+    });
+    return null;
+  }
+}
+async function processReviewSession(sessionId) {
+  const [draft] = await sql`
+        SELECT * FROM ops_content_drafts WHERE review_session_id = ${sessionId} LIMIT 1
+    `;
+  if (!draft) {
+    const [session] = await sql`
+            SELECT metadata FROM ops_roundtable_sessions WHERE id = ${sessionId}
+        `;
+    const draftId = session?.metadata?.draft_id;
+    if (!draftId) {
+      log16.warn("No draft linked to review session", { sessionId });
+      return;
+    }
+    const [draftById] = await sql`
+            SELECT * FROM ops_content_drafts WHERE id = ${draftId} LIMIT 1
+        `;
+    if (!draftById) {
+      log16.warn("Draft not found for review session", {
+        sessionId,
+        draftId
+      });
+      return;
+    }
+    return processReviewForDraft(draftById, sessionId);
+  }
+  return processReviewForDraft(draft, sessionId);
+}
+async function processReviewForDraft(draft, sessionId) {
+  const turns = await sql`
+        SELECT speaker, dialogue, turn_number
+        FROM ops_roundtable_turns
+        WHERE session_id = ${sessionId}
+        ORDER BY turn_number ASC
+    `;
+  if (turns.length === 0) {
+    log16.warn("No turns found for review session", { sessionId });
+    return;
+  }
+  const transcript = turns.map((t) => `[${t.speaker}]: ${t.dialogue}`).join("\n\n");
+  const reviewPrompt = `You are analyzing a content review session where agents reviewed a piece of creative writing.
+
+CONTENT BEING REVIEWED:
+Title: ${draft.title}
+Type: ${draft.content_type}
+Author: ${draft.author_agent}
+
+REVIEW TRANSCRIPT:
+${transcript}
+
+INSTRUCTIONS:
+Summarize each reviewer's verdict and reasoning. Determine the overall consensus.
+
+Respond ONLY with valid JSON (no markdown fencing):
+{
+    "reviewers": [
+        { "reviewer": "agent_name", "verdict": "approve|reject|mixed", "notes": "brief reasoning" }
+    ],
+    "consensus": "approved|rejected|mixed",
+    "summary": "overall review summary"
+}`;
+  try {
+    const result = await llmGenerate({
+      messages: [
+        {
+          role: "system",
+          content: "You are a review consensus analyzer. Output only valid JSON."
+        },
+        { role: "user", content: reviewPrompt }
+      ],
+      temperature: 0.2,
+      maxTokens: 2e3,
+      trackingContext: {
+        context: "content_review"
+      }
+    });
+    const jsonMatch = result.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      log16.warn("No JSON found in review result", { sessionId });
+      return;
+    }
+    const parsed = JSON.parse(jsonMatch[0]);
+    const reviewerNotes = parsed.reviewers ?? [];
+    const consensus = parsed.consensus ?? "mixed";
+    if (consensus === "approved") {
+      await sql`
+                UPDATE ops_content_drafts
+                SET status = 'approved',
+                    reviewer_notes = ${jsonb(reviewerNotes)},
+                    updated_at = NOW()
+                WHERE id = ${draft.id}
+            `;
+      await emitEvent({
+        agent_id: draft.author_agent,
+        kind: "content_approved",
+        title: `Content approved: ${draft.title}`,
+        summary: parsed.summary ?? "Approved by reviewer consensus",
+        tags: ["content", "approved", draft.content_type],
+        metadata: {
+          draftId: draft.id,
+          reviewSessionId: sessionId,
+          reviewerCount: reviewerNotes.length
+        }
+      });
+      log16.info("Draft approved", {
+        draftId: draft.id,
+        reviewers: reviewerNotes.length
+      });
+    } else if (consensus === "rejected") {
+      await sql`
+                UPDATE ops_content_drafts
+                SET status = 'rejected',
+                    reviewer_notes = ${jsonb(reviewerNotes)},
+                    updated_at = NOW()
+                WHERE id = ${draft.id}
+            `;
+      await emitEvent({
+        agent_id: draft.author_agent,
+        kind: "content_rejected",
+        title: `Content rejected: ${draft.title}`,
+        summary: parsed.summary ?? "Rejected by reviewer consensus",
+        tags: ["content", "rejected", draft.content_type],
+        metadata: {
+          draftId: draft.id,
+          reviewSessionId: sessionId,
+          reviewerCount: reviewerNotes.length
+        }
+      });
+      log16.info("Draft rejected", {
+        draftId: draft.id,
+        reviewers: reviewerNotes.length
+      });
+    } else {
+      await sql`
+                UPDATE ops_content_drafts
+                SET reviewer_notes = ${jsonb(reviewerNotes)},
+                    updated_at = NOW()
+                WHERE id = ${draft.id}
+            `;
+      log16.info("Draft review inconclusive, staying in review", {
+        draftId: draft.id,
+        consensus
+      });
+    }
+  } catch (err) {
+    log16.error("Review processing failed", {
+      error: err,
+      sessionId,
+      draftId: draft.id
+    });
+  }
+}
+var log16;
+var init_content_pipeline = __esm({
+  "src/lib/ops/content-pipeline.ts"() {
+    "use strict";
+    init_db();
+    init_client();
+    init_events();
+    init_logger();
+    log16 = logger.child({ module: "content-pipeline" });
+  }
+});
+
 // src/lib/ops/step-prompts.ts
 var step_prompts_exports = {};
 __export(step_prompts_exports, {
@@ -2107,12 +2532,12 @@ init_db();
 init_logger();
 var log5 = logger.child({ module: "memory" });
 var MAX_MEMORIES_PER_AGENT = 200;
-var OLLAMA_BASE_URL2 = process.env.OLLAMA_BASE_URL ?? "";
+var OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL ?? "";
 var EMBEDDING_MODEL = "bge-m3";
 async function getEmbedding(text) {
-  if (!OLLAMA_BASE_URL2) return null;
+  if (!OLLAMA_BASE_URL) return null;
   try {
-    const response = await fetch(`${OLLAMA_BASE_URL2}/v1/embeddings`, {
+    const response = await fetch(`${OLLAMA_BASE_URL}/v1/embeddings`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model: EMBEDDING_MODEL, input: text }),
@@ -3169,12 +3594,12 @@ var checkDroidTool = {
 init_db();
 init_logger();
 var log10 = logger.child({ module: "memory-search" });
-var OLLAMA_BASE_URL3 = process.env.OLLAMA_BASE_URL ?? "";
+var OLLAMA_BASE_URL2 = process.env.OLLAMA_BASE_URL ?? "";
 var EMBEDDING_MODEL2 = "bge-m3";
 async function getEmbedding2(text) {
-  if (!OLLAMA_BASE_URL3) return null;
+  if (!OLLAMA_BASE_URL2) return null;
   try {
-    const response = await fetch(`${OLLAMA_BASE_URL3}/v1/embeddings`, {
+    const response = await fetch(`${OLLAMA_BASE_URL2}/v1/embeddings`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model: EMBEDDING_MODEL2, input: text }),
@@ -3872,14 +4297,14 @@ async function completeSession(sessionId, status, result, toolCalls, llmRounds, 
 
 // scripts/unified-worker/index.ts
 init_logger();
-var log16 = createLogger({ service: "unified-worker" });
+var log17 = createLogger({ service: "unified-worker" });
 var WORKER_ID = `unified-${process.pid}`;
 if (!process.env.DATABASE_URL) {
-  log16.fatal("Missing DATABASE_URL");
+  log17.fatal("Missing DATABASE_URL");
   process.exit(1);
 }
 if (!process.env.OPENROUTER_API_KEY) {
-  log16.fatal("Missing OPENROUTER_API_KEY");
+  log17.fatal("Missing OPENROUTER_API_KEY");
   process.exit(1);
 }
 var sql2 = (0, import_postgres2.default)(process.env.DATABASE_URL, {
@@ -3901,7 +4326,7 @@ async function pollAgentSessions() {
         RETURNING *
     `;
   if (!session) return false;
-  log16.info("Processing agent session", {
+  log17.info("Processing agent session", {
     sessionId: session.id,
     agent: session.agent_id,
     source: session.source
@@ -3922,7 +4347,7 @@ async function pollAgentSessions() {
       }
     }
   } catch (err) {
-    log16.error("Agent session execution failed", {
+    log17.error("Agent session execution failed", {
       error: err,
       sessionId: session.id
     });
@@ -3957,15 +4382,44 @@ async function pollRoundtables() {
         SET status = 'pending'
         WHERE id = ${session.id}
     `;
-  log16.info("Processing roundtable", {
+  log17.info("Processing roundtable", {
     sessionId: session.id,
     format: session.format,
     topic: session.topic.slice(0, 80)
   });
   try {
     await orchestrateConversation(session, true);
+    if (session.format === "writing_room") {
+      try {
+        const { extractContentFromSession: extractContentFromSession2 } = await Promise.resolve().then(() => (init_content_pipeline(), content_pipeline_exports));
+        const draftId = await extractContentFromSession2(session.id);
+        if (draftId) {
+          log17.info("Content draft extracted from writing_room", {
+            sessionId: session.id,
+            draftId
+          });
+        }
+      } catch (extractErr) {
+        log17.error("Content extraction failed (non-fatal)", {
+          error: extractErr,
+          sessionId: session.id
+        });
+      }
+    }
+    if (session.format === "content_review") {
+      try {
+        const { processReviewSession: processReviewSession2 } = await Promise.resolve().then(() => (init_content_pipeline(), content_pipeline_exports));
+        await processReviewSession2(session.id);
+        log17.info("Content review processed", { sessionId: session.id });
+      } catch (reviewErr) {
+        log17.error("Content review processing failed (non-fatal)", {
+          error: reviewErr,
+          sessionId: session.id
+        });
+      }
+    }
   } catch (err) {
-    log16.error("Roundtable orchestration failed", {
+    log17.error("Roundtable orchestration failed", {
       error: err,
       sessionId: session.id
     });
@@ -3994,7 +4448,7 @@ async function pollMissionSteps() {
         RETURNING *
     `;
   if (!step) return false;
-  log16.info("Processing mission step", {
+  log17.info("Processing mission step", {
     stepId: step.id,
     kind: step.kind,
     missionId: step.mission_id
@@ -4027,7 +4481,7 @@ async function pollMissionSteps() {
                     VALUES (${agentId}, ${outputPrefix}, 'mission', ${step.mission_id}::uuid, NOW() + INTERVAL '4 hours')
                 `;
       } catch (grantErr) {
-        log16.warn("Failed to create ACL grant for step", {
+        log17.warn("Failed to create ACL grant for step", {
           error: grantErr,
           agentId,
           outputPath: step.output_path
@@ -4068,7 +4522,7 @@ async function pollMissionSteps() {
       }
     });
   } catch (err) {
-    log16.error("Mission step failed", { error: err, stepId: step.id });
+    log17.error("Mission step failed", { error: err, stepId: step.id });
     const stepData = await sql2`
             SELECT result FROM ops_mission_steps WHERE id = ${step.id}
         `;
@@ -4150,7 +4604,7 @@ async function pollInitiatives() {
         RETURNING *
     `;
   if (!entry) return false;
-  log16.info("Processing initiative", {
+  log17.info("Processing initiative", {
     entryId: entry.id,
     agent: entry.agent_id
   });
@@ -4216,7 +4670,7 @@ Format as JSON: { "title": "...", "description": "...", "steps": [{ "kind": "...
             WHERE id = ${entry.id}
         `;
   } catch (err) {
-    log16.error("Initiative processing failed", { error: err, entryId: entry.id });
+    log17.error("Initiative processing failed", { error: err, entryId: entry.id });
     await sql2`
             UPDATE ops_initiative_queue
             SET status = 'failed',
@@ -4262,22 +4716,22 @@ async function pollLoop() {
       await finalizeMissionSteps();
       await pollInitiatives();
     } catch (err) {
-      log16.error("Poll loop error", { error: err });
+      log17.error("Poll loop error", { error: err });
     }
     await new Promise((resolve) => setTimeout(resolve, 15e3));
   }
 }
 function shutdown(signal) {
-  log16.info(`Received ${signal}, shutting down...`);
+  log17.info(`Received ${signal}, shutting down...`);
   running = false;
   setTimeout(() => {
-    log16.warn("Forced shutdown after 30s timeout");
+    log17.warn("Forced shutdown after 30s timeout");
     process.exit(1);
   }, 3e4);
 }
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
-log16.info("Unified worker started", {
+log17.info("Unified worker started", {
   workerId: WORKER_ID,
   database: !!process.env.DATABASE_URL,
   openrouter: !!process.env.OPENROUTER_API_KEY,
@@ -4285,10 +4739,10 @@ log16.info("Unified worker started", {
   braveSearch: !!process.env.BRAVE_API_KEY
 });
 pollLoop().then(() => {
-  log16.info("Worker stopped");
+  log17.info("Worker stopped");
   process.exit(0);
 }).catch((err) => {
-  log16.fatal("Fatal error", { error: err });
+  log17.fatal("Fatal error", { error: err });
   process.exit(1);
 });
 //# sourceMappingURL=index.js.map
