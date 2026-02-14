@@ -4,6 +4,7 @@
 // Supports both text-only generation and tool-calling (function calling).
 import { OpenRouter, ToolType } from '@openrouter/sdk';
 import type { OpenResponsesUsage } from '@openrouter/sdk/models';
+import { z } from 'zod/v4';
 import type {
     LLMGenerateOptions,
     LLMToolResult,
@@ -41,6 +42,9 @@ const DEFAULT_MODELS = [
     'moonshotai/kimi-k2.5',
     'anthropic/claude-sonnet-4.5',  // last resort — higher quality, higher cost
 ];
+
+/** OpenRouter limits the `models` array to 3 items. Slice for API calls; full list used by individual fallback loop. */
+const MAX_MODELS_ARRAY = 3;
 
 /**
  * Effective model list: if LLM_MODEL env is set to a specific model (not openrouter/auto),
@@ -123,8 +127,68 @@ async function ollamaGenerate(
 }
 
 /**
+ * Convert a plain JSON Schema property to a Zod type.
+ * Handles string (with enum), number, integer, boolean.
+ */
+function jsonSchemaPropToZod(
+    prop: Record<string, unknown>,
+): z.ZodType {
+    const enumValues = prop.enum as string[] | undefined;
+    let zodType: z.ZodType;
+
+    switch (prop.type) {
+        case 'string':
+            zodType =
+                enumValues && enumValues.length > 0
+                    ? z.enum(enumValues as [string, ...string[]])
+                    : z.string();
+            break;
+        case 'number':
+            zodType = z.number();
+            break;
+        case 'integer':
+            zodType = z.number().int();
+            break;
+        case 'boolean':
+            zodType = z.boolean();
+            break;
+        default:
+            zodType = z.unknown();
+            break;
+    }
+
+    if (prop.description && typeof prop.description === 'string') {
+        zodType = zodType.describe(prop.description);
+    }
+
+    return zodType;
+}
+
+/**
+ * Convert a tool's plain JSON Schema `parameters` object to a Zod v4 schema.
+ * The OpenRouter SDK expects `inputSchema` as a Zod object, not raw JSON Schema.
+ * This bridges our ToolDefinition format to the SDK's expected format.
+ */
+function jsonSchemaToZod(
+    schema: Record<string, unknown>,
+): z.ZodObject<z.ZodRawShape> {
+    const properties = (schema.properties ?? {}) as Record<
+        string,
+        Record<string, unknown>
+    >;
+    const required = (schema.required as string[]) ?? [];
+
+    const entries = Object.entries(properties).map(([key, prop]) => {
+        const base = jsonSchemaPropToZod(prop);
+        return [key, required.includes(key) ? base : base.optional()] as const;
+    });
+
+    return z.object(Object.fromEntries(entries));
+}
+
+/**
  * Convert our ToolDefinition format to the OpenRouter SDK's tool format.
- * Uses ToolType.Function with JSON Schema parameters and execute functions.
+ * Uses ToolType.Function with Zod v4 inputSchema and execute functions.
  */
 function toOpenRouterTools(tools: ToolDefinition[]) {
     return tools.map(tool => ({
@@ -132,7 +196,7 @@ function toOpenRouterTools(tools: ToolDefinition[]) {
         function: {
             name: tool.name,
             description: tool.description,
-            parameters: tool.parameters,
+            inputSchema: jsonSchemaToZod(tool.parameters),
             ...(tool.execute ?
                 {
                     execute: async (params: Record<string, unknown>) => {
@@ -220,8 +284,8 @@ export async function llmGenerate(
     }
 
     // ── Fall back to OpenRouter (cloud) ──
-    // Determine model list: specific override → single model, otherwise → native routing array
-    const modelList = model ? [normalizeModel(model)] : LLM_MODELS;
+    // Determine model list: specific override → single model, otherwise → native routing array (capped at 3 for OpenRouter)
+    const modelList = model ? [normalizeModel(model)] : LLM_MODELS.slice(0, MAX_MODELS_ARRAY);
 
     const buildCallOpts = (spec: string | string[]): Record<string, unknown> => {
         const isArray = Array.isArray(spec);
@@ -313,7 +377,7 @@ export async function llmGenerateWithTools(
 
     const client = getClient();
     const startTime = Date.now();
-    const modelList = model ? [normalizeModel(model)] : LLM_MODELS;
+    const modelList = model ? [normalizeModel(model)] : LLM_MODELS.slice(0, MAX_MODELS_ARRAY);
 
     const systemMessage = messages.find(m => m.role === 'system');
     const conversationMessages = messages.filter(m => m.role !== 'system');
@@ -326,7 +390,7 @@ export async function llmGenerateWithTools(
         function: {
             name: tool.name,
             description: tool.description,
-            parameters: tool.parameters,
+            inputSchema: jsonSchemaToZod(tool.parameters),
             ...(tool.execute ?
                 {
                     execute: async (params: Record<string, unknown>) => {

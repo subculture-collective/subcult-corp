@@ -273,7 +273,7 @@ async function finalizeMissionSteps(): Promise<boolean> {
             sess.status as session_status,
             sess.error as session_error
         FROM ops_mission_steps s
-        LEFT JOIN ops_agent_sessions sess ON sess.id = (s.result->>'agent_session_id')::text
+        LEFT JOIN ops_agent_sessions sess ON sess.id = (s.result->>'agent_session_id')::uuid
         WHERE s.status = 'running'
         AND s.result->>'agent_session_id' IS NOT NULL
     `;
