@@ -11,7 +11,17 @@ import { StatsBarSkeleton } from './StageSkeletons';
 import { AGENTS } from '@/lib/agents';
 import type { AgentId } from '@/lib/types';
 
-export type ViewMode = 'feed' | 'missions' | 'office' | 'logs' | 'costs' | 'memories' | 'relationships' | 'content' | 'governance' | 'dreams';
+export type ViewMode =
+    | 'feed'
+    | 'missions'
+    | 'office'
+    | 'logs'
+    | 'costs'
+    | 'memories'
+    | 'relationships'
+    | 'content'
+    | 'governance'
+    | 'dreams';
 
 function ConnectionIndicator({ status }: { status: ConnectionStatus }) {
     const config: Record<

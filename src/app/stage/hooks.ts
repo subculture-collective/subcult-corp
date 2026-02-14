@@ -868,7 +868,11 @@ export function useContent(filters?: ContentFilters) {
 
 // ─── useGovernance — fetch + poll governance proposals ───
 
-export type GovernanceProposalStatus = 'proposed' | 'voting' | 'accepted' | 'rejected';
+export type GovernanceProposalStatus =
+    | 'proposed'
+    | 'voting'
+    | 'accepted'
+    | 'rejected';
 
 export interface GovernanceVoteSummary {
     approvals: number;
@@ -914,9 +918,9 @@ export function useGovernance(filters?: {
             if (proposer) params.set('proposer', proposer);
             params.set('limit', String(limit));
 
-            const data = await fetchJson<{ proposals: GovernanceProposalEntry[] }>(
-                `/api/ops/governance?${params}`,
-            );
+            const data = await fetchJson<{
+                proposals: GovernanceProposalEntry[];
+            }>(`/api/ops/governance?${params}`);
             setProposals(data.proposals);
             setError(null);
         } catch (err) {
