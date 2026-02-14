@@ -2,7 +2,7 @@
 
 .PHONY: dev build start lint typecheck clean \
         seed seed-policy seed-triggers seed-proactive seed-roundtable seed-relationships \
-        verify up down restart status logs logs-app logs-roundtable logs-initiative logs-mission \
+        verify up down restart status logs logs-app logs-worker logs-db \
         heartbeat db-migrate db-shell help
 
 # ──────────────────────────────────────────
@@ -56,14 +56,11 @@ logs: ## Tail logs from all containers
 logs-app: ## Tail app container logs
 	docker compose logs -f --tail=50 app
 
-logs-roundtable: ## Tail roundtable worker logs
-	docker compose logs -f --tail=50 roundtable-worker
+logs-worker: ## Tail unified worker logs
+	docker compose logs -f --tail=50 worker
 
-logs-initiative: ## Tail initiative worker logs
-	docker compose logs -f --tail=50 initiative-worker
-
-logs-mission: ## Tail mission worker logs
-	docker compose logs -f --tail=50 mission-worker
+logs-toolbox: ## Tail toolbox container logs
+	docker compose logs -f --tail=50 toolbox
 
 logs-db: ## Tail Postgres logs
 	docker compose logs -f --tail=50 postgres
