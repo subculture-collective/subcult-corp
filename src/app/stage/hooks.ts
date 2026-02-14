@@ -717,6 +717,74 @@ export function useRelationships() {
     return { relationships, loading, error };
 }
 
+// ─── useDigest — fetch daily digest data ───
+
+export interface DigestHighlight {
+    title: string;
+    description: string;
+    agentId?: string;
+    eventId?: string;
+}
+
+export interface DigestStats {
+    events: number;
+    conversations: number;
+    missions_succeeded: number;
+    missions_failed: number;
+    memories: number;
+    costs: number;
+}
+
+export interface DigestEntry {
+    id: string;
+    digest_date: string;
+    summary: string;
+    highlights: DigestHighlight[];
+    stats: DigestStats;
+    generated_by: string;
+    created_at: string;
+}
+
+export function useDigest(date?: string) {
+    const [digest, setDigest] = useState<DigestEntry | null>(null);
+    const [digests, setDigests] = useState<DigestEntry[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [refreshKey, setRefreshKey] = useState(0);
+
+    const fetchDigest = useCallback(async () => {
+        try {
+            if (date) {
+                const data = await fetchJson<{ digest: DigestEntry }>(
+                    `/api/ops/digest?date=${date}`,
+                );
+                setDigest(data.digest);
+                setDigests([]);
+            } else {
+                const data = await fetchJson<{ digests: DigestEntry[] }>(
+                    `/api/ops/digest?limit=7`,
+                );
+                setDigests(data.digests);
+                setDigest(data.digests[0] ?? null);
+            }
+            setError(null);
+        } catch (err) {
+            setError((err as Error).message);
+        } finally {
+            setLoading(false);
+        }
+    }, [date]);
+
+    useEffect(() => {
+        setLoading(true);
+        fetchDigest();
+    }, [fetchDigest, refreshKey]);
+
+    const refetch = useCallback(() => setRefreshKey(k => k + 1), []);
+
+    return { digest, digests, loading, error, refetch };
+}
+
 // ─── useInterval — for animations and polling ───
 
 export function useInterval(callback: () => void, delay: number | null) {

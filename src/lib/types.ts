@@ -265,7 +265,14 @@ export interface RoundtableVoice {
     systemDirective: string;
 }
 
-export type ArtifactType = 'briefing' | 'report' | 'review' | 'digest' | 'plan' | 'code' | 'none';
+export type ArtifactType =
+    | 'briefing'
+    | 'report'
+    | 'review'
+    | 'digest'
+    | 'plan'
+    | 'code'
+    | 'none';
 
 export interface FormatArtifactConfig {
     type: ArtifactType;
