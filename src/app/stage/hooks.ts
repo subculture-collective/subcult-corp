@@ -1005,6 +1005,93 @@ export function useDreams(filters?: {
     return { dreams, loading, error, refetch };
 }
 
+// ─── useAgentProposals — fetch + poll agent design proposals ───
+
+export type AgentProposalStatus =
+    | 'proposed'
+    | 'voting'
+    | 'approved'
+    | 'rejected'
+    | 'spawned';
+
+export interface AgentProposalVoteSummary {
+    approvals: number;
+    rejections: number;
+    total: number;
+}
+
+export interface AgentProposalPersonality {
+    tone: string;
+    traits: string[];
+    speaking_style: string;
+    emoji?: string;
+}
+
+export interface AgentProposalEntry {
+    id: string;
+    proposed_by: string;
+    agent_name: string;
+    agent_role: string;
+    personality: AgentProposalPersonality;
+    skills: string[];
+    rationale: string;
+    status: AgentProposalStatus;
+    votes: Record<string, { vote: string; reasoning: string }>;
+    human_approved: boolean | null;
+    vote_summary: AgentProposalVoteSummary;
+    created_at: string;
+    decided_at: string | null;
+    spawned_at: string | null;
+}
+
+export function useAgentProposals(filters?: {
+    status?: AgentProposalStatus;
+    proposedBy?: string;
+    limit?: number;
+}) {
+    const [proposals, setProposals] = useState<AgentProposalEntry[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [refreshKey, setRefreshKey] = useState(0);
+
+    const status = filters?.status;
+    const proposedBy = filters?.proposedBy;
+    const limit = filters?.limit ?? 50;
+
+    const fetchProposals = useCallback(async () => {
+        try {
+            const params = new URLSearchParams();
+            if (status) params.set('status', status);
+            if (proposedBy) params.set('proposed_by', proposedBy);
+            params.set('limit', String(limit));
+
+            const data = await fetchJson<{
+                proposals: AgentProposalEntry[];
+            }>(`/api/ops/agent-proposals?${params}`);
+            setProposals(data.proposals);
+            setError(null);
+        } catch (err) {
+            setError((err as Error).message);
+        } finally {
+            setLoading(false);
+        }
+    }, [status, proposedBy, limit]);
+
+    useEffect(() => {
+        setLoading(true);
+        fetchProposals();
+    }, [fetchProposals, refreshKey]);
+
+    // Poll every 30 seconds
+    useInterval(() => {
+        fetchProposals();
+    }, 30000);
+
+    const refetch = useCallback(() => setRefreshKey(k => k + 1), []);
+
+    return { proposals, loading, error, refetch };
+}
+
 // ─── useInterval — for animations and polling ───
 
 // ─── useRebellionState — fetch active rebellion states ───

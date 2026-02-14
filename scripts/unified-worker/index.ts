@@ -554,6 +554,33 @@ async function pollInitiatives(): Promise<boolean> {
     });
 
     try {
+        // ─── Agent Design Proposal (Phase 14) ───
+        // If the initiative context specifies agent_design_proposal action,
+        // delegate to the agent-designer module instead of generic initiative flow.
+        const initiativeAction = (entry.context as Record<string, unknown>)
+            ?.action;
+        if (initiativeAction === 'agent_design_proposal') {
+            log.info('Processing agent design proposal', {
+                entryId: entry.id,
+                agent: entry.agent_id,
+            });
+            const { generateAgentProposal } =
+                await import('../../src/lib/ops/agent-designer');
+            const proposal = await generateAgentProposal(entry.agent_id);
+            await sql`
+                UPDATE ops_initiative_queue
+                SET status = 'completed',
+                    processed_at = NOW(),
+                    result = ${sql.json({
+                        type: 'agent_design_proposal',
+                        proposalId: proposal.id,
+                        agentName: proposal.agent_name,
+                    })}::jsonb
+                WHERE id = ${entry.id}
+            `;
+            return true;
+        }
+
         const { llmGenerate } = await import('../../src/lib/llm/client');
         const { getVoice } = await import('../../src/lib/roundtable/voices');
 

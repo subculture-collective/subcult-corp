@@ -251,7 +251,8 @@ export type ConversationFormat =
     | 'reframe'
     | 'writing_room'
     | 'content_review'
-    | 'watercooler';
+    | 'watercooler'
+    | 'agent_design';
 export type SessionStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 export interface RoundtableVoice {
