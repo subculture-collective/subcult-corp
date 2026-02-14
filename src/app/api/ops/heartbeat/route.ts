@@ -15,6 +15,8 @@ import { checkArtifactFreshness } from '@/lib/ops/artifact-health';
 import { checkTemplateHealth } from '@/lib/ops/template-health';
 import { evaluateCronSchedules } from '@/lib/ops/cron-scheduler';
 import { generateDailyDigest } from '@/lib/ops/digest';
+import { runDreamCycle, hasAgentDreamedToday } from '@/lib/ops/dreams';
+import { AGENT_IDS } from '@/lib/agents';
 import { logger } from '@/lib/logger';
 import { withRequestContext } from '@/middleware';
 
@@ -155,6 +157,60 @@ export async function GET(req: NextRequest) {
         } catch (err) {
             results.digest = { error: (err as Error).message };
             log.error('Daily digest generation failed', { error: err });
+        }
+
+        // ── Phase 12: Dream cycles (midnight–6AM CST / 6AM–12PM UTC) ──
+        try {
+            const nowUtc = new Date();
+            const cstHour = (nowUtc.getUTCHours() - 6 + 24) % 24;
+            if (cstHour >= 0 && cstHour < 6) {
+                // Select 1-2 random agents who haven't dreamed today
+                const candidates: string[] = [];
+                for (const agentId of AGENT_IDS) {
+                    if (agentId === 'primus') continue; // primus doesn't dream
+                    const dreamed = await hasAgentDreamedToday(agentId);
+                    if (!dreamed) candidates.push(agentId);
+                }
+
+                if (candidates.length > 0) {
+                    // Pick 1-2 random agents
+                    const shuffled = candidates.sort(() => Math.random() - 0.5);
+                    const dreamCount = Math.min(
+                        1 + Math.floor(Math.random() * 2),
+                        shuffled.length,
+                    );
+                    const dreamers = shuffled.slice(0, dreamCount);
+
+                    const dreamResults = [];
+                    for (const agentId of dreamers) {
+                        const result = await runDreamCycle(agentId);
+                        if (result) {
+                            dreamResults.push({
+                                agentId: result.agentId,
+                                dreamType: result.dreamType,
+                                dreamId: result.dreamId,
+                            });
+                        }
+                    }
+                    results.dreams = {
+                        window: true,
+                        candidates: candidates.length,
+                        dreamers,
+                        completed: dreamResults,
+                    };
+                } else {
+                    results.dreams = {
+                        window: true,
+                        candidates: 0,
+                        reason: 'all_agents_dreamed_today',
+                    };
+                }
+            } else {
+                results.dreams = { window: false, reason: 'outside_dream_hours' };
+            }
+        } catch (err) {
+            results.dreams = { error: (err as Error).message };
+            log.error('Dream cycle failed', { error: err });
         }
 
         const durationMs = Date.now() - startTime;

@@ -1,11 +1,12 @@
 // OfficeRoom — pixel art cyberpunk office with 6 agents
 // Real-time data: speech bubbles from conversations, behavior tied to system state
+// Supports replay mode: agents gather at meeting table to re-enact roundtable sessions
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
 import { useTimeOfDay, useInterval, useSystemStats, useConversations } from './hooks';
 import { AGENTS } from '@/lib/agents';
-import type { AgentId } from '@/lib/types';
+import type { AgentId, RoundtableSession, RoundtableTurn } from '@/lib/types';
 
 // ─── Types ───
 
@@ -488,13 +489,51 @@ function AgentStatusBar({ agents, sessions }: {
     );
 }
 
+// ─── Replay Helpers ───
+
+/** Meeting table positions: agents gather near center during replay */
+const MEETING_POSITIONS: Record<string, number> = {
+    chora: 280, subrosa: 340, thaum: 400, primus: 460, mux: 520, praxis: 580,
+};
+
+function truncateDialogue(text: string, maxLen = 80): string {
+    let cleaned = text
+        .replace(/https?:\/\/\S+/g, '')
+        .replace(/[*_]{1,3}([^*_]+)[*_]{1,3}/g, '$1')
+        .replace(/^["']|["']$/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (cleaned.length <= maxLen) return cleaned;
+    const truncated = cleaned.slice(0, maxLen);
+    const lastSpace = truncated.lastIndexOf(' ');
+    return (lastSpace > maxLen * 0.6 ? truncated.slice(0, lastSpace) : truncated) + '…';
+}
+
 // ─── Main Component ───
 
-export function OfficeRoom() {
+export interface OfficeRoomProps {
+    /** Replay mode props — pass all four to activate replay */
+    replaySession?: RoundtableSession;
+    replayTurns?: RoundtableTurn[];
+    currentTurnIndex?: number;
+    isReplaying?: boolean;
+}
+
+export function OfficeRoom({ replaySession, replayTurns, currentTurnIndex, isReplaying }: OfficeRoomProps) {
     const period = useTimeOfDay();
     const { stats } = useSystemStats();
     const { sessions } = useConversations(5);
     const sky = SKY_COLORS[period];
+
+    // Determine which agents are replay participants
+    const replayParticipants = useMemo(
+        () => new Set(replaySession?.participants ?? []),
+        [replaySession?.participants],
+    );
+
+    // Current replay turn
+    const currentReplayTurn = isReplaying && replayTurns && currentTurnIndex !== undefined
+        ? replayTurns[currentTurnIndex] : undefined;
 
     const [agents, setAgents] = useState<OfficeAgent[]>(() =>
         AGENT_CONFIGS.map(cfg => ({
@@ -512,10 +551,43 @@ export function OfficeRoom() {
         })),
     );
 
-    // Fetch recent conversation turns for speech bubbles
+    // Replay mode: override positions and behaviors for participants
+    useEffect(() => {
+        if (!isReplaying) return;
+
+        setAgents(prev =>
+            prev.map(agent => {
+                const isParticipant = replayParticipants.has(agent.id);
+                if (!isParticipant) return agent; // non-participants keep normal behavior
+
+                const meetingX = MEETING_POSITIONS[agent.id] ?? agent.x;
+                const isSpeaker = currentReplayTurn?.speaker === agent.id;
+                const behavior: AgentBehavior = isSpeaker ? 'chatting' : 'thinking';
+
+                // Show speech bubble for current speaker
+                let speechBubble: string | undefined;
+                let speechTick = 0;
+                if (isSpeaker && currentReplayTurn) {
+                    speechBubble = truncateDialogue(currentReplayTurn.dialogue, 80);
+                    speechTick = 999; // Keep showing until turn changes
+                }
+
+                return {
+                    ...agent,
+                    behavior,
+                    targetX: meetingX,
+                    speechBubble,
+                    speechTick,
+                };
+            }),
+        );
+    }, [isReplaying, currentTurnIndex, currentReplayTurn, replayParticipants]);
+
+    // Fetch recent conversation turns for speech bubbles (normal mode only)
     const [recentTurns, setRecentTurns] = useState<{ speaker: string; dialogue: string }[]>([]);
 
     useEffect(() => {
+        if (isReplaying) return; // Skip in replay mode
         async function fetchTurns() {
             try {
                 const lastSession = sessions.find(s => s.status === 'completed' || s.status === 'running');
@@ -532,10 +604,12 @@ export function OfficeRoom() {
             } catch { /* ignore */ }
         }
         fetchTurns();
-    }, [sessions]);
+    }, [sessions, isReplaying]);
 
-    // Cycle behaviors with speech bubbles from real data
+    // Cycle behaviors with speech bubbles from real data (normal mode only)
     useEffect(() => {
+        if (isReplaying) return; // Disable behavior cycling in replay mode
+
         const interval = setInterval(() => {
             setAgents(prev =>
                 prev.map(agent => {
@@ -567,7 +641,26 @@ export function OfficeRoom() {
         }, 8000 + Math.random() * 7000);
 
         return () => clearInterval(interval);
-    }, [recentTurns]);
+    }, [recentTurns, isReplaying]);
+
+    // Reset agent positions when exiting replay mode
+    useEffect(() => {
+        if (isReplaying) return;
+
+        // Return agents to their desks
+        setAgents(prev =>
+            prev.map(agent => {
+                const cfg = AGENT_CONFIGS.find(c => c.id === agent.id);
+                return {
+                    ...agent,
+                    targetX: cfg?.startX ?? agent.x,
+                    speechBubble: undefined,
+                    speechTick: 0,
+                    behavior: 'working' as AgentBehavior,
+                };
+            }),
+        );
+    }, [isReplaying]);
 
     // Animation loop
     useInterval(() => {
@@ -580,8 +673,15 @@ export function OfficeRoom() {
                         newX = agent.x + Math.sign(dx) * 2;
                     }
                 }
-                // Auto-clear speech bubbles
-                const newSpeechTick = agent.speechTick > 0 ? agent.speechTick - 1 : 0;
+                // In replay mode, glide participants to meeting positions
+                if (isReplaying && replayParticipants.has(agent.id)) {
+                    const dx = agent.targetX - agent.x;
+                    if (Math.abs(dx) > 1) {
+                        newX = agent.x + Math.sign(dx) * Math.min(Math.abs(dx), 3);
+                    }
+                }
+                // Auto-clear speech bubbles (skip in replay — managed by replay effect)
+                const newSpeechTick = isReplaying ? agent.speechTick : (agent.speechTick > 0 ? agent.speechTick - 1 : 0);
                 return {
                     ...agent,
                     x: newX,
@@ -609,12 +709,24 @@ export function OfficeRoom() {
                     The Office
                 </span>
                 <div className='flex items-center gap-3'>
-                    <span className='text-[10px] text-zinc-600'>
-                        {period === 'day' ? 'Day' : period === 'dusk' ? 'Dusk' : 'Night'}
-                    </span>
-                    <span className='text-[10px] text-zinc-700'>
-                        {agents.filter(a => a.behavior !== 'working').length} agents active
-                    </span>
+                    {isReplaying ? (
+                        <span className='flex items-center gap-1.5 text-[10px] text-accent-blue font-medium'>
+                            <span className='relative flex h-1.5 w-1.5'>
+                                <span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-accent-blue opacity-75' />
+                                <span className='relative inline-flex rounded-full h-1.5 w-1.5 bg-accent-blue' />
+                            </span>
+                            Replay — {replaySession?.format.replace(/_/g, ' ')}
+                        </span>
+                    ) : (
+                        <>
+                            <span className='text-[10px] text-zinc-600'>
+                                {period === 'day' ? 'Day' : period === 'dusk' ? 'Dusk' : 'Night'}
+                            </span>
+                            <span className='text-[10px] text-zinc-700'>
+                                {agents.filter(a => a.behavior !== 'working').length} agents active
+                            </span>
+                        </>
+                    )}
                 </div>
             </div>
             <svg

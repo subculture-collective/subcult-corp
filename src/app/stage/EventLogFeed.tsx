@@ -12,7 +12,7 @@ import {
 } from './hooks';
 import { AGENTS } from '@/lib/agents';
 import { TranscriptViewer } from './TranscriptViewer';
-import type { AgentEvent, AgentId, RoundtableSession } from '@/lib/types';
+import type { AgentEvent, AgentId, RoundtableSession, RoundtableTurn } from '@/lib/types';
 
 // ─── Constants ───
 
@@ -472,7 +472,11 @@ const CONVERSATION_EVENT_KINDS = new Set([
 
 export function EventLogFeed({
     onConnectionStatusAction,
-}: { onConnectionStatusAction?: (status: ConnectionStatus) => void } = {}) {
+    onStartReplay,
+}: {
+    onConnectionStatusAction?: (status: ConnectionStatus) => void;
+    onStartReplay?: (session: RoundtableSession, turns: RoundtableTurn[]) => void;
+} = {}) {
     const [activeTab, setActiveTab] = useState<FeedTab>('all');
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
     const [showSessions, setShowSessions] = useState(true);
@@ -611,6 +615,7 @@ export function EventLogFeed({
                                                 onClose={() =>
                                                     setSelectedSession(null)
                                                 }
+                                                onStartReplay={onStartReplay}
                                             />
                                         </div>
                                     )}
@@ -680,6 +685,7 @@ export function EventLogFeed({
                                                 onClose={() =>
                                                     setTranscriptEventId(null)
                                                 }
+                                                onStartReplay={onStartReplay}
                                             />
                                         </div>
                                     )}

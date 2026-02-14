@@ -127,6 +127,19 @@ const triggers = [
         cooldown_minutes: 1440,
         enabled: true,
     },
+
+    // ─── Governance ───
+    {
+        name: 'Governance debate (All agents)',
+        trigger_event: 'governance_proposal_created',
+        conditions: { lookback_minutes: 60 },
+        action_config: {
+            target_agent: 'primus',
+            action: 'convene_governance_debate',
+        },
+        cooldown_minutes: 30,
+        enabled: true,
+    },
 ];
 
 async function seed() {
