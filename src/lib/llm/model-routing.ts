@@ -17,7 +17,7 @@ export const DEFAULT_MODELS = [
     'deepseek/deepseek-v3.2',
     'qwen/qwen3-235b-a22b',
     'moonshotai/kimi-k2.5',
-    'anthropic/claude-sonnet-4.5',  // last resort — higher quality, higher cost
+    'anthropic/claude-sonnet-4.5', // last resort — higher quality, higher cost
 ];
 
 const CACHE_TTL_MS = 30_000;
