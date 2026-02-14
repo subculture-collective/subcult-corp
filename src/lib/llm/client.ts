@@ -40,7 +40,10 @@ const LLM_MODEL_ENV: string | null = (() => {
 async function resolveModelsWithEnv(context?: string): Promise<string[]> {
     const models = await resolveModels(context);
     if (!LLM_MODEL_ENV) return models;
-    return [LLM_MODEL_ENV, ...models.filter(m => m !== LLM_MODEL_ENV)];
+    return [
+        LLM_MODEL_ENV,
+        ...models.filter((m: string) => m !== LLM_MODEL_ENV),
+    ];
 }
 
 let _client: OpenRouter | null = null;
@@ -84,7 +87,10 @@ async function ollamaGenerate(
 
     try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT_MS);
+        const timeoutId = setTimeout(
+            () => controller.abort(),
+            OLLAMA_TIMEOUT_MS,
+        );
 
         const response = await fetch(`${OLLAMA_BASE_URL}/v1/chat/completions`, {
             method: 'POST',
@@ -116,18 +122,16 @@ async function ollamaGenerate(
  * Convert a plain JSON Schema property to a Zod type.
  * Handles string (with enum), number, integer, boolean.
  */
-function jsonSchemaPropToZod(
-    prop: Record<string, unknown>,
-): z.ZodType {
+function jsonSchemaPropToZod(prop: Record<string, unknown>): z.ZodType {
     const enumValues = prop.enum as string[] | undefined;
     let zodType: z.ZodType;
 
     switch (prop.type) {
         case 'string':
             zodType =
-                enumValues && enumValues.length > 0
-                    ? z.enum(enumValues as [string, ...string[]])
-                    : z.string();
+                enumValues && enumValues.length > 0 ?
+                    z.enum(enumValues as [string, ...string[]])
+                :   z.string();
             break;
         case 'number':
             zodType = z.number();
@@ -203,7 +207,11 @@ async function trackUsage(
     model: string,
     usage: OpenResponsesUsage | null | undefined,
     durationMs: number,
-    trackingContext?: { agentId?: string; context?: string; sessionId?: string },
+    trackingContext?: {
+        agentId?: string;
+        context?: string;
+        sessionId?: string;
+    },
 ): Promise<void> {
     try {
         const agentId = trackingContext?.agentId ?? 'unknown';
@@ -235,7 +243,11 @@ async function trackUsage(
         `;
     } catch (error) {
         // Log error but don't throw — tracking should never break the main flow
-        log.error('Failed to track LLM usage', { error, model, trackingContext });
+        log.error('Failed to track LLM usage', {
+            error,
+            model,
+            trackingContext,
+        });
     }
 }
 
@@ -271,12 +283,18 @@ export async function llmGenerate(
 
     // ── Fall back to OpenRouter (cloud) ──
     // Resolve model list: explicit override → single model, otherwise → dynamic routing (DB + env + defaults)
-    const resolved = model
-        ? [normalizeModel(model)]
-        : await resolveModelsWithEnv(trackingContext?.context);
+    const resolved =
+        model ?
+            [normalizeModel(model)]
+        :   await resolveModelsWithEnv(trackingContext?.context);
     const modelList = resolved.slice(0, MAX_MODELS_ARRAY);
+    if (modelList.length === 0) {
+        throw new Error('No LLM models available after resolution');
+    }
 
-    const buildCallOpts = (spec: string | string[]): Record<string, unknown> => {
+    const buildCallOpts = (
+        spec: string | string[],
+    ): Record<string, unknown> => {
         const isArray = Array.isArray(spec);
         const opts: Record<string, unknown> = {
             ...(isArray ? { models: spec } : { model: spec }),
@@ -322,10 +340,14 @@ export async function llmGenerate(
     } catch (error: unknown) {
         const err = error as { statusCode?: number; message?: string };
         if (err.statusCode === 401) {
-            throw new Error('Invalid OpenRouter API key — check your OPENROUTER_API_KEY');
+            throw new Error(
+                'Invalid OpenRouter API key — check your OPENROUTER_API_KEY',
+            );
         }
         if (err.statusCode === 402) {
-            throw new Error('Insufficient OpenRouter credits — add credits at openrouter.ai');
+            throw new Error(
+                'Insufficient OpenRouter credits — add credits at openrouter.ai',
+            );
         }
         if (err.statusCode === 429) {
             throw new Error('OpenRouter rate limited — try again shortly');
@@ -366,9 +388,10 @@ export async function llmGenerateWithTools(
 
     const client = getClient();
     const startTime = Date.now();
-    const resolved = model
-        ? [normalizeModel(model)]
-        : await resolveModelsWithEnv(trackingContext?.context);
+    const resolved =
+        model ?
+            [normalizeModel(model)]
+        :   await resolveModelsWithEnv(trackingContext?.context);
     const modelList = resolved.slice(0, MAX_MODELS_ARRAY);
 
     const systemMessage = messages.find(m => m.role === 'system');
