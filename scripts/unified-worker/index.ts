@@ -169,6 +169,80 @@ async function pollRoundtables(): Promise<boolean> {
                 });
             }
         }
+
+        // Governance: extract votes from debate sessions tied to a governance proposal
+        const proposalId = (session.metadata as Record<string, unknown>)?.governance_proposal_id as string | undefined;
+        if (session.format === 'debate' && proposalId) {
+            try {
+                const { castGovernanceVote } = await import('../../src/lib/ops/governance');
+                const { llmGenerate } = await import('../../src/lib/llm/client');
+
+                // Fetch the debate turns
+                const turns = await sql<Array<{ agent_id: string; dialogue: string }>>`
+                    SELECT agent_id, dialogue FROM ops_roundtable_turns
+                    WHERE session_id = ${session.id}
+                    ORDER BY turn_number ASC
+                `;
+
+                if (turns.length > 0) {
+                    // Build a transcript for LLM parsing
+                    const transcript = turns
+                        .map(t => `${t.agent_id}: ${t.dialogue}`)
+                        .join('\n\n');
+
+                    const parseResult = await llmGenerate({
+                        messages: [
+                            {
+                                role: 'system',
+                                content:
+                                    'You extract each participant\'s final position from a governance debate. ' +
+                                    'Return ONLY valid JSON — an array of objects, one per unique participant. ' +
+                                    'Each object: { "agent": "<agent_id>", "vote": "approve" | "reject", "reason": "<1-sentence summary>" }',
+                            },
+                            {
+                                role: 'user',
+                                content: `Extract the final position of each participant in this debate:\n\n${transcript}`,
+                            },
+                        ],
+                        temperature: 0.2,
+                        maxTokens: 800,
+                        trackingContext: {
+                            agentId: 'system',
+                            context: 'governance-vote-extraction',
+                        },
+                    });
+
+                    // Parse the JSON response
+                    const jsonMatch = parseResult.match(/\[[\s\S]*\]/);
+                    if (jsonMatch) {
+                        const votes = JSON.parse(jsonMatch[0]) as Array<{
+                            agent: string;
+                            vote: 'approve' | 'reject';
+                            reason: string;
+                        }>;
+
+                        for (const v of votes) {
+                            if (v.agent && (v.vote === 'approve' || v.vote === 'reject')) {
+                                await castGovernanceVote(proposalId, v.agent, v.vote, v.reason ?? '');
+                            }
+                        }
+
+                        log.info('Governance votes extracted from debate', {
+                            sessionId: session.id,
+                            proposalId,
+                            voteCount: votes.length,
+                        });
+                    }
+                }
+            } catch (govErr) {
+                // Non-fatal — governance vote extraction should never stall the worker
+                log.error('Governance vote extraction failed (non-fatal)', {
+                    error: govErr,
+                    sessionId: session.id,
+                    proposalId,
+                });
+            }
+        }
     } catch (err) {
         log.error('Roundtable orchestration failed', {
             error: err,

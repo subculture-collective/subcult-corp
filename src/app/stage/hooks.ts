@@ -856,6 +856,141 @@ export function useContent(filters?: ContentFilters) {
     return { drafts, loading, error, refetch };
 }
 
+// ─── useGovernance — fetch + poll governance proposals ───
+
+export type GovernanceProposalStatus = 'proposed' | 'voting' | 'accepted' | 'rejected';
+
+export interface GovernanceVoteSummary {
+    approvals: number;
+    rejections: number;
+    total: number;
+    required: number;
+}
+
+export interface GovernanceProposalEntry {
+    id: string;
+    proposer: string;
+    policy_key: string;
+    current_value: Record<string, unknown> | null;
+    proposed_value: Record<string, unknown>;
+    rationale: string;
+    status: GovernanceProposalStatus;
+    votes: Record<string, { vote: string; reason: string }>;
+    required_votes: number;
+    debate_session_id: string | null;
+    vote_summary: GovernanceVoteSummary;
+    created_at: string;
+    resolved_at: string | null;
+}
+
+export function useGovernance(filters?: {
+    status?: GovernanceProposalStatus;
+    proposer?: string;
+    limit?: number;
+}) {
+    const [proposals, setProposals] = useState<GovernanceProposalEntry[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [refreshKey, setRefreshKey] = useState(0);
+
+    const status = filters?.status;
+    const proposer = filters?.proposer;
+    const limit = filters?.limit ?? 50;
+
+    const fetchProposals = useCallback(async () => {
+        try {
+            const params = new URLSearchParams();
+            if (status) params.set('status', status);
+            if (proposer) params.set('proposer', proposer);
+            params.set('limit', String(limit));
+
+            const data = await fetchJson<{ proposals: GovernanceProposalEntry[] }>(
+                `/api/ops/governance?${params}`,
+            );
+            setProposals(data.proposals);
+            setError(null);
+        } catch (err) {
+            setError((err as Error).message);
+        } finally {
+            setLoading(false);
+        }
+    }, [status, proposer, limit]);
+
+    useEffect(() => {
+        setLoading(true);
+        fetchProposals();
+    }, [fetchProposals, refreshKey]);
+
+    // Poll every 30 seconds
+    useInterval(() => {
+        fetchProposals();
+    }, 30000);
+
+    const refetch = useCallback(() => setRefreshKey(k => k + 1), []);
+
+    return { proposals, loading, error, refetch };
+}
+
+// ─── useDreams — fetch dream cycles with filtering ───
+
+export interface DreamEntry {
+    id: string;
+    agent_id: string;
+    source_memories: string[];
+    dream_content: string;
+    dream_type: string;
+    new_memory_id: string | null;
+    created_at: string;
+}
+
+export function useDreams(filters?: {
+    agentId?: string;
+    dreamType?: string;
+    limit?: number;
+}) {
+    const [dreams, setDreams] = useState<DreamEntry[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [refreshKey, setRefreshKey] = useState(0);
+
+    const agentId = filters?.agentId;
+    const dreamType = filters?.dreamType;
+    const limit = filters?.limit ?? 50;
+
+    const fetchDreams = useCallback(async () => {
+        try {
+            const params = new URLSearchParams();
+            if (agentId) params.set('agent_id', agentId);
+            if (dreamType) params.set('dream_type', dreamType);
+            params.set('limit', String(limit));
+
+            const data = await fetchJson<{ dreams: DreamEntry[] }>(
+                `/api/ops/dreams?${params}`,
+            );
+            setDreams(data.dreams);
+            setError(null);
+        } catch (err) {
+            setError((err as Error).message);
+        } finally {
+            setLoading(false);
+        }
+    }, [agentId, dreamType, limit]);
+
+    useEffect(() => {
+        setLoading(true);
+        fetchDreams();
+    }, [fetchDreams, refreshKey]);
+
+    // Poll every 60 seconds (dreams are infrequent)
+    useInterval(() => {
+        fetchDreams();
+    }, 60000);
+
+    const refetch = useCallback(() => setRefreshKey(k => k + 1), []);
+
+    return { dreams, loading, error, refetch };
+}
+
 // ─── useInterval — for animations and polling ───
 
 export function useInterval(callback: () => void, delay: number | null) {

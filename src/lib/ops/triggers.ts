@@ -150,6 +150,8 @@ async function checkTrigger(rule: TriggerRule, defaults: TriggerDefaults): Promi
             return checkOpsReport(conditions, targetAgent);
         case 'strategic_drift_check':
             return checkStrategicDrift(conditions, targetAgent, defaults);
+        case 'governance_proposal_created':
+            return checkGovernanceProposalCreated(conditions, targetAgent);
         default:
             if (rule.trigger_event.startsWith('proactive_')) {
                 return checkProactiveGeneric(rule, targetAgent);
@@ -627,6 +629,88 @@ async function checkProactiveGeneric(
             agent_id: targetAgent,
             title: rule.name.substring(0, 100),
             proposed_steps: [{ kind: 'research_topic', payload: { topic } }],
+            source: 'trigger',
+        },
+    };
+}
+
+async function checkGovernanceProposalCreated(
+    conditions: Record<string, unknown>,
+    targetAgent: string,
+): Promise<TriggerCheckResult> {
+    const lookback = (conditions.lookback_minutes as number) ?? 60;
+    const cutoff = new Date(Date.now() - lookback * 60_000).toISOString();
+
+    // Find proposals in 'proposed' status that don't yet have a debate session
+    const proposals = await sql<{
+        id: string;
+        proposer: string;
+        policy_key: string;
+        current_value: Record<string, unknown> | null;
+        proposed_value: Record<string, unknown>;
+        rationale: string;
+    }[]>`
+        SELECT id, proposer, policy_key, current_value, proposed_value, rationale
+        FROM ops_governance_proposals
+        WHERE status = 'proposed'
+          AND debate_session_id IS NULL
+          AND created_at >= ${cutoff}
+        ORDER BY created_at ASC
+        LIMIT 1
+    `;
+
+    if (proposals.length === 0) {
+        return { fired: false };
+    }
+
+    const proposal = proposals[0];
+
+    // Build debate topic
+    const currentStr = JSON.stringify(proposal.current_value, null, 0);
+    const proposedStr = JSON.stringify(proposal.proposed_value, null, 0);
+    const topic = `Governance debate: ${proposal.proposer} proposes changing "${proposal.policy_key}" from ${currentStr} to ${proposedStr}. Rationale: ${proposal.rationale}`;
+
+    // Create a debate roundtable with ALL 6 agents
+    const allAgents = ['chora', 'subrosa', 'thaum', 'praxis', 'mux', 'primus'];
+    const [session] = await sql<[{ id: string }]>`
+        INSERT INTO ops_roundtable_sessions (
+            format, topic, participants, status, scheduled_for, metadata
+        ) VALUES (
+            'debate',
+            ${topic.slice(0, 1000)},
+            ${allAgents},
+            'pending',
+            NOW(),
+            ${sql.json({
+                governance_proposal_id: proposal.id,
+                policy_key: proposal.policy_key,
+                proposer: proposal.proposer,
+            })}::jsonb
+        )
+        RETURNING id
+    `;
+
+    // Update proposal: status → voting, link debate session
+    await sql`
+        UPDATE ops_governance_proposals
+        SET status = 'voting', debate_session_id = ${session.id}
+        WHERE id = ${proposal.id}
+    `;
+
+    log.info('Governance debate session created', {
+        proposalId: proposal.id,
+        sessionId: session.id,
+        policyKey: proposal.policy_key,
+    });
+
+    return {
+        fired: true,
+        reason: `Governance debate convened for "${proposal.policy_key}" (proposed by ${proposal.proposer})`,
+        proposal: {
+            agent_id: targetAgent,
+            title: `Governance debate: ${proposal.policy_key}`,
+            description: `Debate roundtable created for proposal by ${proposal.proposer}`,
+            proposed_steps: [{ kind: 'log_event' }],
             source: 'trigger',
         },
     };
