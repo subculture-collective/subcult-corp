@@ -1,9 +1,11 @@
 // file_write tool — write files to /workspace in the toolbox
 // Enforces per-agent path ACLs and auto-appends to manifest for output/ writes.
+// ACLs: static WRITE_ACLS map + dynamic ops_acl_grants from DB.
 import type { NativeTool } from '../types';
 import type { AgentId } from '../../types';
 import { execInToolbox } from '../executor';
 import { randomUUID } from 'node:crypto';
+import { sql } from '@/lib/db';
 import path from 'node:path';
 
 /**
@@ -23,8 +25,8 @@ export const WRITE_ACLS: Record<AgentId, string[]> = {
 /** Droids write to their own scratch directory only */
 const DROID_PREFIX = 'droids/';
 
+/** Check static ACLs only (synchronous, for backwards compat) */
 export function isPathAllowed(agentId: string, relativePath: string): boolean {
-    // Droid sessions (agentId like "droid-<uuid>") can only write to their own droid directory
     if (agentId.startsWith('droid-')) {
         return relativePath.startsWith(`${DROID_PREFIX}${agentId}/`);
     }
@@ -33,6 +35,42 @@ export function isPathAllowed(agentId: string, relativePath: string): boolean {
     if (!acls) return false;
 
     return acls.some(prefix => relativePath.startsWith(prefix));
+}
+
+// ─── Dynamic ACL grants cache (30s TTL per agent) ───
+
+const GRANT_CACHE_TTL_MS = 30_000;
+const grantCache = new Map<string, { prefixes: string[]; ts: number }>();
+
+async function getActiveGrants(agentId: string): Promise<string[]> {
+    const cached = grantCache.get(agentId);
+    if (cached && Date.now() - cached.ts < GRANT_CACHE_TTL_MS) {
+        return cached.prefixes;
+    }
+
+    const rows = await sql<{ path_prefix: string }[]>`
+        SELECT path_prefix FROM ops_acl_grants
+        WHERE agent_id = ${agentId} AND expires_at > NOW()
+    `;
+
+    const prefixes = rows.map(r => r.path_prefix);
+    grantCache.set(agentId, { prefixes, ts: Date.now() });
+    return prefixes;
+}
+
+/** Check both static ACLs and dynamic DB grants */
+async function isPathAllowedWithGrants(agentId: string, relativePath: string): Promise<boolean> {
+    // Static ACLs first (fast path)
+    if (isPathAllowed(agentId, relativePath)) return true;
+
+    // Dynamic grants from DB
+    try {
+        const grants = await getActiveGrants(agentId);
+        return grants.some(prefix => relativePath.startsWith(prefix));
+    } catch {
+        // DB unavailable — deny
+        return false;
+    }
 }
 
 /** Append a manifest entry for artifacts written to output/ */
@@ -103,8 +141,8 @@ export function createFileWriteExecute(agentId: string) {
             };
         }
 
-        // Enforce write ACLs
-        if (!isPathAllowed(agentId, relativePath)) {
+        // Enforce write ACLs (static + dynamic grants)
+        if (!(await isPathAllowedWithGrants(agentId, relativePath))) {
             return {
                 error: `Access denied: ${agentId} cannot write to ${relativePath}. Check your designated write paths.`,
             };

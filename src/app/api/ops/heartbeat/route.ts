@@ -12,6 +12,8 @@ import { checkScheduleAndEnqueue } from '@/lib/roundtable/orchestrator';
 import { learnFromOutcomes } from '@/lib/ops/outcome-learner';
 import { checkAndQueueInitiatives } from '@/lib/ops/initiative';
 import { checkArtifactFreshness } from '@/lib/ops/artifact-health';
+import { checkTemplateHealth } from '@/lib/ops/template-health';
+import { evaluateCronSchedules } from '@/lib/ops/cron-scheduler';
 import { logger } from '@/lib/logger';
 import { withRequestContext } from '@/middleware';
 
@@ -117,6 +119,22 @@ export async function GET(req: NextRequest) {
         } catch (err) {
             results.artifacts = { error: (err as Error).message };
             log.error('Artifact freshness check failed', { error: err });
+        }
+
+        // ── Phase 9: Evaluate cron schedules ──
+        try {
+            results.cron = await evaluateCronSchedules();
+        } catch (err) {
+            results.cron = { error: (err as Error).message };
+            log.error('Cron schedule evaluation failed', { error: err });
+        }
+
+        // ── Phase 10: Template health check ──
+        try {
+            results.templateHealth = await checkTemplateHealth();
+        } catch (err) {
+            results.templateHealth = { error: (err as Error).message };
+            log.error('Template health check failed', { error: err });
         }
 
         const durationMs = Date.now() - startTime;

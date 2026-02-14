@@ -169,13 +169,41 @@ async function pollMissionSteps(): Promise<boolean> {
         const { emitEvent } = await import('../../src/lib/ops/events');
         const { buildStepPrompt } = await import('../../src/lib/ops/step-prompts');
 
-        // Build a tool-aware prompt for this step kind
-        const prompt = buildStepPrompt(step.kind, {
+        // Build a tool-aware prompt for this step kind (with template version tracking)
+        const { prompt, templateVersion } = await buildStepPrompt(step.kind, {
             missionTitle: mission?.title ?? 'Unknown',
             agentId,
             payload: step.payload ?? {},
             outputPath: step.output_path ?? undefined,
-        });
+        }, { withVersion: true });
+
+        // Record template version on the step for outcome tracking
+        if (templateVersion != null) {
+            await sql`
+                UPDATE ops_mission_steps
+                SET template_version = ${templateVersion}
+                WHERE id = ${step.id}
+            `;
+        }
+
+        // Grant temporary write access if the step writes outside base ACLs
+        if (step.output_path) {
+            const outputPrefix = step.output_path.endsWith('/')
+                ? step.output_path
+                : step.output_path + '/';
+            try {
+                await sql`
+                    INSERT INTO ops_acl_grants (agent_id, path_prefix, source, source_id, expires_at)
+                    VALUES (${agentId}, ${outputPrefix}, 'mission', ${step.mission_id}::uuid, NOW() + INTERVAL '4 hours')
+                `;
+            } catch (grantErr) {
+                log.warn('Failed to create ACL grant for step', {
+                    error: grantErr,
+                    agentId,
+                    outputPath: step.output_path,
+                });
+            }
+        }
 
         // Create an agent session so the step gets full tool access
         const [session] = await sql`

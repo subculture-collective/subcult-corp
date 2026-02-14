@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS ops_llm_usage (
   -- agent_id is nullable for system-initiated calls (e.g., topic generation)
   agent_id TEXT,
   context TEXT NOT NULL,
-  session_id UUID REFERENCES ops_roundtable_sessions(id) ON DELETE SET NULL,
+  session_id UUID,  -- References ops_roundtable_sessions or ops_agent_sessions (no FK — polymorphic)
   -- Duration is nullable for requests that timeout or fail before completion
   duration_ms INTEGER,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()

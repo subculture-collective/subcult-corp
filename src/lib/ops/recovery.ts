@@ -1,11 +1,12 @@
 // Recovery — reclaim stale steps and finalize missions
 import { sql } from '@/lib/db';
 import { emitEvent } from './events';
-
-const STALE_THRESHOLD_MINUTES = 30;
+import { getPolicy } from './policy';
 
 export async function recoverStaleSteps(): Promise<{ recovered: number }> {
-    const cutoff = new Date(Date.now() - STALE_THRESHOLD_MINUTES * 60_000);
+    const policy = await getPolicy('recovery_policy');
+    const staleThresholdMinutes = (policy.stale_threshold_minutes as number) ?? 30;
+    const cutoff = new Date(Date.now() - staleThresholdMinutes * 60_000);
 
     const staleRows = await sql<{ id: string; mission_id: string }[]>`
         SELECT id, mission_id FROM ops_mission_steps
@@ -16,7 +17,7 @@ export async function recoverStaleSteps(): Promise<{ recovered: number }> {
     if (staleRows.length === 0) return { recovered: 0 };
 
     const ids = staleRows.map(r => r.id);
-    const reason = `Recovered: step exceeded ${STALE_THRESHOLD_MINUTES} minute timeout`;
+    const reason = `Recovered: step exceeded ${staleThresholdMinutes} minute timeout`;
     await sql`
         UPDATE ops_mission_steps
         SET status = 'failed',
@@ -36,7 +37,7 @@ export async function recoverStaleSteps(): Promise<{ recovered: number }> {
         agent_id: 'mux',
         kind: 'stale_steps_recovered',
         title: `Recovered ${staleRows.length} stale step(s)`,
-        summary: `Steps exceeded ${STALE_THRESHOLD_MINUTES}min timeout`,
+        summary: `Steps exceeded ${staleThresholdMinutes}min timeout`,
         tags: ['recovery', 'stale'],
         metadata: { stepIds: ids, missionIds },
     });

@@ -1,11 +1,20 @@
 // Trigger evaluation — fires proposals based on trigger rules
 import { sql } from '@/lib/db';
-import type { TriggerRule, TriggerCheckResult } from '../types';
+import type { TriggerRule, TriggerCheckResult, ProposedStep } from '../types';
 import { createProposalAndMaybeAutoApprove } from './proposal-service';
 import { emitEvent } from './events';
+import { getPolicy } from './policy';
+import { evaluateCondition, type TriggerCondition } from './condition-evaluator';
 import { logger } from '@/lib/logger';
 
 const log = logger.child({ module: 'triggers' });
+
+/** Default thresholds loaded from ops_policy once per evaluation cycle */
+interface TriggerDefaults {
+    stall_minutes: number;
+    failure_rate_threshold: number;
+    lookback_hours: number;
+}
 
 export async function evaluateTriggers(
     timeoutMs: number = 4000,
@@ -15,6 +24,14 @@ export async function evaluateTriggers(
     const rules = await sql<TriggerRule[]>`
         SELECT * FROM ops_trigger_rules WHERE enabled = true
     `;
+
+    // Load trigger defaults once per evaluation cycle
+    const defaultsPolicy = await getPolicy('trigger_defaults');
+    const triggerDefaults: TriggerDefaults = {
+        stall_minutes: (defaultsPolicy.stall_minutes as number) ?? 120,
+        failure_rate_threshold: (defaultsPolicy.failure_rate_threshold as number) ?? 0.3,
+        lookback_hours: (defaultsPolicy.lookback_hours as number) ?? 48,
+    };
 
     let evaluated = 0;
     let fired = 0;
@@ -34,7 +51,7 @@ export async function evaluateTriggers(
         }
 
         try {
-            const result = await checkTrigger(rule);
+            const result = await checkTrigger(rule, triggerDefaults);
             evaluated++;
 
             if (result.fired && result.proposal) {
@@ -73,11 +90,38 @@ export async function evaluateTriggers(
     return { evaluated, fired };
 }
 
-async function checkTrigger(rule: TriggerRule): Promise<TriggerCheckResult> {
+async function checkTrigger(rule: TriggerRule, defaults: TriggerDefaults): Promise<TriggerCheckResult> {
     const conditions = rule.conditions as Record<string, unknown>;
     const actionConfig = rule.action_config as Record<string, unknown>;
     const targetAgent = actionConfig.target_agent as string;
     const actionType = actionConfig.action as string;
+
+    // Declarative condition path — if rule has a JSONB condition, evaluate it
+    if (rule.condition) {
+        try {
+            const met = await evaluateCondition(rule.condition as unknown as TriggerCondition);
+            if (met) {
+                return {
+                    fired: true,
+                    reason: `Declarative condition met for ${rule.name}`,
+                    proposal: {
+                        agent_id: targetAgent,
+                        title: (actionConfig.title as string) ?? rule.name,
+                        description: (actionConfig.description as string) ?? undefined,
+                        proposed_steps: (actionConfig.steps as ProposedStep[]) ?? [{ kind: 'log_event' as const }],
+                        source: 'trigger',
+                    },
+                };
+            }
+            return { fired: false };
+        } catch (err) {
+            log.error(`Declarative condition evaluation failed for "${rule.name}", falling through to code`, {
+                error: err,
+                ruleId: rule.id,
+            });
+            // Fall through to switch/case as fallback
+        }
+    }
 
     switch (rule.trigger_event) {
         case 'mission_failed':
@@ -89,7 +133,7 @@ async function checkTrigger(rule: TriggerRule): Promise<TriggerCheckResult> {
         case 'proactive_scan_signals':
             return checkProactiveScan(conditions, targetAgent);
         case 'work_stalled':
-            return checkWorkStalled(conditions, targetAgent);
+            return checkWorkStalled(conditions, targetAgent, defaults);
         case 'proposal_ready':
             return checkProposalReady(conditions, targetAgent);
         case 'mission_milestone_hit':
@@ -103,7 +147,7 @@ async function checkTrigger(rule: TriggerRule): Promise<TriggerCheckResult> {
         case 'proactive_ops_report':
             return checkOpsReport(conditions, targetAgent);
         case 'strategic_drift_check':
-            return checkStrategicDrift(conditions, targetAgent);
+            return checkStrategicDrift(conditions, targetAgent, defaults);
         default:
             if (rule.trigger_event.startsWith('proactive_')) {
                 return checkProactiveGeneric(rule, targetAgent);
@@ -222,8 +266,9 @@ async function checkProactiveScan(
 async function checkWorkStalled(
     conditions: Record<string, unknown>,
     targetAgent: string,
+    defaults: TriggerDefaults,
 ): Promise<TriggerCheckResult> {
-    const stallMinutes = (conditions.stall_minutes as number) ?? 120;
+    const stallMinutes = (conditions.stall_minutes as number) ?? defaults.stall_minutes;
     const cutoff = new Date(Date.now() - stallMinutes * 60_000).toISOString();
 
     const [{ count }] = await sql<[{ count: number }]>`
@@ -438,9 +483,10 @@ async function checkOpsReport(
 async function checkStrategicDrift(
     conditions: Record<string, unknown>,
     targetAgent: string,
+    defaults: TriggerDefaults,
 ): Promise<TriggerCheckResult> {
-    const lookbackHours = (conditions.lookback_hours as number) ?? 48;
-    const failureThreshold = (conditions.failure_rate_threshold as number) ?? 0.3;
+    const lookbackHours = (conditions.lookback_hours as number) ?? defaults.lookback_hours;
+    const failureThreshold = (conditions.failure_rate_threshold as number) ?? defaults.failure_rate_threshold;
     const cutoff = new Date(Date.now() - lookbackHours * 60 * 60_000).toISOString();
 
     // Check mission failure rate

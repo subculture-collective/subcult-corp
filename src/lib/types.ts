@@ -178,6 +178,8 @@ export interface TriggerRule {
     fire_count: number;
     last_fired_at?: string;
     created_at: string;
+    /** Declarative condition (JSONB). When set, evaluated by condition-evaluator instead of switch/case. */
+    condition?: Record<string, unknown> | null;
 }
 
 export interface TriggerCheckResult {

@@ -7,15 +7,21 @@ import { logger } from '@/lib/logger';
 
 const log = logger.child({ module: 'initiative' });
 
-const INITIATIVE_COOLDOWN_MINUTES = 120;
-const MIN_MEMORIES_FOR_INITIATIVE = 5;
-
 export async function maybeQueueInitiative(
     agentId: string,
+    policyOverrides?: {
+        cooldown_minutes?: number;
+        min_memories?: number;
+        min_confidence?: number;
+    },
 ): Promise<string | null> {
+    const cooldownMinutes = policyOverrides?.cooldown_minutes ?? 120;
+    const minMemories = policyOverrides?.min_memories ?? 5;
+    const minConfidence = policyOverrides?.min_confidence ?? 0.55;
+
     // Cooldown check
     const cutoff = new Date(
-        Date.now() - INITIATIVE_COOLDOWN_MINUTES * 60_000,
+        Date.now() - cooldownMinutes * 60_000,
     ).toISOString();
 
     const [{ count }] = await sql<[{ count: number }]>`
@@ -29,11 +35,11 @@ export async function maybeQueueInitiative(
     // Memory prerequisites
     const memories = await queryAgentMemories({
         agentId,
-        limit: MIN_MEMORIES_FOR_INITIATIVE,
-        minConfidence: 0.55,
+        limit: minMemories,
+        minConfidence,
     });
 
-    if (memories.length < MIN_MEMORIES_FOR_INITIATIVE) return null;
+    if (memories.length < minMemories) return null;
 
     // Queue initiative with memory context
     const context = {
@@ -63,10 +69,16 @@ export async function checkAndQueueInitiatives(): Promise<{
         return { checked: 0, queued: 0 };
     }
 
+    const policyOverrides = {
+        cooldown_minutes: (policy.cooldown_minutes as number) ?? undefined,
+        min_memories: (policy.min_memories as number) ?? undefined,
+        min_confidence: (policy.min_confidence as number) ?? undefined,
+    };
+
     let queued = 0;
     for (const agentId of AGENT_IDS) {
         try {
-            const id = await maybeQueueInitiative(agentId);
+            const id = await maybeQueueInitiative(agentId, policyOverrides);
             if (id) queued++;
         } catch (err) {
             log.error(`Failed to queue initiative for ${agentId}`, {

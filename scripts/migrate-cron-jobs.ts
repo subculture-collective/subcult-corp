@@ -197,6 +197,68 @@ Report any outages, maintenance windows, or status changes that affect our infra
     },
 ];
 
+/** Compute the next fire time for a cron expression in a given timezone */
+function computeNextFireAt(cronExpr: string, timezone: string): Date {
+    const now = new Date();
+    const maxIterations = 7 * 24 * 60; // 7 days of minutes
+
+    for (let i = 1; i <= maxIterations; i++) {
+        const candidate = new Date(now.getTime() + i * 60_000);
+        const formatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: timezone,
+            hour: 'numeric',
+            minute: 'numeric',
+            weekday: 'short',
+            day: 'numeric',
+            month: 'numeric',
+            hour12: false,
+        });
+        const parts = Object.fromEntries(
+            formatter.formatToParts(candidate).map(p => [p.type, p.value])
+        );
+
+        const min = parseInt(parts.minute ?? '0');
+        const hour = parseInt(parts.hour ?? '0');
+        const dow = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+            .indexOf(parts.weekday ?? 'Mon');
+        const dom = parseInt(parts.day ?? '1');
+        const month = parseInt(parts.month ?? '1');
+
+        const fields = cronExpr.trim().split(/\s+/);
+        if (fields.length < 5) break;
+
+        const [minF, hourF, domF, monthF, dowF] = fields;
+
+        if (
+            matchField(minF, min, 0, 59) &&
+            matchField(hourF, hour, 0, 23) &&
+            matchField(domF, dom, 1, 31) &&
+            matchField(monthF, month, 1, 12) &&
+            matchField(dowF, dow, 0, 6)
+        ) {
+            return candidate;
+        }
+    }
+
+    return new Date(now.getTime() + 86_400_000); // fallback: 1 day from now
+}
+
+/** Match a single cron field against a value */
+function matchField(field: string, value: number, _min: number, _max: number): boolean {
+    if (field === '*') return true;
+    if (field.startsWith('*/')) return value % parseInt(field.slice(2)) === 0;
+
+    for (const v of field.split(',')) {
+        if (v.includes('-')) {
+            const [start, end] = v.split('-').map(Number);
+            if (value >= start && value <= end) return true;
+        } else {
+            if (parseInt(v) === value) return true;
+        }
+    }
+    return false;
+}
+
 async function main() {
     console.log(`Migrating ${JOBS.length} cron jobs...`);
 
@@ -210,6 +272,8 @@ async function main() {
             continue;
         }
 
+        const nextFireAt = computeNextFireAt(job.cron_expression, 'America/Chicago');
+
         await sql`
             INSERT INTO ops_cron_schedules ${sql({
                 name: job.name,
@@ -221,10 +285,11 @@ async function main() {
                 max_tool_rounds: job.max_tool_rounds,
                 model: job.model ?? null,
                 enabled: true,
+                next_fire_at: nextFireAt.toISOString(),
             })}
         `;
 
-        console.log(`  OK: "${job.name}" → ${job.agent_id} (${job.cron_expression})`);
+        console.log(`  OK: "${job.name}" → ${job.agent_id} (${job.cron_expression}) next: ${nextFireAt.toISOString()}`);
     }
 
     console.log('Done.');

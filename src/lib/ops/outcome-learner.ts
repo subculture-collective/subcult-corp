@@ -1,7 +1,10 @@
 // Outcome learner — extract lessons from completed missions
 import { sql } from '@/lib/db';
 import { writeMemory, enforceMemoryCap } from './memory';
+import { logger } from '@/lib/logger';
 import type { MemoryType } from '../types';
+
+const log = logger.child({ module: 'outcome-learner' });
 
 // Map step kinds to appropriate memory types
 const STEP_KIND_TO_MEMORY_TYPE: Record<string, MemoryType> = {
@@ -145,6 +148,24 @@ export async function learnFromOutcomes(): Promise<{ learned: number }> {
             learned++;
             await enforceMemoryCap(mission.created_by);
         }
+    }
+
+    // Check template performance for recently completed step kinds
+    try {
+        const underperforming = await sql<{ kind: string; success_rate: number; total_runs: number }[]>`
+            SELECT kind, success_rate, total_runs
+            FROM step_template_performance
+            WHERE total_runs >= 10 AND success_rate < 50
+        `;
+        for (const row of underperforming) {
+            log.warn('Step template underperforming', {
+                kind: row.kind,
+                successRate: `${row.success_rate}%`,
+                totalRuns: row.total_runs,
+            });
+        }
+    } catch {
+        // View may not exist yet — ignore
     }
 
     return { learned };

@@ -11,7 +11,7 @@ await build({
     target: 'node22',
     outfile: 'scripts/unified-worker/dist/index.js',
     sourcemap: true,
-    external: ['postgres', '@openrouter/sdk', 'dotenv'],
+    external: ['postgres', '@openrouter/sdk', 'dotenv', 'zod', 'zod/v4'],
     alias: {
         '@': srcDir,
     },

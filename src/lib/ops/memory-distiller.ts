@@ -3,6 +3,7 @@ import { llmGenerate } from '../llm';
 import { writeMemory, enforceMemoryCap } from './memory';
 import { applyPairwiseDrifts } from './relationships';
 import { createProposalAndMaybeAutoApprove } from './proposal-service';
+import { getPolicy } from './policy';
 import type {
     ConversationTurnEntry,
     ConversationFormat,
@@ -14,9 +15,6 @@ import { logger } from '@/lib/logger';
 
 const log = logger.child({ module: 'distiller' });
 
-const MAX_MEMORIES_PER_CONVERSATION = 6;
-const MIN_CONFIDENCE = 0.55;
-const MAX_ACTION_ITEMS = 3;
 const ACTION_ITEM_FORMATS: ConversationFormat[] = ['standup'];
 const VALID_MEMORY_TYPES: MemoryType[] = [
     'insight',
@@ -32,6 +30,12 @@ export async function distillConversationMemories(
     format: ConversationFormat,
 ): Promise<number> {
     if (history.length < 2) return 0;
+
+    // Load distillation policy from DB (30s cache)
+    const distillPolicy = await getPolicy('roundtable_distillation');
+    const maxMemories = (distillPolicy.max_memories_per_conversation as number) ?? 6;
+    const minConfidence = (distillPolicy.min_confidence_threshold as number) ?? 0.55;
+    const maxActionItems = (distillPolicy.max_action_items_per_conversation as number) ?? 3;
 
     const speakers = [...new Set(history.map(h => h.speaker))];
     const transcript = history
@@ -64,13 +68,13 @@ Respond with valid JSON only:
 }
 
 Rules:
-- Max ${MAX_MEMORIES_PER_CONVERSATION} memories total
+- Max ${maxMemories} memories total
 - Only valid types: ${VALID_MEMORY_TYPES.join(', ')}
 - Only valid agents: ${speakers.join(', ')}
-- Confidence must be >= ${MIN_CONFIDENCE}
+- Confidence must be >= ${minConfidence}
 - Content max 200 characters
 - Drift between -0.03 and 0.03
-- Max ${MAX_ACTION_ITEMS} action items (only for standup conversations)
+- Max ${maxActionItems} action items (only for standup conversations)
 - Return empty arrays if nothing meaningful to extract`;
 
     let parsed: {
@@ -112,15 +116,12 @@ Rules:
     let written = 0;
 
     // Process memories
-    const memories = (parsed.memories ?? []).slice(
-        0,
-        MAX_MEMORIES_PER_CONVERSATION,
-    );
+    const memories = (parsed.memories ?? []).slice(0, maxMemories);
     for (const mem of memories) {
         // Validate
         if (!VALID_MEMORY_TYPES.includes(mem.type as MemoryType)) continue;
         if (!speakers.includes(mem.agent_id)) continue;
-        if (mem.confidence < MIN_CONFIDENCE) continue;
+        if (mem.confidence < minConfidence) continue;
         if (mem.content.length > 200) mem.content = mem.content.slice(0, 200);
 
         const id = await writeMemory({
@@ -156,10 +157,7 @@ Rules:
 
     // Process action items (standup format only)
     if (ACTION_ITEM_FORMATS.includes(format)) {
-        const actionItems = (parsed.action_items ?? []).slice(
-            0,
-            MAX_ACTION_ITEMS,
-        );
+        const actionItems = (parsed.action_items ?? []).slice(0, maxActionItems);
         for (const item of actionItems) {
             if (!speakers.includes(item.agent_id)) continue;
 

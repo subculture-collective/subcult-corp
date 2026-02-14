@@ -1,38 +1,118 @@
 // Step Prompts — maps mission step kinds to explicit prompts with tool instructions
 // Used when routing mission steps through agent sessions instead of bare LLM calls.
+//
+// Templates are loaded from the ops_step_templates DB table (60s cache).
+// Falls back to the hardcoded STEP_INSTRUCTIONS map if no DB template exists.
 
+import { sql } from '@/lib/db';
 import type { StepKind } from '../types';
 
-interface StepPromptContext {
+export interface StepPromptContext {
     missionTitle: string;
     agentId: string;
     payload: Record<string, unknown>;
     outputPath?: string;
 }
 
+export interface StepTemplate {
+    kind: string;
+    template: string;
+    tools_hint: string[];
+    output_hint: string | null;
+    version: number;
+}
+
+// ─── Template cache (60s TTL) ───
+
+const TEMPLATE_CACHE_TTL_MS = 60_000;
+const templateCache = new Map<string, { template: StepTemplate | null; ts: number }>();
+
+export async function loadStepTemplate(kind: string): Promise<StepTemplate | null> {
+    const cached = templateCache.get(kind);
+    if (cached && Date.now() - cached.ts < TEMPLATE_CACHE_TTL_MS) {
+        return cached.template;
+    }
+
+    const [row] = await sql<[StepTemplate?]>`
+        SELECT kind, template, tools_hint, output_hint, version
+        FROM ops_step_templates WHERE kind = ${kind}
+    `;
+
+    const template = row ?? null;
+    templateCache.set(kind, { template, ts: Date.now() });
+    return template;
+}
+
+/** Render a DB template by replacing {{key}} placeholders with context values */
+function renderTemplate(template: string, vars: Record<string, string>): string {
+    return template.replace(/\{\{(\w+)\}\}/g, (_, key: string) => vars[key] ?? `{{${key}}}`);
+}
+
 /**
  * Build an explicit, tool-aware prompt for a mission step.
- * Each step kind gets specific instructions on which tools to use
- * and where to write output.
+ * Tries DB template first, falls back to hardcoded STEP_INSTRUCTIONS.
+ * Returns the rendered prompt and the template version (if from DB).
  */
-export function buildStepPrompt(kind: StepKind, ctx: StepPromptContext): string {
+export async function buildStepPrompt(
+    kind: StepKind,
+    ctx: StepPromptContext,
+): Promise<string>;
+export async function buildStepPrompt(
+    kind: StepKind,
+    ctx: StepPromptContext,
+    opts: { withVersion: true },
+): Promise<{ prompt: string; templateVersion: number | null }>;
+export async function buildStepPrompt(
+    kind: StepKind,
+    ctx: StepPromptContext,
+    opts?: { withVersion: true },
+): Promise<string | { prompt: string; templateVersion: number | null }> {
     const today = new Date().toISOString().split('T')[0];
     const payloadStr = JSON.stringify(ctx.payload, null, 2);
     const outputDir = ctx.outputPath ?? `agents/${ctx.agentId}/notes`;
 
-    let prompt = `Mission: ${ctx.missionTitle}\n`;
-    prompt += `Step: ${kind}\n`;
-    prompt += `Payload: ${payloadStr}\n\n`;
+    let header = `Mission: ${ctx.missionTitle}\n`;
+    header += `Step: ${kind}\n`;
+    header += `Payload: ${payloadStr}\n\n`;
 
-    const stepInstructions = STEP_INSTRUCTIONS[kind];
-    if (stepInstructions) {
-        prompt += stepInstructions(ctx, today, outputDir);
-    } else {
-        prompt += `Execute this step thoroughly. Write your results to ${outputDir}/ using file_write.\n`;
-        prompt += `Provide a detailed summary of what you accomplished.\n`;
+    // Try DB template first
+    let dbTemplate: StepTemplate | null = null;
+    try {
+        dbTemplate = await loadStepTemplate(kind);
+    } catch {
+        // DB unavailable — fall through to hardcoded
     }
 
-    return prompt;
+    if (dbTemplate) {
+        const vars: Record<string, string> = {
+            date: today,
+            agentId: ctx.agentId,
+            missionTitle: ctx.missionTitle,
+            missionSlug: slugify(ctx.missionTitle),
+            outputDir,
+            payload: payloadStr,
+        };
+        const rendered = renderTemplate(dbTemplate.template, vars);
+        const prompt = header + rendered;
+        return opts?.withVersion
+            ? { prompt, templateVersion: dbTemplate.version }
+            : prompt;
+    }
+
+    // Fall back to hardcoded instructions
+    let body: string;
+    const stepInstructions = STEP_INSTRUCTIONS[kind];
+    if (stepInstructions) {
+        body = stepInstructions(ctx, today, outputDir);
+    } else {
+        body = `Execute this step thoroughly. Write your results to ${outputDir}/ using file_write.\n`;
+        body += `Provide a detailed summary of what you accomplished.\n`;
+    }
+
+    const prompt = header + body;
+    return opts?.withVersion
+        ? { prompt, templateVersion: null }
+        : prompt;
 }
 
 type StepInstructionFn = (ctx: StepPromptContext, today: string, outputDir: string) => string;
