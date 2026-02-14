@@ -71,7 +71,7 @@ function validateAndNormalizePersonality(
             : 'neutral and balanced';
 
     const traits = Array.isArray(p.traits)
-        ? p.traits.filter((t): t is string => typeof t === 'string')
+        ? p.traits.filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
         : [];
 
     const speaking_style =
