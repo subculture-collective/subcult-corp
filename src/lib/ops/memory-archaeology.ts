@@ -196,16 +196,16 @@ async function fetchMemoriesForDig(
 
     // Truncate content to prevent excessive token usage (max 2000 chars per memory)
     return sql<MemoryRow[]>`
-        SELECT 
-            id, 
-            agent_id, 
-            type, 
-            CASE 
+        SELECT
+            id,
+            agent_id,
+            type,
+            CASE
                 WHEN LENGTH(content) > 2000 THEN LEFT(content, 2000) || '...[truncated]'
                 ELSE content
             END as content,
-            confidence, 
-            tags, 
+            confidence,
+            tags,
             created_at
         FROM ops_agent_memory
         WHERE superseded_by IS NULL

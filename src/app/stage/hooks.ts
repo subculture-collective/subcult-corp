@@ -1226,7 +1226,10 @@ export function useArchaeology(options?: { limit?: number }) {
                 try {
                     const errorBody = await res.json();
                     if (errorBody && typeof errorBody === 'object') {
-                        const bodyAny = errorBody as { message?: string; error?: string };
+                        const bodyAny = errorBody as {
+                            message?: string;
+                            error?: string;
+                        };
                         if (typeof bodyAny.message === 'string') {
                             errorMessage = bodyAny.message;
                         } else if (typeof bodyAny.error === 'string') {
@@ -1243,7 +1246,9 @@ export function useArchaeology(options?: { limit?: number }) {
             setRefreshKey(k => k + 1);
         } catch (err) {
             const message =
-                err instanceof Error ? err.message : 'Failed to start dig due to an unexpected error.';
+                err instanceof Error ?
+                    err.message
+                :   'Failed to start dig due to an unexpected error.';
             setError(message);
         } finally {
             setTriggerLoading(false);

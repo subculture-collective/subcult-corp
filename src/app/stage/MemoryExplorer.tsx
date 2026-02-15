@@ -941,10 +941,14 @@ export function MemoryExplorer() {
                     if (
                         !cancelled &&
                         data &&
-                        Array.isArray((data as { findings?: ArchaeologyFinding[] }).findings)
+                        Array.isArray(
+                            (data as { findings?: ArchaeologyFinding[] })
+                                .findings,
+                        )
                     ) {
                         results.push(
-                            ...((data as { findings: ArchaeologyFinding[] }).findings),
+                            ...(data as { findings: ArchaeologyFinding[] })
+                                .findings,
                         );
                     }
                 } catch {

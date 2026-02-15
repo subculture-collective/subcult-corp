@@ -76,11 +76,12 @@ function validateAndNormalizePersonality(
         (typeof p.tone === 'string' ? p.tone.trim() : '') ||
         DEFAULT_PERSONALITY.tone;
 
-    const traits = Array.isArray(p.traits)
-        ? p.traits
-              .map((t) => (typeof t === 'string' ? t.trim() : ''))
-              .filter((t) => t.length > 0)
-        : DEFAULT_PERSONALITY.traits;
+    const traits =
+        Array.isArray(p.traits) ?
+            p.traits
+                .map(t => (typeof t === 'string' ? t.trim() : ''))
+                .filter(t => t.length > 0)
+        :   DEFAULT_PERSONALITY.traits;
 
     const speaking_style =
         (typeof p.speaking_style === 'string' ? p.speaking_style.trim() : '') ||
@@ -218,13 +219,17 @@ export async function prepareSpawn(proposalId: string): Promise<SpawnPreview> {
     const color = SPAWN_COLORS[existingCount.count % SPAWN_COLORS.length];
 
     // Generate workspace files
-    const identityMarkdown = await generateIdentityMarkdown(proposal, personality);
+    const identityMarkdown = await generateIdentityMarkdown(
+        proposal,
+        personality,
+    );
     const soulMarkdown = await generateSoulMarkdown(proposal, personality);
 
     // Build system directive from personality
-    const traitsText = personality.traits.length > 0 
-        ? ` Your key traits: ${personality.traits.join(', ')}.`
-        : '';
+    const traitsText =
+        personality.traits.length > 0 ?
+            ` Your key traits: ${personality.traits.join(', ')}.`
+        :   '';
     const systemDirective = `You are ${nameCapitalized}, ${proposal.agent_role.toLowerCase()} of the SubCult collective. ${personality.tone}. You communicate in a ${personality.speaking_style} manner.${traitsText}`;
 
     const workspaceFiles = [
@@ -302,7 +307,7 @@ export async function executeSpawn(proposalId: string): Promise<SpawnResult> {
     const expectedPrefix = resolve(process.cwd(), 'workspace', 'agents');
     const expectedPath = resolve(expectedPrefix, proposal.agent_name);
     const resolvedWorkspaceRoot = resolve(workspaceRoot);
-    
+
     // Use exact path matching - the resolved path must exactly match the expected path
     if (resolvedWorkspaceRoot !== expectedPath) {
         throw new Error(
