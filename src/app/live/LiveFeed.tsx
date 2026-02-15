@@ -230,6 +230,16 @@ export function LiveFeed() {
                 }
             });
 
+            es.addEventListener('error', (e: MessageEvent) => {
+                if (!isMounted) return;
+                try {
+                    JSON.parse(e.data);
+                    // Error event received from server
+                } catch {
+                    // Not a JSON error event, likely connection error
+                }
+            });
+
             es.onopen = () => {
                 if (!isMounted) return;
                 reconnectRef.current = 0;
@@ -272,7 +282,11 @@ export function LiveFeed() {
 
         const interval = setInterval(async () => {
             try {
-                const res = await fetch('/api/public/events?limit=20');
+                const params = new URLSearchParams({ limit: '20' });
+                if (lastEventIdRef.current) {
+                    params.set('after_id', lastEventIdRef.current);
+                }
+                const res = await fetch(`/api/public/events?${params}`);
                 if (!res.ok) return;
                 const data = await res.json();
                 const newEvents = (data.events as SanitizedEvent[]).reverse();

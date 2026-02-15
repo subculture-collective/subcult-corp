@@ -1,6 +1,7 @@
 // /api/ops/content — List and manage content drafts
 import { NextRequest, NextResponse } from 'next/server';
 import { sql, jsonb } from '@/lib/db';
+import { emitEvent } from '@/lib/ops/events';
 
 export const dynamic = 'force-dynamic';
 
@@ -156,6 +157,34 @@ export async function PATCH(req: NextRequest) {
                     updated_at = NOW()
                 WHERE id = ${body.id}
             `;
+        }
+
+        // Emit event when content is published
+        if (body.status === 'published') {
+            const [publishedDraft] = await sql<
+                [
+                    {
+                        id: string;
+                        author_agent: string;
+                        title: string;
+                        content_type: string;
+                    }?,
+                ]
+            >`
+                SELECT id, author_agent, title, content_type
+                FROM ops_content_drafts
+                WHERE id = ${body.id}
+            `;
+
+            if (publishedDraft) {
+                await emitEvent({
+                    agent_id: publishedDraft.author_agent,
+                    kind: 'content_published',
+                    title: `Published: ${publishedDraft.title}`,
+                    summary: `${publishedDraft.content_type} published by ${publishedDraft.author_agent}`,
+                    tags: ['content', 'published', publishedDraft.content_type],
+                });
+            }
         }
 
         return NextResponse.json({

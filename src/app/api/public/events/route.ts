@@ -23,18 +23,50 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const rawLimit = parseInt(searchParams.get('limit') ?? '50', 10);
     const limit = Math.min(Math.max(rawLimit, 1), 100);
+    const afterId = searchParams.get('after_id');
 
     try {
-        const rows = await sql`
-            SELECT id, agent_id, kind, title, summary, tags, created_at
-            FROM ops_agent_events
-            WHERE kind = ANY(${PUBLIC_SAFE_KINDS as unknown as string[]})
-            ORDER BY created_at DESC
-            LIMIT ${limit}
-        `;
+        // If after_id is provided, fetch events newer than that event
+        let rows: Array<Record<string, unknown>> = [];
+        if (afterId) {
+            // Get the timestamp of the after_id event first
+            const [afterEvent] = await sql<
+                [{ created_at: string }?]
+            >`
+                SELECT created_at FROM ops_agent_events WHERE id = ${afterId} LIMIT 1
+            `;
+
+            if (afterEvent) {
+                rows = await sql`
+                    SELECT id, agent_id, kind, title, summary, tags, created_at
+                    FROM ops_agent_events
+                    WHERE kind = ANY(${PUBLIC_SAFE_KINDS as unknown as string[]})
+                    AND (
+                        created_at > ${afterEvent.created_at}
+                        OR (created_at = ${afterEvent.created_at} AND id > ${afterId})
+                    )
+                    ORDER BY created_at DESC
+                    LIMIT ${limit}
+                `;
+            }
+        } else {
+            rows = await sql`
+                SELECT id, agent_id, kind, title, summary, tags, created_at
+                FROM ops_agent_events
+                WHERE kind = ANY(${PUBLIC_SAFE_KINDS as unknown as string[]})
+                ORDER BY created_at DESC
+                LIMIT ${limit}
+            `;
+        }
 
         return NextResponse.json({
             events: rows.map(r => sanitizeEvent(r as Record<string, unknown>)),
+        }, {
+            headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET',
+                'Access-Control-Allow-Headers': 'Content-Type',
+            },
         });
     } catch (err) {
         return NextResponse.json(
