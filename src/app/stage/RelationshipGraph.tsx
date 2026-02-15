@@ -657,14 +657,20 @@ export function RelationshipGraph() {
         }));
     }, [relationships]);
 
+    // Helper: create empty position map
+    const createEmptyPositionMap = useCallback(
+        () => new Map<AgentId, { x: number; y: number }>(),
+        []
+    );
+
     // Compute initial layout (memoized to avoid recalculation on every render)
     const initialLayout = useMemo(() => {
-        if (relationships.length === 0) return new Map<AgentId, { x: number; y: number }>();
+        if (relationships.length === 0) return createEmptyPositionMap();
         return computeLayout(AGENT_IDS, edges);
-    }, [relationships, edges]);
+    }, [relationships, edges, createEmptyPositionMap]);
 
-    // Positions state for manual dragging (initialized from computed layout)
-    const [positions, setPositions] = useState(initialLayout);
+    // Positions state for manual dragging (lazy initialized from computed layout)
+    const [positions, setPositions] = useState(() => initialLayout);
 
     // Update positions when layout changes (e.g., when relationships data loads or updates)
     useEffect(() => {
