@@ -179,8 +179,8 @@ export function DailyDigest() {
                 <div className='flex items-center gap-2 text-zinc-500 text-sm'>
                     <span>🗂️</span>
                     <span>
-                        No digest available yet. Digests generate daily at 11PM
-                        CST.
+                        No digest available yet. Digests generate nightly around
+                        11PM CST.
                     </span>
                 </div>
             </div>

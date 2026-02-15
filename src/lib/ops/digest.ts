@@ -4,6 +4,7 @@
 import { sql, jsonb } from '@/lib/db';
 import { llmGenerate } from '@/lib/llm/client';
 import { getVoice } from '@/lib/roundtable/voices';
+import { emitEvent } from '@/lib/ops/events';
 import { logger } from '@/lib/logger';
 
 const log = logger.child({ module: 'digest' });
@@ -275,18 +276,15 @@ export async function generateDailyDigest(date?: Date): Promise<string | null> {
         RETURNING id
     `;
 
-    // Emit event
-    await sql`
-        INSERT INTO ops_agent_events (agent_id, kind, title, summary, tags, metadata)
-        VALUES (
-            'mux',
-            'daily_digest_generated',
-            ${`Daily digest for ${dateStr}`},
-            ${summary.slice(0, 200)},
-            ${sql.array(['digest', 'daily', 'mux'])},
-            ${jsonb({ digest_id: inserted.id, date: dateStr, stats })}
-        )
-    `;
+    // Emit event using emitEvent helper
+    await emitEvent({
+        agent_id: 'mux',
+        kind: 'daily_digest_generated',
+        title: `Daily digest for ${dateStr}`,
+        summary: summary.slice(0, 200),
+        tags: ['digest', 'daily', 'mux'],
+        metadata: { digest_id: inserted.id, date: dateStr, stats },
+    });
 
     log.info('Daily digest generated', {
         date: dateStr,
