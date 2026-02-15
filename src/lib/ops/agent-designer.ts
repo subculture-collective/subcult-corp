@@ -202,7 +202,7 @@ Respond with valid JSON only, no markdown fencing:
         .replace(/[^a-z0-9_]/g, '');
 
     // Validate normalized name is not empty
-    if (!agentName || agentName.length === 0) {
+    if (!agentName) {
         throw new Error(
             `Invalid agent_name: "${parsed.agent_name}" normalized to empty string`,
         );

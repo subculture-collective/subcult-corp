@@ -62,7 +62,7 @@ async function seed() {
         //   42703 = undefined_column (column doesn't exist)
         if (err.code === '42P10' || err.code === '42703') {
             log.warn(
-                'name column may not have a unique constraint — inserting directly',
+                `ON CONFLICT failed with error code ${err.code} - falling back to direct insert without conflict handling`,
             );
             await sql`
                 INSERT INTO ops_trigger_rules (name, trigger_event, conditions, action_config, cooldown_minutes, enabled)
