@@ -11,6 +11,10 @@ import type {
 
 const log = logger.child({ module: 'agent-proposal-voting' });
 
+// Truncation limits for debate topics
+const RATIONALE_PREVIEW_LENGTH = 200;
+const TOPIC_MAX_LENGTH = 1000;
+
 // ─── Submit a vote ───
 
 export async function submitVote(
@@ -134,7 +138,10 @@ export async function checkConsensus(
     // We multiply first then divide to avoid floating point precision issues with integer counts
     // Example: 6 agents -> ceil((6 * 2) / 3) = ceil(12/3) = 4 required approvals
     const requiredApprovals = Math.ceil((tally.totalAgents * 2) / 3);
-    const quorum = Math.ceil(tally.totalAgents / 2);
+    
+    // Quorum is also 2/3 to match the approval threshold
+    // This ensures enough agents participate before making a decision
+    const quorum = requiredApprovals;
     const quorumMet = tally.total >= quorum;
 
     // 3+ rejections = blocked (matching governance pattern)

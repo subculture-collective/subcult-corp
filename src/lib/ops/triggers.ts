@@ -14,6 +14,10 @@ import { generateAgentProposal } from './agent-designer';
 
 const log = logger.child({ module: 'triggers' });
 
+// Truncation limits for debate topics
+const RATIONALE_PREVIEW_LENGTH = 200;
+const TOPIC_MAX_LENGTH = 1000;
+
 /** Default thresholds loaded from ops_policy once per evaluation cycle */
 interface TriggerDefaults {
     stall_minutes: number;
@@ -809,14 +813,16 @@ async function checkAgentProposalCreated(
 
     // Build debate topic (with ellipsis if truncated)
     const rationalePreview =
-        proposal.rationale.length > 200 ?
-            proposal.rationale.slice(0, 200) + '...'
+        proposal.rationale.length > RATIONALE_PREVIEW_LENGTH ?
+            proposal.rationale.slice(0, RATIONALE_PREVIEW_LENGTH) + '...'
         :   proposal.rationale;
     const topic = `Agent Design Review: ${proposal.proposed_by} proposes new agent "${proposal.agent_name}" (${proposal.agent_role}). Rationale: ${rationalePreview}`;
 
-    // Create a debate roundtable with ALL agents (topic truncated to 1000 chars with ellipsis if needed)
+    // Create a debate roundtable with ALL agents (topic truncated with ellipsis if needed)
     const topicTruncated =
-        topic.length > 1000 ? topic.slice(0, 997) + '...' : topic;
+        topic.length > TOPIC_MAX_LENGTH ?
+            topic.slice(0, TOPIC_MAX_LENGTH - 3) + '...'
+        :   topic;
     const [session] = await sql<[{ id: string }]>`
         INSERT INTO ops_roundtable_sessions (
             format, topic, participants, status, scheduled_for, metadata
