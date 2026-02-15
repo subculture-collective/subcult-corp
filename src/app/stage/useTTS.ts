@@ -50,9 +50,8 @@ export interface TTSControls {
 export function useTTS(): [TTSState, TTSControls] {
     const [isPlaying, setIsPlaying] = useState(false);
     const [activeTurnIndex, setActiveTurnIndex] = useState(-1);
-    const [isAvailable, setIsAvailable] = useState(() =>
-        typeof window !== 'undefined' && 'speechSynthesis' in window
-    );
+    const isAvailable =
+        typeof window !== 'undefined' && 'speechSynthesis' in window;
     const [needsUnlock, setNeedsUnlock] = useState(false);
     const cancelledRef = useRef(false);
 
