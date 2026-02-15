@@ -8,6 +8,7 @@ import {
     setHumanApproval,
     type AgentProposalStatus,
 } from '@/lib/ops/agent-designer';
+import { tallyVotes } from '@/lib/ops/agent-proposal-voting';
 import { prepareSpawn, executeSpawn } from '@/lib/ops/agent-spawner';
 
 export const dynamic = 'force-dynamic';

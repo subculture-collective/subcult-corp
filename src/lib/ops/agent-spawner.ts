@@ -1,7 +1,7 @@
 // Agent Spawner — materialize approved proposals into real agents
 // Creates workspace files, registers in ops_agent_registry, and inserts skills.
 // REQUIRES human_approved === true before execution.
-import { sql } from '@/lib/db';
+import { sql, jsonb } from '@/lib/db';
 import { llmGenerate } from '@/lib/llm/client';
 import { emitEventAndCheckReactions } from './events';
 import { logger } from '@/lib/logger';
