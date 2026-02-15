@@ -173,6 +173,16 @@ If no extractable creative content exists, respond with:
             return null;
         }
 
+        // Validate that title and body are strings (LLM could return non-string types)
+        if (typeof parsed.title !== 'string' || typeof parsed.body !== 'string') {
+            log.warn('Title or body not strings, rejecting', {
+                sessionId,
+                titleType: typeof parsed.title,
+                bodyType: typeof parsed.body,
+            });
+            return null;
+        }
+
         // Validate content length
         if (parsed.title.length > MAX_TITLE_LENGTH) {
             log.warn('Title too long, truncating', { sessionId });

@@ -58,14 +58,22 @@ export async function PATCH(req: NextRequest) {
             );
         }
 
-        // Validate notes field length
-        if (body.notes && body.notes.length > MAX_NOTES_LENGTH) {
-            return NextResponse.json(
-                {
-                    error: `Notes field too long (max ${MAX_NOTES_LENGTH} characters)`,
-                },
-                { status: 400 },
-            );
+        // Validate notes field type and length
+        if (body.notes !== undefined) {
+            if (typeof body.notes !== 'string') {
+                return NextResponse.json(
+                    { error: 'Notes field must be a string' },
+                    { status: 400 },
+                );
+            }
+            if (body.notes.length > MAX_NOTES_LENGTH) {
+                return NextResponse.json(
+                    {
+                        error: `Notes field too long (max ${MAX_NOTES_LENGTH} characters)`,
+                    },
+                    { status: 400 },
+                );
+            }
         }
 
         // Validate status value
