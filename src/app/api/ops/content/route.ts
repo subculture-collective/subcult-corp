@@ -56,6 +56,14 @@ export async function PATCH(req: NextRequest) {
             );
         }
 
+        // Validate notes field length
+        if (body.notes && body.notes.length > 5000) {
+            return NextResponse.json(
+                { error: 'Notes field too long (max 5000 characters)' },
+                { status: 400 },
+            );
+        }
+
         // Validate status value
         const validStatuses = [
             'draft',

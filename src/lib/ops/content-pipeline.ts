@@ -147,16 +147,35 @@ If no extractable creative content exists, respond with:
             return null;
         }
 
-        const parsed = JSON.parse(jsonMatch[0]) as {
+        let parsed: {
             title?: string;
             body?: string;
             contentType?: string;
             hasContent?: boolean;
         };
+        try {
+            parsed = JSON.parse(jsonMatch[0]);
+        } catch (parseErr) {
+            log.warn('Invalid JSON in extraction result', {
+                sessionId,
+                error: parseErr,
+            });
+            return null;
+        }
 
         if (!parsed.hasContent || !parsed.title || !parsed.body) {
             log.info('No extractable content found', { sessionId });
             return null;
+        }
+
+        // Validate content length
+        if (parsed.title.length > 500) {
+            log.warn('Title too long, truncating', { sessionId });
+            parsed.title = parsed.title.slice(0, 500);
+        }
+        if (parsed.body.length > 50000) {
+            log.warn('Body too long, truncating', { sessionId });
+            parsed.body = parsed.body.slice(0, 50000);
         }
 
         // Validate content type
@@ -246,7 +265,10 @@ export async function processReviewSession(sessionId: string): Promise<void> {
         const [session] = await sql<[{ metadata: Record<string, unknown> }?]>`
             SELECT metadata FROM ops_roundtable_sessions WHERE id = ${sessionId}
         `;
-        const draftId = session?.metadata?.draft_id as string | undefined;
+        const draftId =
+            typeof session?.metadata?.draft_id === 'string' ?
+                session.metadata.draft_id
+            :   undefined;
         if (!draftId) {
             log.warn('No draft linked to review session', { sessionId });
             return;
@@ -263,6 +285,10 @@ export async function processReviewSession(sessionId: string): Promise<void> {
             });
             return;
         }
+        log.info('Found draft via metadata lookup', {
+            sessionId,
+            draftId,
+        });
         return processReviewForDraft(draftById, sessionId);
     }
 
@@ -338,11 +364,21 @@ Respond ONLY with valid JSON (no markdown fencing):
             return;
         }
 
-        const parsed = JSON.parse(jsonMatch[0]) as {
+        let parsed: {
             reviewers?: ReviewerNote[];
             consensus?: string;
             summary?: string;
         };
+        try {
+            parsed = JSON.parse(jsonMatch[0]);
+        } catch (parseErr) {
+            log.warn('Invalid JSON in review result', {
+                sessionId,
+                draftId: draft.id,
+                error: parseErr,
+            });
+            return;
+        }
 
         const reviewerNotes: ReviewerNote[] = parsed.reviewers ?? [];
         const consensus = parsed.consensus ?? 'mixed';
