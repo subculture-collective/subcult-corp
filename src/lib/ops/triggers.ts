@@ -10,8 +10,13 @@ import {
 } from './condition-evaluator';
 import { logger } from '@/lib/logger';
 import { AGENT_IDS } from '@/lib/agents';
+import { generateAgentProposal } from './agent-designer';
 
 const log = logger.child({ module: 'triggers' });
+
+// Truncation limits for debate topics
+const RATIONALE_PREVIEW_LENGTH = 200;
+const TOPIC_MAX_LENGTH = 1000;
 
 /** Default thresholds loaded from ops_policy once per evaluation cycle */
 interface TriggerDefaults {
@@ -169,8 +174,12 @@ async function checkTrigger(
             return checkStrategicDrift(conditions, targetAgent, defaults);
         case 'governance_proposal_created':
             return checkGovernanceProposalCreated(conditions, targetAgent);
+        case 'agent_proposal_created':
+            return checkAgentProposalCreated(conditions, targetAgent);
         case 'memory_archaeology_due':
             return checkMemoryArchaeologyDue(conditions, targetAgent);
+        case 'agent_design_review':
+            return checkAgentDesignReview(conditions, targetAgent);
         default:
             if (rule.trigger_event.startsWith('proactive_')) {
                 return checkProactiveGeneric(rule, targetAgent);
@@ -724,13 +733,17 @@ async function checkGovernanceProposalCreated(
     const proposedStr = JSON.stringify(proposal.proposed_value, null, 0);
     const topic = `Governance debate: ${proposal.proposer} proposes changing "${proposal.policy_key}" from ${currentStr} to ${proposedStr}. Rationale: ${proposal.rationale}`;
 
-    // Create a debate roundtable with ALL agents
+    // Create a debate roundtable with ALL agents (topic truncated to max length)
+    const topicTruncated =
+        topic.length > TOPIC_MAX_LENGTH ?
+            topic.slice(0, TOPIC_MAX_LENGTH - 3) + '...'
+        :   topic;
     const [session] = await sql<[{ id: string }]>`
         INSERT INTO ops_roundtable_sessions (
             format, topic, participants, status, scheduled_for, metadata
         ) VALUES (
             'debate',
-            ${topic.slice(0, 1000)},
+            ${topicTruncated},
             ${AGENT_IDS},
             'pending',
             NOW(),
@@ -763,6 +776,95 @@ async function checkGovernanceProposalCreated(
             agent_id: targetAgent,
             title: `Governance debate: ${proposal.policy_key}`,
             description: `Debate roundtable created for proposal by ${proposal.proposer}`,
+            proposed_steps: [{ kind: 'log_event' }],
+            source: 'trigger',
+        },
+    };
+}
+
+// ─── Agent Proposal Created ───
+
+async function checkAgentProposalCreated(
+    conditions: Record<string, unknown>,
+    targetAgent: string,
+): Promise<TriggerCheckResult> {
+    const lookback = (conditions.lookback_minutes as number) ?? 60;
+    const cutoff = new Date(Date.now() - lookback * 60_000).toISOString();
+
+    // Find agent proposals in 'proposed' status that don't yet have a debate session
+    const proposals = await sql<
+        {
+            id: string;
+            proposed_by: string;
+            agent_name: string;
+            agent_role: string;
+            rationale: string;
+        }[]
+    >`
+        SELECT id, proposed_by, agent_name, agent_role, rationale
+        FROM ops_agent_proposals
+        WHERE status = 'proposed'
+          AND created_at >= ${cutoff}
+        ORDER BY created_at ASC
+        LIMIT 1
+    `;
+
+    if (proposals.length === 0) {
+        return { fired: false };
+    }
+
+    const proposal = proposals[0];
+
+    // Build debate topic (with ellipsis if truncated, staying within length limit)
+    const rationalePreview =
+        proposal.rationale.length > RATIONALE_PREVIEW_LENGTH ?
+            proposal.rationale.slice(0, RATIONALE_PREVIEW_LENGTH - 3) + '...'
+        :   proposal.rationale;
+    const topic = `Agent Design Review: ${proposal.proposed_by} proposes new agent "${proposal.agent_name}" (${proposal.agent_role}). Rationale: ${rationalePreview}`;
+
+    // Create a debate roundtable with ALL agents (topic truncated with ellipsis if needed)
+    const topicTruncated =
+        topic.length > TOPIC_MAX_LENGTH ?
+            topic.slice(0, TOPIC_MAX_LENGTH - 3) + '...'
+        :   topic;
+    const [session] = await sql<[{ id: string }]>`
+        INSERT INTO ops_roundtable_sessions (
+            format, topic, participants, status, scheduled_for, metadata
+        ) VALUES (
+            'debate',
+            ${topicTruncated},
+            ${AGENT_IDS},
+            'pending',
+            NOW(),
+            ${sql.json({
+                agent_proposal_id: proposal.id,
+                agent_name: proposal.agent_name,
+                proposer: proposal.proposed_by,
+            })}::jsonb
+        )
+        RETURNING id
+    `;
+
+    // Update proposal: status → voting (linking is not in the schema, so we just transition status)
+    await sql`
+        UPDATE ops_agent_proposals
+        SET status = 'voting'
+        WHERE id = ${proposal.id}
+    `;
+
+    log.info('Agent proposal debate session created', {
+        proposalId: proposal.id,
+        sessionId: session.id,
+        agentName: proposal.agent_name,
+    });
+
+    return {
+        fired: true,
+        reason: `Agent proposal debate convened for "${proposal.agent_name}" (proposed by ${proposal.proposed_by})`,
+        proposal: {
+            agent_id: targetAgent,
+            title: `Agent debate: ${proposal.agent_name}`,
+            description: `Debate roundtable created for agent proposal by ${proposal.proposed_by}`,
             proposed_steps: [{ kind: 'log_event' }],
             source: 'trigger',
         },
@@ -814,4 +916,73 @@ async function checkMemoryArchaeologyDue(
             source: 'trigger',
         },
     };
+}
+
+// ─── Agent Design Review ───
+
+async function checkAgentDesignReview(
+    conditions: Record<string, unknown>,
+    targetAgent: string,
+): Promise<TriggerCheckResult> {
+    const minAgents = (conditions.min_agents_before_proposing as number) ?? 4;
+    const maxPending = (conditions.max_pending_proposals as number) ?? 2;
+
+    // Check if we have enough active agents
+    const [{ agentCount }] = await sql<[{ agentCount: number }]>`
+        SELECT COUNT(*)::int as "agentCount"
+        FROM ops_agent_registry
+        WHERE active = true
+    `;
+
+    if (agentCount < minAgents) {
+        return {
+            fired: false,
+            reason: `Only ${agentCount} active agents (minimum ${minAgents} required)`,
+        };
+    }
+
+    // Check for pending proposals to avoid overwhelming the collective
+    const [{ pendingCount }] = await sql<[{ pendingCount: number }]>`
+        SELECT COUNT(*)::int as "pendingCount"
+        FROM ops_agent_proposals
+        WHERE status IN ('proposed', 'voting')
+    `;
+
+    if (pendingCount >= maxPending) {
+        return {
+            fired: false,
+            reason: `${pendingCount} agent proposals already pending (max ${maxPending})`,
+        };
+    }
+
+    // Trigger fires — actually generate the proposal
+    try {
+        const proposal = await generateAgentProposal(targetAgent);
+        log.info('Agent design review completed', {
+            proposalId: proposal.id,
+            agentName: proposal.agent_name,
+            proposer: targetAgent,
+        });
+
+        return {
+            fired: true,
+            reason: `${targetAgent} proposed new agent: ${proposal.agent_name}`,
+            proposal: {
+                agent_id: targetAgent,
+                title: `Agent design proposal: ${proposal.agent_name}`,
+                description: proposal.rationale,
+                proposed_steps: [{ kind: 'log_event' }],
+                source: 'trigger',
+            },
+        };
+    } catch (err) {
+        log.error('Agent design review failed', {
+            error: err,
+            targetAgent,
+        });
+        return {
+            fired: false,
+            reason: `Agent design failed: ${(err as Error).message}`,
+        };
+    }
 }

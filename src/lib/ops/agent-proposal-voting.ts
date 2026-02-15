@@ -130,8 +130,14 @@ export async function checkConsensus(
 ): Promise<ConsensusResult> {
     const tally = await tallyVotes(proposalId);
 
-    // Majority = >50% of registered agents must approve
-    const quorum = Math.ceil(tally.totalAgents / 2);
+    // Supermajority = 2/3 of registered agents must approve (matching 4/6 requirement)
+    // JavaScript division always produces floating point, but Math.ceil() ensures integer result
+    // Example: 6 agents -> ceil((6 * 2) / 3) = ceil(12/3) = ceil(4.0) = 4 required approvals
+    const requiredApprovals = Math.ceil((tally.totalAgents * 2) / 3);
+    
+    // Quorum is also 2/3 to match the approval threshold
+    // This ensures enough agents participate before making a decision
+    const quorum = requiredApprovals;
     const quorumMet = tally.total >= quorum;
 
     // 3+ rejections = blocked (matching governance pattern)
@@ -145,8 +151,8 @@ export async function checkConsensus(
         };
     }
 
-    // Majority approved
-    if (tally.approvals > tally.totalAgents / 2) {
+    // Supermajority approved (2/3 threshold)
+    if (tally.approvals >= requiredApprovals) {
         return {
             result: 'approved',
             approvals: tally.approvals,
