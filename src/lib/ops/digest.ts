@@ -4,9 +4,14 @@
 import { sql, jsonb } from '@/lib/db';
 import { llmGenerate } from '@/lib/llm/client';
 import { getVoice } from '@/lib/roundtable/voices';
+import { emitEvent } from '@/lib/ops/events';
 import { logger } from '@/lib/logger';
 
 const log = logger.child({ module: 'digest' });
+
+// CST is UTC-6 hours
+const CST_OFFSET_HOURS = -6;
+const HOURS_PER_DAY = 24;
 
 // ─── Types ───
 
@@ -168,12 +173,32 @@ async function gatherDayData(date: Date): Promise<DayData> {
 // ─── Public: generate and store digest ───
 
 /**
- * Generate a daily digest for the given date (defaults to today).
+ * Generate a daily digest for the given date (defaults to the current CST day).
+ * If called after midnight CST, creates digest for the previous day.
  * Gathers activity data and asks Mux to write a narrative summary.
  * Returns the digest ID, or null if a digest already exists for that date.
  */
 export async function generateDailyDigest(date?: Date): Promise<string | null> {
-    const targetDate = date ?? new Date();
+    let targetDate: Date;
+    
+    if (date) {
+        // Use provided date as-is (assume it's already the correct UTC midnight)
+        targetDate = date;
+    } else {
+        // Calculate CST date — digest should be for the CST calendar day
+        const now = new Date();
+        const cstHour = (now.getUTCHours() + CST_OFFSET_HOURS + 24) % 24;
+        
+        // If it's past midnight CST (0:00-1:59), use yesterday's date
+        // Otherwise use today's date
+        const offsetHours = cstHour < 2 ? CST_OFFSET_HOURS - HOURS_PER_DAY : CST_OFFSET_HOURS;
+        const cstDate = new Date(now.getTime() + offsetHours * 60 * 60 * 1000);
+        
+        // Extract just the date portion and create UTC midnight
+        const dateStr = cstDate.toISOString().slice(0, 10);
+        targetDate = new Date(dateStr + 'T00:00:00Z');
+    }
+    
     const dateStr = targetDate.toISOString().slice(0, 10); // YYYY-MM-DD
 
     // Check if digest already exists for this date
@@ -275,18 +300,15 @@ export async function generateDailyDigest(date?: Date): Promise<string | null> {
         RETURNING id
     `;
 
-    // Emit event
-    await sql`
-        INSERT INTO ops_agent_events (agent_id, kind, title, summary, tags, metadata)
-        VALUES (
-            'mux',
-            'daily_digest_generated',
-            ${`Daily digest for ${dateStr}`},
-            ${summary.slice(0, 200)},
-            ${sql.array(['digest', 'daily', 'mux'])},
-            ${jsonb({ digest_id: inserted.id, date: dateStr, stats })}
-        )
-    `;
+    // Emit event using emitEvent helper
+    await emitEvent({
+        agent_id: 'mux',
+        kind: 'daily_digest_generated',
+        title: `Daily digest for ${dateStr}`,
+        summary: summary.slice(0, 200),
+        tags: ['digest', 'daily', 'mux'],
+        metadata: { digest_id: inserted.id, date: dateStr, stats },
+    });
 
     log.info('Daily digest generated', {
         date: dateStr,
