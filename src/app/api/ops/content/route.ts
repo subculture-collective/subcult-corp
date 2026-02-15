@@ -115,10 +115,15 @@ export async function PATCH(req: NextRequest) {
 
         if (body.notes) {
             // Append note to reviewer_notes array
+            // Map status to verdict value
+            const verdict =
+                body.status === 'approved' ? 'approve'
+                : body.status === 'rejected' ? 'reject'
+                : 'mixed';
             await sql`
                 UPDATE ops_content_drafts
                 SET status = ${body.status},
-                    reviewer_notes = reviewer_notes || ${jsonb([{ reviewer: 'manual', verdict: body.status, notes: body.notes }])}::jsonb,
+                    reviewer_notes = reviewer_notes || ${jsonb([{ reviewer: 'manual', verdict, notes: body.notes }])}::jsonb,
                     ${body.status === 'published' ? sql`published_at = NOW(),` : sql``}
                     updated_at = NOW()
                 WHERE id = ${body.id}
