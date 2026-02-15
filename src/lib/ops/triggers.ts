@@ -807,16 +807,22 @@ async function checkAgentProposalCreated(
 
     const proposal = proposals[0];
 
-    // Build debate topic
-    const topic = `Agent Design Review: ${proposal.proposed_by} proposes new agent "${proposal.agent_name}" (${proposal.agent_role}). Rationale: ${proposal.rationale.slice(0, 200)}`;
+    // Build debate topic (with ellipsis if truncated)
+    const rationalePreview =
+        proposal.rationale.length > 200 ?
+            proposal.rationale.slice(0, 200) + '...'
+        :   proposal.rationale;
+    const topic = `Agent Design Review: ${proposal.proposed_by} proposes new agent "${proposal.agent_name}" (${proposal.agent_role}). Rationale: ${rationalePreview}`;
 
-    // Create a debate roundtable with ALL agents
+    // Create a debate roundtable with ALL agents (topic truncated to 1000 chars with ellipsis if needed)
+    const topicTruncated =
+        topic.length > 1000 ? topic.slice(0, 997) + '...' : topic;
     const [session] = await sql<[{ id: string }]>`
         INSERT INTO ops_roundtable_sessions (
             format, topic, participants, status, scheduled_for, metadata
         ) VALUES (
             'debate',
-            ${topic.slice(0, 1000)},
+            ${topicTruncated},
             ${AGENT_IDS},
             'pending',
             NOW(),

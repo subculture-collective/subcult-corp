@@ -57,6 +57,9 @@ async function seed() {
         log.info('Seeded trigger', { name: trigger.name });
     } catch (err) {
         // If ON CONFLICT (name) fails because name is not unique, fall back to insert
+        // PostgreSQL error codes:
+        //   42P10 = invalid_column_reference (no unique constraint on name)
+        //   42703 = undefined_column (column doesn't exist)
         if (err.code === '42P10' || err.code === '42703') {
             log.warn(
                 'name column may not have a unique constraint — inserting directly',

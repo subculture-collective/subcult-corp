@@ -131,6 +131,8 @@ export async function checkConsensus(
     const tally = await tallyVotes(proposalId);
 
     // Supermajority = 2/3 of registered agents must approve (matching 4/6 requirement)
+    // We multiply first then divide to avoid floating point precision issues with integer counts
+    // Example: 6 agents -> ceil((6 * 2) / 3) = ceil(12/3) = 4 required approvals
     const requiredApprovals = Math.ceil((tally.totalAgents * 2) / 3);
     const quorum = Math.ceil(tally.totalAgents / 2);
     const quorumMet = tally.total >= quorum;
