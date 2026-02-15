@@ -4,6 +4,8 @@ import { sql, jsonb } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
+const MAX_NOTES_LENGTH = 5000;
+
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get('status');
@@ -57,9 +59,11 @@ export async function PATCH(req: NextRequest) {
         }
 
         // Validate notes field length
-        if (body.notes && body.notes.length > 5000) {
+        if (body.notes && body.notes.length > MAX_NOTES_LENGTH) {
             return NextResponse.json(
-                { error: 'Notes field too long (max 5000 characters)' },
+                {
+                    error: `Notes field too long (max ${MAX_NOTES_LENGTH} characters)`,
+                },
                 { status: 400 },
             );
         }

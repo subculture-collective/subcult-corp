@@ -6,6 +6,11 @@ import { logger } from '@/lib/logger';
 
 const log = logger.child({ module: 'content-pipeline' });
 
+// ─── Constants ───
+
+const MAX_TITLE_LENGTH = 500;
+const MAX_BODY_LENGTH = 50000;
+
 // ─── Types ───
 
 export type ContentType =
@@ -169,13 +174,13 @@ If no extractable creative content exists, respond with:
         }
 
         // Validate content length
-        if (parsed.title.length > 500) {
+        if (parsed.title.length > MAX_TITLE_LENGTH) {
             log.warn('Title too long, truncating', { sessionId });
-            parsed.title = parsed.title.slice(0, 500);
+            parsed.title = parsed.title.slice(0, MAX_TITLE_LENGTH);
         }
-        if (parsed.body.length > 50000) {
+        if (parsed.body.length > MAX_BODY_LENGTH) {
             log.warn('Body too long, truncating', { sessionId });
-            parsed.body = parsed.body.slice(0, 50000);
+            parsed.body = parsed.body.slice(0, MAX_BODY_LENGTH);
         }
 
         // Validate content type
