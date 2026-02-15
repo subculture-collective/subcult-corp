@@ -3,7 +3,7 @@
 // Supports replay mode: agents gather at meeting table to re-enact roundtable sessions
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
     useTimeOfDay,
     useInterval,
@@ -1261,7 +1261,7 @@ const MEETING_POSITIONS: Record<string, number> = {
 };
 
 function truncateDialogue(text: string, maxLen = 80): string {
-    let cleaned = text
+    const cleaned = text
         .replace(/https?:\/\/\S+/g, '')
         .replace(/[*_]{1,3}([^*_]+)[*_]{1,3}/g, '$1')
         .replace(/^["']|["']$/g, '')
@@ -1326,41 +1326,16 @@ export function OfficeRoom({
         })),
     );
 
+    // Track replay state changes with refs to avoid setState in effects
+    const prevReplayingRef = useRef(isReplaying);
+    const prevTurnIndexRef = useRef(currentTurnIndex);
+
     // Replay mode: override positions and behaviors for participants
+    // Uses refs to track state changes and updates are applied in animation loop
     useEffect(() => {
-        if (!isReplaying) return;
-
-        setAgents(prev =>
-            prev.map(agent => {
-                const isParticipant = replayParticipants.has(agent.id);
-                if (!isParticipant) return agent; // non-participants keep normal behavior
-
-                const meetingX = MEETING_POSITIONS[agent.id] ?? agent.x;
-                const isSpeaker = currentReplayTurn?.speaker === agent.id;
-                const behavior: AgentBehavior =
-                    isSpeaker ? 'chatting' : 'thinking';
-
-                // Show speech bubble for current speaker
-                let speechBubble: string | undefined;
-                let speechTick = 0;
-                if (isSpeaker && currentReplayTurn) {
-                    speechBubble = truncateDialogue(
-                        currentReplayTurn.dialogue,
-                        80,
-                    );
-                    speechTick = 999; // Keep showing until turn changes
-                }
-
-                return {
-                    ...agent,
-                    behavior,
-                    targetX: meetingX,
-                    speechBubble,
-                    speechTick,
-                };
-            }),
-        );
-    }, [isReplaying, currentTurnIndex, currentReplayTurn, replayParticipants]);
+        prevReplayingRef.current = isReplaying;
+        prevTurnIndexRef.current = currentTurnIndex;
+    }, [isReplaying, currentTurnIndex]);
 
     // Fetch recent conversation turns for speech bubbles (normal mode only)
     const [recentTurns, setRecentTurns] = useState<
@@ -1453,29 +1428,64 @@ export function OfficeRoom({
         return () => clearInterval(interval);
     }, [recentTurns, isReplaying]);
 
-    // Reset agent positions when exiting replay mode
-    useEffect(() => {
-        if (isReplaying) return;
-
-        // Return agents to their desks
-        setAgents(prev =>
-            prev.map(agent => {
-                const cfg = AGENT_CONFIGS.find(c => c.id === agent.id);
-                return {
-                    ...agent,
-                    targetX: cfg?.startX ?? agent.x,
-                    speechBubble: undefined,
-                    speechTick: 0,
-                    behavior: 'working' as AgentBehavior,
-                };
-            }),
-        );
-    }, [isReplaying]);
-
-    // Animation loop
+    // Animation loop - handles position updates and replay state changes
     useInterval(() => {
         setAgents(prev =>
             prev.map(agent => {
+                // Handle replay mode state changes
+                if (isReplaying) {
+                    const isParticipant = replayParticipants.has(agent.id);
+                    if (isParticipant) {
+                        const meetingX = MEETING_POSITIONS[agent.id] ?? agent.x;
+                        const isSpeaker = currentReplayTurn?.speaker === agent.id;
+                        const behavior: AgentBehavior =
+                            isSpeaker ? 'chatting' : 'thinking';
+
+                        // Show speech bubble for current speaker
+                        let speechBubble: string | undefined;
+                        let speechTick = 0;
+                        if (isSpeaker && currentReplayTurn) {
+                            speechBubble = truncateDialogue(
+                                currentReplayTurn.dialogue,
+                                80,
+                            );
+                            speechTick = 999; // Keep showing until turn changes
+                        }
+
+                        // Glide participants to meeting positions
+                        let newX = agent.x;
+                        const dx = meetingX - agent.x;
+                        if (Math.abs(dx) > 1) {
+                            newX =
+                                agent.x + Math.sign(dx) * Math.min(Math.abs(dx), 3);
+                        }
+
+                        return {
+                            ...agent,
+                            x: newX,
+                            behavior,
+                            targetX: meetingX,
+                            speechBubble,
+                            speechTick,
+                            frame: agent.frame + 1,
+                        };
+                    }
+                }
+                
+                // Handle exit from replay mode - return to desks
+                if (!isReplaying && prevReplayingRef.current) {
+                    const cfg = AGENT_CONFIGS.find(c => c.id === agent.id);
+                    return {
+                        ...agent,
+                        targetX: cfg?.startX ?? agent.x,
+                        speechBubble: undefined,
+                        speechTick: 0,
+                        behavior: 'working' as AgentBehavior,
+                        frame: agent.frame + 1,
+                    };
+                }
+
+                // Normal mode - handle walking and animation
                 let newX = agent.x;
                 if (
                     agent.behavior === 'walking' ||
@@ -1486,19 +1496,11 @@ export function OfficeRoom({
                         newX = agent.x + Math.sign(dx) * 2;
                     }
                 }
-                // In replay mode, glide participants to meeting positions
-                if (isReplaying && replayParticipants.has(agent.id)) {
-                    const dx = agent.targetX - agent.x;
-                    if (Math.abs(dx) > 1) {
-                        newX =
-                            agent.x + Math.sign(dx) * Math.min(Math.abs(dx), 3);
-                    }
-                }
-                // Auto-clear speech bubbles (skip in replay — managed by replay effect)
+                
+                // Auto-clear speech bubbles in normal mode
                 const newSpeechTick =
-                    isReplaying ? agent.speechTick
-                    : agent.speechTick > 0 ? agent.speechTick - 1
-                    : 0;
+                    agent.speechTick > 0 ? agent.speechTick - 1 : 0;
+                    
                 return {
                     ...agent,
                     x: newX,
