@@ -27,6 +27,7 @@ const VALID_FORMATS: ConversationFormat[] = [
     'writing_room',
     'content_review',
     'watercooler',
+    'agent_design',
 ];
 
 // POST — manually trigger a conversation

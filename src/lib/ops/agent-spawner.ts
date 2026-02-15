@@ -1,7 +1,7 @@
 // Agent Spawner — materialize approved proposals into real agents
 // Creates workspace files, registers in ops_agent_registry, and inserts skills.
 // REQUIRES human_approved === true before execution.
-import { sql, jsonb } from '@/lib/db';
+import { sql } from '@/lib/db';
 import { llmGenerate } from '@/lib/llm/client';
 import { emitEventAndCheckReactions } from './events';
 import { logger } from '@/lib/logger';
@@ -278,6 +278,14 @@ export async function executeSpawn(proposalId: string): Promise<SpawnResult> {
         agentName: proposal.agent_name,
     });
 
+    // Validate agent_name to prevent path traversal attacks
+    const agentNamePattern = /^[a-z0-9_]+$/;
+    if (!agentNamePattern.test(proposal.agent_name)) {
+        throw new Error(
+            `Invalid agent_name: "${proposal.agent_name}". Must contain only lowercase letters, numbers, and underscores.`,
+        );
+    }
+
     // Generate preview (includes all the content)
     const preview = await prepareSpawn(proposalId);
 
@@ -288,6 +296,14 @@ export async function executeSpawn(proposalId: string): Promise<SpawnResult> {
         'agents',
         proposal.agent_name,
     );
+
+    // Verify the resolved path stays under the intended workspace directory
+    const expectedPrefix = join(process.cwd(), 'workspace', 'agents');
+    if (!workspaceRoot.startsWith(expectedPrefix)) {
+        throw new Error(
+            `Security violation: agent_name "${proposal.agent_name}" attempted to escape workspace directory.`,
+        );
+    }
 
     // 1. Create workspace directory
     await mkdir(workspaceRoot, { recursive: true });
