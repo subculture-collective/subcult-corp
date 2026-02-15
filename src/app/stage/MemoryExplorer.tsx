@@ -924,11 +924,33 @@ export function MemoryExplorer() {
             const results: ArchaeologyFinding[] = [];
             for (const dig of latestDigs.slice(0, 3)) {
                 try {
-                    const data = await fetch(
+                    const res = await fetch(
                         `/api/ops/archaeology?dig_id=${dig.dig_id}`,
-                    ).then(r => r.json());
-                    if (!cancelled && data.findings)
-                        results.push(...data.findings);
+                    );
+                    if (!res.ok) {
+                        // Skip non-OK responses; keep behavior of ignoring individual errors
+                        continue;
+                    }
+                    let data: any;
+                    try {
+                        data = await res.json();
+                    } catch {
+                        // Skip responses that are not valid JSON
+                        continue;
+                    }
+                    if (
+                        !cancelled &&
+                        data &&
+                        Array.isArray(
+                            (data as { findings?: ArchaeologyFinding[] })
+                                .findings,
+                        )
+                    ) {
+                        results.push(
+                            ...(data as { findings: ArchaeologyFinding[] })
+                                .findings,
+                        );
+                    }
                 } catch {
                     /* ignore individual fetch errors */
                 }

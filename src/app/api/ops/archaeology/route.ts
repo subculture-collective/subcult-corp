@@ -7,6 +7,7 @@ import {
     getFindingsForMemory,
     getLatestFindings,
     performDig,
+    type FindingType,
 } from '@/lib/ops/memory-archaeology';
 import { withRequestContext } from '@/middleware';
 import { logger } from '@/lib/logger';
@@ -60,6 +61,16 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
     return withRequestContext(req, async () => {
+        const authHeader = req.headers.get('authorization');
+        const cronSecret = process.env.CRON_SECRET;
+
+        if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+            return NextResponse.json(
+                { error: 'Unauthorized' },
+                { status: 401 },
+            );
+        }
+
         try {
             const body = await req.json().catch(() => ({}));
             const { agent_id, time_range, max_memories, finding_types } =
@@ -100,9 +111,7 @@ export async function POST(req: NextRequest) {
                         }
                     :   undefined,
                 max_memories: max_memories ?? 100,
-                finding_types: finding_types as
-                    | (typeof result.findings)[0]['finding_type'][]
-                    | undefined,
+                finding_types: finding_types as FindingType[] | undefined,
             });
 
             return NextResponse.json(result);

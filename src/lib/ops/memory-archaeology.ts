@@ -194,8 +194,19 @@ async function fetchMemoriesForDig(
 ): Promise<MemoryRow[]> {
     const { agent_id, time_range } = config;
 
+    // Truncate content to prevent excessive token usage (max 2000 chars per memory)
     return sql<MemoryRow[]>`
-        SELECT id, agent_id, type, content, confidence, tags, created_at
+        SELECT
+            id,
+            agent_id,
+            type,
+            CASE
+                WHEN LENGTH(content) > 2000 THEN LEFT(content, 2000) || '...[truncated]'
+                ELSE content
+            END as content,
+            confidence,
+            tags,
+            created_at
         FROM ops_agent_memory
         WHERE superseded_by IS NULL
         ${agent_id ? sql`AND agent_id = ${agent_id}` : sql``}

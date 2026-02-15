@@ -7,7 +7,7 @@ import { emitEventAndCheckReactions } from './events';
 import { logger } from '@/lib/logger';
 import type { AgentProposal, AgentPersonality } from './agent-designer';
 import { writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { join, resolve } from 'path';
 
 const log = logger.child({ module: 'agent-spawner' });
 
@@ -76,11 +76,12 @@ function validateAndNormalizePersonality(
         (typeof p.tone === 'string' ? p.tone.trim() : '') ||
         DEFAULT_PERSONALITY.tone;
 
-    const traits = Array.isArray(p.traits)
-        ? p.traits
-              .map((t) => (typeof t === 'string' ? t.trim() : ''))
-              .filter((t) => t.length > 0)
-        : DEFAULT_PERSONALITY.traits;
+    const traits =
+        Array.isArray(p.traits) ?
+            p.traits
+                .map(t => (typeof t === 'string' ? t.trim() : ''))
+                .filter(t => t.length > 0)
+        :   DEFAULT_PERSONALITY.traits;
 
     const speaking_style =
         (typeof p.speaking_style === 'string' ? p.speaking_style.trim() : '') ||
@@ -218,13 +219,17 @@ export async function prepareSpawn(proposalId: string): Promise<SpawnPreview> {
     const color = SPAWN_COLORS[existingCount.count % SPAWN_COLORS.length];
 
     // Generate workspace files
-    const identityMarkdown = await generateIdentityMarkdown(proposal, personality);
+    const identityMarkdown = await generateIdentityMarkdown(
+        proposal,
+        personality,
+    );
     const soulMarkdown = await generateSoulMarkdown(proposal, personality);
 
     // Build system directive from personality
-    const traitsText = personality.traits.length > 0 
-        ? ` Your key traits: ${personality.traits.join(', ')}.`
-        : '';
+    const traitsText =
+        personality.traits.length > 0 ?
+            ` Your key traits: ${personality.traits.join(', ')}.`
+        :   '';
     const systemDirective = `You are ${nameCapitalized}, ${proposal.agent_role.toLowerCase()} of the SubCult collective. ${personality.tone}. You communicate in a ${personality.speaking_style} manner.${traitsText}`;
 
     const workspaceFiles = [
@@ -260,6 +265,14 @@ export async function executeSpawn(proposalId: string): Promise<SpawnResult> {
 
     if (!proposal) throw new Error(`Proposal "${proposalId}" not found`);
 
+    // Validate agent_name to prevent path traversal attacks - do this first before any other checks
+    const agentNamePattern = /^[a-z0-9_]+$/;
+    if (!agentNamePattern.test(proposal.agent_name)) {
+        throw new Error(
+            `Invalid agent_name: "${proposal.agent_name}". Must contain only lowercase letters, numbers, and underscores.`,
+        );
+    }
+
     if (proposal.status !== 'approved') {
         throw new Error(
             `Proposal must be approved before spawning (current: ${proposal.status})`,
@@ -288,6 +301,19 @@ export async function executeSpawn(proposalId: string): Promise<SpawnResult> {
         'agents',
         proposal.agent_name,
     );
+
+    // Verify the resolved path stays under the intended workspace directory
+    // Use resolve to normalize paths and exact matching to prevent any traversal
+    const expectedPrefix = resolve(process.cwd(), 'workspace', 'agents');
+    const expectedPath = resolve(expectedPrefix, proposal.agent_name);
+    const resolvedWorkspaceRoot = resolve(workspaceRoot);
+
+    // Use exact path matching - the resolved path must exactly match the expected path
+    if (resolvedWorkspaceRoot !== expectedPath) {
+        throw new Error(
+            `Security violation: agent_name "${proposal.agent_name}" resulted in unexpected path. Expected: ${expectedPath}, Got: ${resolvedWorkspaceRoot}`,
+        );
+    }
 
     // 1. Create workspace directory
     await mkdir(workspaceRoot, { recursive: true });
