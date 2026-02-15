@@ -1,13 +1,13 @@
 // Agent Spawner — materialize approved proposals into real agents
 // Creates workspace files, registers in ops_agent_registry, and inserts skills.
 // REQUIRES human_approved === true before execution.
-import { sql, jsonb } from '@/lib/db';
+import { sql } from '@/lib/db';
 import { llmGenerate } from '@/lib/llm/client';
 import { emitEventAndCheckReactions } from './events';
 import { logger } from '@/lib/logger';
 import type { AgentProposal, AgentPersonality } from './agent-designer';
 import { writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { join, resolve } from 'path';
 
 const log = logger.child({ module: 'agent-spawner' });
 
@@ -260,6 +260,14 @@ export async function executeSpawn(proposalId: string): Promise<SpawnResult> {
 
     if (!proposal) throw new Error(`Proposal "${proposalId}" not found`);
 
+    // Validate agent_name to prevent path traversal attacks - do this first before any other checks
+    const agentNamePattern = /^[a-z0-9_]+$/;
+    if (!agentNamePattern.test(proposal.agent_name)) {
+        throw new Error(
+            `Invalid agent_name: "${proposal.agent_name}". Must contain only lowercase letters, numbers, and underscores.`,
+        );
+    }
+
     if (proposal.status !== 'approved') {
         throw new Error(
             `Proposal must be approved before spawning (current: ${proposal.status})`,
@@ -288,6 +296,19 @@ export async function executeSpawn(proposalId: string): Promise<SpawnResult> {
         'agents',
         proposal.agent_name,
     );
+
+    // Verify the resolved path stays under the intended workspace directory
+    // Use resolve to normalize paths and exact matching to prevent any traversal
+    const expectedPrefix = resolve(process.cwd(), 'workspace', 'agents');
+    const expectedPath = resolve(expectedPrefix, proposal.agent_name);
+    const resolvedWorkspaceRoot = resolve(workspaceRoot);
+    
+    // Use exact path matching - the resolved path must exactly match the expected path
+    if (resolvedWorkspaceRoot !== expectedPath) {
+        throw new Error(
+            `Security violation: agent_name "${proposal.agent_name}" resulted in unexpected path. Expected: ${expectedPath}, Got: ${resolvedWorkspaceRoot}`,
+        );
+    }
 
     // 1. Create workspace directory
     await mkdir(workspaceRoot, { recursive: true });

@@ -1216,14 +1216,36 @@ export function useArchaeology(options?: { limit?: number }) {
     const triggerDig = useCallback(async (agentId?: string) => {
         setTriggerLoading(true);
         try {
-            await fetch('/api/ops/archaeology', {
+            const res = await fetch('/api/ops/archaeology', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ agent_id: agentId, max_memories: 100 }),
             });
+
+            if (!res.ok) {
+                let errorMessage = `Failed to start dig (status ${res.status})`;
+                try {
+                    const errorBody = await res.json();
+                    if (errorBody && typeof errorBody === 'object') {
+                        const bodyAny = errorBody as { message?: string; error?: string };
+                        if (typeof bodyAny.message === 'string') {
+                            errorMessage = bodyAny.message;
+                        } else if (typeof bodyAny.error === 'string') {
+                            errorMessage = bodyAny.error;
+                        }
+                    }
+                } catch {
+                    // Ignore JSON parsing errors and fall back to default message.
+                }
+                setError(errorMessage);
+                return;
+            }
+
             setRefreshKey(k => k + 1);
         } catch (err) {
-            setError((err as Error).message);
+            const message =
+                err instanceof Error ? err.message : 'Failed to start dig due to an unexpected error.';
+            setError(message);
         } finally {
             setTriggerLoading(false);
         }
