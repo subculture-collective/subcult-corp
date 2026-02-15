@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
                         await sendEvent(writer, 'session_complete', { status });
                         isActive = false;
                         stopKeepAlive();
-                        await writer.close().catch(() => {});
+                        writer.close().catch(() => {});
                         return;
                     }
                 }
