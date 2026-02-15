@@ -273,11 +273,6 @@ export async function executeSpawn(proposalId: string): Promise<SpawnResult> {
         );
     }
 
-    log.info('Executing agent spawn', {
-        proposalId,
-        agentName: proposal.agent_name,
-    });
-
     // Validate agent_name to prevent path traversal attacks
     const agentNamePattern = /^[a-z0-9_]+$/;
     if (!agentNamePattern.test(proposal.agent_name)) {
@@ -285,6 +280,11 @@ export async function executeSpawn(proposalId: string): Promise<SpawnResult> {
             `Invalid agent_name: "${proposal.agent_name}". Must contain only lowercase letters, numbers, and underscores.`,
         );
     }
+
+    log.info('Executing agent spawn', {
+        proposalId,
+        agentName: proposal.agent_name,
+    });
 
     // Generate preview (includes all the content)
     const preview = await prepareSpawn(proposalId);
