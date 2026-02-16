@@ -1,7 +1,7 @@
 // AgentDesigner — agent design proposals with approval controls and spawn workflow
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, type ReactNode } from 'react';
 import {
     useAgentProposals,
     type AgentProposalEntry,
@@ -9,20 +9,29 @@ import {
 } from './hooks';
 import { AGENTS } from '@/lib/agents';
 import type { AgentId } from '@/lib/types';
+import {
+    ClipboardListIcon,
+    VoteIcon,
+    CheckCircleIcon,
+    DNAIcon,
+    XCircleIcon,
+    FileTextIcon,
+    LoaderIcon,
+} from '@/lib/icons';
 
 // ─── Constants ───
 
 const STATUS_TABS: {
     key: AgentProposalStatus | 'all';
     label: string;
-    icon: string;
+    icon: ReactNode;
 }[] = [
-    { key: 'all', label: 'All', icon: '📋' },
-    { key: 'voting', label: 'Voting', icon: '🗳️' },
-    { key: 'approved', label: 'Approved', icon: '✅' },
-    { key: 'spawned', label: 'Spawned', icon: '🧬' },
-    { key: 'rejected', label: 'Rejected', icon: '❌' },
-    { key: 'proposed', label: 'Proposed', icon: '📝' },
+    { key: 'all', label: 'All', icon: <ClipboardListIcon className='w-4 h-4' /> },
+    { key: 'voting', label: 'Voting', icon: <VoteIcon className='w-4 h-4' /> },
+    { key: 'approved', label: 'Approved', icon: <CheckCircleIcon className='w-4 h-4' /> },
+    { key: 'spawned', label: 'Spawned', icon: <DNAIcon className='w-4 h-4' /> },
+    { key: 'rejected', label: 'Rejected', icon: <XCircleIcon className='w-4 h-4' /> },
+    { key: 'proposed', label: 'Proposed', icon: <FileTextIcon className='w-4 h-4' /> },
 ];
 
 const STATUS_COLORS: Record<AgentProposalStatus, string> = {
@@ -369,11 +378,19 @@ function ProposalCard({
                                         onAction('spawn', proposal.id)
                                     }
                                     disabled={isThisLoading}
-                                    className='flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-500/20 text-violet-300 border border-violet-500/30 hover:bg-violet-500/30 transition-colors disabled:opacity-50'
+                                    className='flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-500/20 text-violet-300 border border-violet-500/30 hover:bg-violet-500/30 transition-colors disabled:opacity-50 cursor-pointer'
                                 >
-                                    {isThisLoading ?
-                                        '⏳ Spawning...'
-                                    :   '🧬 Spawn Agent'}
+                                    {isThisLoading ? (
+                                        <>
+                                            <LoaderIcon className='w-3 h-3 animate-spin' />
+                                            Spawning...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <DNAIcon className='w-3 h-3' />
+                                            Spawn Agent
+                                        </>
+                                    )}
                                 </button>
                             </div>
                         )}
@@ -476,8 +493,9 @@ export function AgentDesigner() {
             {/* Header */}
             <div className='flex items-center justify-between'>
                 <div>
-                    <h2 className='text-lg font-semibold text-zinc-100'>
-                        🧬 Agent Designer
+                    <h2 className='text-lg font-semibold text-zinc-100 flex items-center gap-2'>
+                        <DNAIcon className='w-5 h-5 text-violet-400' />
+                        Agent Designer
                     </h2>
                     <p className='text-xs text-zinc-500 mt-0.5'>
                         Agent-proposed new members for the collective

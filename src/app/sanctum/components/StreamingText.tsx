@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, useReducer } from 'react';
+import { useRef, useEffect, useReducer, useLayoutEffect } from 'react';
 
 interface StreamingTextProps {
     text: string;
@@ -27,7 +27,9 @@ export function StreamingText({
         { displayed: '', done: false },
     );
     const onCompleteRef = useRef(onComplete);
-    onCompleteRef.current = onComplete;
+    useLayoutEffect(() => {
+        onCompleteRef.current = onComplete;
+    });
 
     useEffect(() => {
         dispatch({ displayed: '', done: false });

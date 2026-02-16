@@ -1,28 +1,57 @@
 // Signal Feed — virtualized real-time event feed
 'use client';
 
-import { useRef } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEvents } from './hooks';
 import { SignalFeedSkeleton } from './StageSkeletons';
 import type { AgentEvent, AgentId } from '@/lib/types';
 import { AGENTS } from '@/lib/agents';
+import {
+    MessageCircleIcon,
+    MicIcon,
+    CheckCircleIcon,
+    XCircleIcon,
+    FileTextIcon,
+    BanIcon,
+    RocketIcon,
+    TrophyIcon,
+    SettingsIcon,
+    ZapIcon,
+    SignalIcon,
+} from '@/lib/icons';
 
-const KIND_ICONS: Record<string, string> = {
-    conversation_turn: '💬',
-    conversation_started: '🎙️',
-    conversation_completed: '✅',
-    conversation_failed: '❌',
-    proposal_created: '📝',
-    proposal_approved: '✅',
-    proposal_rejected: '🚫',
-    mission_started: '🚀',
-    mission_completed: '🏆',
-    step_completed: '⚙️',
-    step_failed: '💥',
-    trigger_fired: '⚡',
-    default: '📡',
-};
+function getKindIcon(kind: string): ReactNode {
+    const iconClass = 'w-4 h-4';
+    switch (kind) {
+        case 'conversation_turn':
+            return <MessageCircleIcon className={iconClass} />;
+        case 'conversation_started':
+            return <MicIcon className={iconClass} />;
+        case 'conversation_completed':
+            return <CheckCircleIcon className={iconClass} />;
+        case 'conversation_failed':
+            return <XCircleIcon className={iconClass} />;
+        case 'proposal_created':
+            return <FileTextIcon className={iconClass} />;
+        case 'proposal_approved':
+            return <CheckCircleIcon className={iconClass} />;
+        case 'proposal_rejected':
+            return <BanIcon className={iconClass} />;
+        case 'mission_started':
+            return <RocketIcon className={iconClass} />;
+        case 'mission_completed':
+            return <TrophyIcon className={iconClass} />;
+        case 'step_completed':
+            return <SettingsIcon className={iconClass} />;
+        case 'step_failed':
+            return <XCircleIcon className={iconClass} />;
+        case 'trigger_fired':
+            return <ZapIcon className={iconClass} />;
+        default:
+            return <SignalIcon className={iconClass} />;
+    }
+}
 
 function formatRelativeTime(dateStr: string): string {
     const now = Date.now();
@@ -41,7 +70,6 @@ function EventRow({ event }: { event: AgentEvent }) {
     const borderBg =
         AGENTS[agentId]?.tailwindBorderBg ??
         'border-zinc-400/20 bg-zinc-400/10';
-    const icon = KIND_ICONS[event.kind] ?? KIND_ICONS.default;
 
     return (
         <div
@@ -49,7 +77,7 @@ function EventRow({ event }: { event: AgentEvent }) {
         >
             {/* Agent badge */}
             <div className='flex flex-col items-center gap-1 pt-0.5'>
-                <span className='text-base leading-none'>{icon}</span>
+                <span className='text-zinc-400'>{getKindIcon(event.kind)}</span>
                 <span className={`text-[10px] font-medium ${textColor}`}>
                     {event.agent_id}
                 </span>

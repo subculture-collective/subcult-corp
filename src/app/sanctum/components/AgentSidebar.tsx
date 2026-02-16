@@ -2,6 +2,7 @@
 
 import { AGENT_DATA } from '../lib/agents-client';
 import type { TypingAgent } from '../hooks/useSanctumSocket';
+import { VolumeOffIcon } from '@/lib/icons';
 
 interface AgentSidebarProps {
     open: boolean;
@@ -43,7 +44,7 @@ export function AgentSidebar({
                                 }
                                 className={`
                                     w-full flex items-center gap-3 px-3 py-2.5 rounded-lg
-                                    transition-all duration-200 group text-left
+                                    transition-all duration-200 group text-left cursor-pointer
                                     ${
                                         isWhisper ?
                                             'bg-white/[0.06] border border-white/[0.1]'
@@ -81,9 +82,7 @@ export function AgentSidebar({
                                             {agent.displayName}
                                         </span>
                                         {isWhisper && (
-                                            <span className='text-[9px] text-white/30'>
-                                                🔇
-                                            </span>
+                                            <VolumeOffIcon size={10} className='text-white/30' />
                                         )}
                                     </div>
                                     <span className='text-[10px] text-white/25 leading-none'>
@@ -102,7 +101,7 @@ export function AgentSidebar({
                 <div className='px-4 pb-4'>
                     <button
                         onClick={() => onWhisper(null)}
-                        className='w-full py-2 text-[11px] text-white/30 hover:text-white/50 border border-white/[0.06] rounded-md hover:border-white/[0.1] transition-colors'
+                        className='w-full py-2 text-[11px] text-white/30 hover:text-white/50 border border-white/[0.06] rounded-md hover:border-white/[0.1] transition-colors cursor-pointer'
                     >
                         Exit Whisper
                     </button>

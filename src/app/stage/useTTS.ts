@@ -50,15 +50,22 @@ export interface TTSControls {
 export function useTTS(): [TTSState, TTSControls] {
     const [isPlaying, setIsPlaying] = useState(false);
     const [activeTurnIndex, setActiveTurnIndex] = useState(-1);
-    const [isAvailable, setIsAvailable] = useState(false);
+    // Initialize isAvailable lazily to avoid SSR hydration mismatch
+    const [isAvailable, setIsAvailable] = useState(() => {
+        if (typeof window === 'undefined') return false;
+        return 'speechSynthesis' in window;
+    });
     const [needsUnlock, setNeedsUnlock] = useState(false);
     const cancelledRef = useRef(false);
 
-    // Set isAvailable on client-side only to avoid SSR hydration mismatch
+    // Re-check availability on mount (handles edge cases)
     useEffect(() => {
-        setIsAvailable(
-            typeof window !== 'undefined' && 'speechSynthesis' in window,
-        );
+        const available =
+            typeof window !== 'undefined' && 'speechSynthesis' in window;
+        if (available !== isAvailable) {
+            setIsAvailable(available);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const stop = useCallback(async () => {

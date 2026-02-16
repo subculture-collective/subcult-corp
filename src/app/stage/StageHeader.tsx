@@ -10,6 +10,22 @@ import {
 import { StatsBarSkeleton } from './StageSkeletons';
 import { AGENTS } from '@/lib/agents';
 import type { AgentId } from '@/lib/types';
+import {
+    SignalIcon,
+    TargetIcon,
+    BuildingIcon,
+    BrainIcon,
+    WalletIcon,
+    DnaIcon,
+    NetworkIcon,
+    FileTextIcon,
+    ScaleIcon,
+    CloudIcon,
+    UsersIcon,
+    ArchiveIcon,
+    LinkIcon,
+    CheckIcon,
+} from '@/lib/icons';
 
 export type ViewMode =
     | 'feed'
@@ -114,19 +130,35 @@ export function StageHeader({
         });
     }, []);
 
-    const views: { key: ViewMode; label: string; icon: string }[] = [
-        { key: 'feed', label: 'Signal Feed', icon: '📡' },
-        { key: 'missions', label: 'Missions', icon: '🎯' },
-        { key: 'office', label: 'Office', icon: '🏢' },
-        { key: 'logs', label: 'Cortex', icon: '🧠' },
-        { key: 'costs', label: 'Costs', icon: '💰' },
-        { key: 'memories', label: 'Memories', icon: '🧬' },
-        { key: 'relationships', label: 'Graph', icon: '🌐' },
-        { key: 'content', label: 'Content', icon: '📝' },
-        { key: 'governance', label: 'Governance', icon: '⚖️' },
-        { key: 'dreams', label: 'Dreams', icon: '💭' },
-        { key: 'agent-designer', label: 'Agents', icon: '🧬' },
-        { key: 'archaeology', label: 'Archaeology', icon: '🏛️' },
+    const views: { key: ViewMode; label: string; icon: React.ReactNode }[] = [
+        { key: 'feed', label: 'Signal Feed', icon: <SignalIcon size={14} /> },
+        { key: 'missions', label: 'Missions', icon: <TargetIcon size={14} /> },
+        { key: 'office', label: 'Office', icon: <BuildingIcon size={14} /> },
+        { key: 'logs', label: 'Cortex', icon: <BrainIcon size={14} /> },
+        { key: 'costs', label: 'Costs', icon: <WalletIcon size={14} /> },
+        { key: 'memories', label: 'Memories', icon: <DnaIcon size={14} /> },
+        {
+            key: 'relationships',
+            label: 'Graph',
+            icon: <NetworkIcon size={14} />,
+        },
+        { key: 'content', label: 'Content', icon: <FileTextIcon size={14} /> },
+        {
+            key: 'governance',
+            label: 'Governance',
+            icon: <ScaleIcon size={14} />,
+        },
+        { key: 'dreams', label: 'Dreams', icon: <CloudIcon size={14} /> },
+        {
+            key: 'agent-designer',
+            label: 'Agents',
+            icon: <UsersIcon size={14} />,
+        },
+        {
+            key: 'archaeology',
+            label: 'Archaeology',
+            icon: <ArchiveIcon size={14} />,
+        },
     ];
 
     return (
@@ -150,40 +182,19 @@ export function StageHeader({
                 {/* Share link button */}
                 <button
                     onClick={handleShareClick}
-                    className='flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors border border-zinc-700/50'
+                    className='flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors border border-zinc-700/50 cursor-pointer'
                     title='Copy /live link (Alt+click to open)'
                 >
                     {copied ?
                         <>
-                            <svg
-                                className='w-3.5 h-3.5 text-accent-green'
-                                fill='none'
-                                viewBox='0 0 24 24'
-                                stroke='currentColor'
-                                strokeWidth={2}
-                            >
-                                <path
-                                    strokeLinecap='round'
-                                    strokeLinejoin='round'
-                                    d='M5 13l4 4L19 7'
-                                />
-                            </svg>
+                            <CheckIcon
+                                size={14}
+                                className='text-accent-green'
+                            />
                             <span className='text-accent-green'>Copied!</span>
                         </>
                     :   <>
-                            <svg
-                                className='w-3.5 h-3.5'
-                                fill='none'
-                                viewBox='0 0 24 24'
-                                stroke='currentColor'
-                                strokeWidth={2}
-                            >
-                                <path
-                                    strokeLinecap='round'
-                                    strokeLinejoin='round'
-                                    d='M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1'
-                                />
-                            </svg>
+                            <LinkIcon size={14} />
                             <span className='hidden sm:inline'>Share Live</span>
                         </>
                     }
@@ -195,13 +206,13 @@ export function StageHeader({
                         <button
                             key={v.key}
                             onClick={() => onViewChange(v.key)}
-                            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
                                 view === v.key ?
                                     'bg-zinc-700 text-zinc-100'
                                 :   'text-zinc-400 hover:text-zinc-300 hover:bg-zinc-800'
                             }`}
                         >
-                            <span>{v.icon}</span>
+                            {v.icon}
                             <span className='hidden sm:inline'>{v.label}</span>
                         </button>
                     ))}

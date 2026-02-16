@@ -18,40 +18,98 @@ import type {
     RoundtableSession,
     RoundtableTurn,
 } from '@/lib/types';
+import {
+    MessageCircleIcon,
+    MicIcon,
+    CheckCircleIcon,
+    XCircleIcon,
+    FileTextIcon,
+    RocketIcon,
+    TrophyIcon,
+    GearIcon,
+    ZapIcon,
+    BrainIcon,
+    DnaIcon,
+    HeartPulseIcon,
+    BotIcon,
+    TimerIcon,
+    PlayIcon,
+    AlertCircleIcon,
+    BellIcon,
+    StethoscopeIcon,
+    ChartBarIcon,
+    FlameIcon,
+    DoveIcon,
+    SignalIcon,
+    ClipboardListIcon,
+    TargetIcon,
+    HourglassIcon,
+    RefreshIcon,
+} from '@/lib/icons';
 
 // ─── Constants ───
 
-const KIND_ICONS: Record<string, string> = {
-    conversation_turn: '💬',
-    conversation_started: '🎙️',
-    conversation_completed: '✅',
-    conversation_failed: '❌',
-    proposal_created: '📝',
-    proposal_approved: '✅',
-    proposal_rejected: '🚫',
-    mission_started: '🚀',
-    mission_completed: '🏆',
-    step_completed: '⚙️',
-    step_failed: '💥',
-    trigger_fired: '⚡',
-    initiative_queued: '🧠',
-    memory_stored: '🧬',
-    heartbeat: '💓',
-    // Agent session event kinds
-    agent_session_completed: '🟢',
-    agent_session_failed: '🔴',
-    skill_execution: '🔧',
-    action_run: '▶️',
-    cron_run: '⏱️',
-    model_fallback: '⚠️',
-    alert_sent: '🔔',
-    agent_session: '🟢',
-    health_check: '🩺',
-    health_score: '📊',
-    rebellion_started: '🔥',
-    rebellion_ended: '🕊️',
-    default: '📡',
-};
+function getKindIcon(kind: string): React.ReactNode {
+    const iconProps = { size: 14, className: 'shrink-0' };
+    switch (kind) {
+        case 'conversation_turn':
+            return <MessageCircleIcon {...iconProps} />;
+        case 'conversation_started':
+            return <MicIcon {...iconProps} />;
+        case 'conversation_completed':
+            return <CheckCircleIcon {...iconProps} />;
+        case 'conversation_failed':
+            return <XCircleIcon {...iconProps} />;
+        case 'proposal_created':
+            return <FileTextIcon {...iconProps} />;
+        case 'proposal_approved':
+            return <CheckCircleIcon {...iconProps} />;
+        case 'proposal_rejected':
+            return <XCircleIcon {...iconProps} />;
+        case 'mission_started':
+            return <RocketIcon {...iconProps} />;
+        case 'mission_completed':
+            return <TrophyIcon {...iconProps} />;
+        case 'step_completed':
+            return <GearIcon {...iconProps} />;
+        case 'step_failed':
+            return <XCircleIcon {...iconProps} />;
+        case 'trigger_fired':
+            return <ZapIcon {...iconProps} />;
+        case 'initiative_queued':
+            return <BrainIcon {...iconProps} />;
+        case 'memory_stored':
+            return <DnaIcon {...iconProps} />;
+        case 'heartbeat':
+            return <HeartPulseIcon {...iconProps} />;
+        case 'agent_session_completed':
+            return <CheckCircleIcon {...iconProps} />;
+        case 'agent_session_failed':
+            return <XCircleIcon {...iconProps} />;
+        case 'skill_execution':
+            return <GearIcon {...iconProps} />;
+        case 'action_run':
+            return <PlayIcon {...iconProps} />;
+        case 'cron_run':
+            return <TimerIcon {...iconProps} />;
+        case 'model_fallback':
+            return <AlertCircleIcon {...iconProps} />;
+        case 'alert_sent':
+            return <BellIcon {...iconProps} />;
+        case 'agent_session':
+            return <BotIcon {...iconProps} />;
+        case 'health_check':
+            return <StethoscopeIcon {...iconProps} />;
+        case 'health_score':
+            return <ChartBarIcon {...iconProps} />;
+        case 'rebellion_started':
+            return <FlameIcon {...iconProps} />;
+        case 'rebellion_ended':
+            return <DoveIcon {...iconProps} />;
+        default:
+            return <SignalIcon {...iconProps} />;
+    }
+}
 
 const KIND_LABELS: Record<string, string> = {
     conversation_turn: 'Conversation Turn',
@@ -176,7 +234,7 @@ function DetailedEventRow({
     const agentId = event.agent_id as AgentId;
     const agent = AGENTS[agentId];
     const textColor = agent?.tailwindTextColor ?? 'text-zinc-400';
-    const icon = KIND_ICONS[event.kind] ?? KIND_ICONS.default;
+    const icon = getKindIcon(event.kind);
     const severity = getKindSeverity(event.kind);
     const kindLabel = KIND_LABELS[event.kind] ?? event.kind;
     const hasMetadata =
@@ -210,7 +268,7 @@ function DetailedEventRow({
 
                 {/* Icon + Agent badge */}
                 <div className='flex flex-col items-center gap-0.5 shrink-0 w-10'>
-                    <span className='text-sm leading-none'>{icon}</span>
+                    <span className='text-zinc-500'>{icon}</span>
                     <span
                         className={`text-[9px] font-semibold ${textColor} uppercase tracking-wide`}
                     >
@@ -311,11 +369,11 @@ function SessionCard({
         failed: 'text-accent-red bg-accent-red/10 border-accent-red/30',
     };
 
-    const statusIcons = {
-        pending: '\u23F3',
-        running: '\uD83D\uDD04',
-        completed: '\u2705',
-        failed: '\u274C',
+    const statusIcons: Record<string, React.ReactNode> = {
+        pending: <HourglassIcon size={12} className='shrink-0' />,
+        running: <RefreshIcon size={12} className='shrink-0 animate-spin' />,
+        completed: <CheckCircleIcon size={12} className='shrink-0' />,
+        failed: <XCircleIcon size={12} className='shrink-0' />,
     };
 
     return (
@@ -330,7 +388,7 @@ function SessionCard({
             <div className='flex items-start justify-between gap-2'>
                 <div className='min-w-0 flex-1'>
                     <div className='flex items-center gap-2'>
-                        <span className='text-sm'>
+                        <span className='text-zinc-400'>
                             {statusIcons[session.status]}
                         </span>
                         <span className='text-xs font-medium text-zinc-200 truncate'>
@@ -435,12 +493,12 @@ function FeedTabs({
     active: FeedTab;
     onChange: (tab: FeedTab) => void;
 }) {
-    const tabs: { key: FeedTab; label: string; icon: string }[] = [
-        { key: 'all', label: 'All', icon: '📋' },
-        { key: 'conversations', label: 'Conversations', icon: '💬' },
-        { key: 'missions', label: 'Missions', icon: '🎯' },
-        { key: 'system', label: 'System', icon: '⚙️' },
-        { key: 'sessions', label: 'Sessions', icon: '🤖' },
+    const tabs: { key: FeedTab; label: string; icon: React.ReactNode }[] = [
+        { key: 'all', label: 'All', icon: <ClipboardListIcon size={12} /> },
+        { key: 'conversations', label: 'Conversations', icon: <MessageCircleIcon size={12} /> },
+        { key: 'missions', label: 'Missions', icon: <TargetIcon size={12} /> },
+        { key: 'system', label: 'System', icon: <GearIcon size={12} /> },
+        { key: 'sessions', label: 'Sessions', icon: <BotIcon size={12} /> },
     ];
 
     return (
@@ -449,13 +507,13 @@ function FeedTabs({
                 <button
                     key={t.key}
                     onClick={() => onChange(t.key)}
-                    className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                    className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer ${
                         active === t.key ?
                             'bg-zinc-700 text-zinc-100'
                         :   'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'
                     }`}
                 >
-                    <span className='text-xs'>{t.icon}</span>
+                    {t.icon}
                     <span>{t.label}</span>
                 </button>
             ))}
@@ -568,8 +626,9 @@ export function EventLogFeed({
             {/* Header */}
             <div className='flex items-center justify-between gap-3 px-4 py-3 border-b border-zinc-800'>
                 <div className='flex items-center gap-2'>
+                    <ChartBarIcon size={14} className='text-zinc-500' />
                     <span className='text-xs font-medium text-zinc-400'>
-                        📊 Event Log
+                        Event Log
                     </span>
                     <LiveDot />
                     <span className='text-[10px] text-zinc-600 tabular-nums'>
@@ -580,13 +639,14 @@ export function EventLogFeed({
                     <FeedTabs active={activeTab} onChange={setActiveTab} />
                     <button
                         onClick={() => setShowSessions(s => !s)}
-                        className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors border ${
+                        className={`flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors border cursor-pointer ${
                             showSessions ?
                                 'border-zinc-600 bg-zinc-700 text-zinc-200'
                             :   'border-zinc-700/50 text-zinc-500 hover:text-zinc-300'
                         }`}
                     >
-                        🎙️ Sessions
+                        <MicIcon size={12} />
+                        <span>Sessions</span>
                     </button>
                 </div>
             </div>

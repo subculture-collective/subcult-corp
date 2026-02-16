@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { AGENT_DATA } from '../lib/agents-client';
+import { SendIcon } from '@/lib/icons';
 
 interface MessageInputProps {
     onSend: (text: string) => void;
@@ -141,7 +142,7 @@ export function MessageInput({
                                     e.preventDefault();
                                     insertMention(id);
                                 }}
-                                className='w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-white/[0.04] transition-colors'
+                                className='w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-white/[0.04] transition-colors cursor-pointer'
                             >
                                 <div
                                     className='w-2 h-2 rounded-full'
@@ -169,7 +170,7 @@ export function MessageInput({
                                 e.preventDefault();
                                 insertCommand(c.cmd);
                             }}
-                            className='w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-white/[0.04] transition-colors'
+                            className='w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-white/[0.04] transition-colors cursor-pointer'
                         >
                             <span className='text-sm text-white/70 font-mono'>
                                 {c.cmd}
@@ -197,22 +198,10 @@ export function MessageInput({
                 <button
                     onClick={handleSend}
                     disabled={!connected || !text.trim()}
-                    className='shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-white/[0.06] hover:bg-white/[0.12] disabled:opacity-20 disabled:hover:bg-white/[0.06] transition-colors'
+                    className='shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-white/[0.06] hover:bg-white/[0.12] disabled:opacity-20 disabled:hover:bg-white/[0.06] transition-colors cursor-pointer disabled:cursor-not-allowed'
                     aria-label='Send message'
                 >
-                    <svg
-                        className='w-4 h-4 text-white/60'
-                        fill='none'
-                        viewBox='0 0 24 24'
-                        stroke='currentColor'
-                        strokeWidth={2}
-                    >
-                        <path
-                            strokeLinecap='round'
-                            strokeLinejoin='round'
-                            d='M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5'
-                        />
-                    </svg>
+                    <SendIcon size={16} className='text-white/60' />
                 </button>
             </div>
         </div>

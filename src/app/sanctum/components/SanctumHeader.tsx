@@ -1,5 +1,7 @@
 'use client';
 
+import { VolumeOffIcon, XIcon, MenuIcon } from '@/lib/icons';
+
 interface SanctumHeaderProps {
     sidebarOpen: boolean;
     onToggleSidebar: () => void;
@@ -20,29 +22,13 @@ export function SanctumHeader({
             <div className='flex items-center gap-3'>
                 <button
                     onClick={onToggleSidebar}
-                    className='w-8 h-8 flex items-center justify-center rounded-md hover:bg-white/[0.06] transition-colors'
+                    className='w-8 h-8 flex items-center justify-center rounded-md hover:bg-white/[0.06] transition-colors cursor-pointer'
                     aria-label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
                 >
-                    <svg
-                        className='w-5 h-5 text-white/50'
-                        fill='none'
-                        viewBox='0 0 24 24'
-                        stroke='currentColor'
-                        strokeWidth={1.5}
-                    >
-                        {sidebarOpen ?
-                            <path
-                                strokeLinecap='round'
-                                strokeLinejoin='round'
-                                d='M6 18L18 6M6 6l12 12'
-                            />
-                        :   <path
-                                strokeLinecap='round'
-                                strokeLinejoin='round'
-                                d='M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5'
-                            />
-                        }
-                    </svg>
+                    {sidebarOpen ?
+                        <XIcon size={20} className='text-white/50' />
+                    :   <MenuIcon size={20} className='text-white/50' />
+                    }
                 </button>
 
                 <div className='flex items-center gap-2'>
@@ -57,18 +43,19 @@ export function SanctumHeader({
 
             {whisperTarget && (
                 <div className='flex items-center gap-2 px-3 py-1.5 bg-white/[0.04] rounded-full border border-white/[0.08]'>
+                    <VolumeOffIcon size={12} className='text-white/40' />
                     <span className='text-xs text-white/40'>
-                        🔇 Whispering to
+                        Whispering to
                     </span>
                     <span className='text-xs font-medium text-white/70 capitalize'>
                         {whisperTarget}
                     </span>
                     <button
                         onClick={onExitWhisper}
-                        className='ml-1 w-4 h-4 flex items-center justify-center rounded-full hover:bg-white/[0.1] text-white/30 hover:text-white/60 transition-colors'
+                        className='ml-1 w-4 h-4 flex items-center justify-center rounded-full hover:bg-white/[0.1] text-white/30 hover:text-white/60 transition-colors cursor-pointer'
                         aria-label='Exit whisper mode'
                     >
-                        ×
+                        <XIcon size={10} />
                     </button>
                 </div>
             )}

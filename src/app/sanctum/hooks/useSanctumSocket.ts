@@ -256,6 +256,8 @@ export function useSanctumSocket(): UseSanctumSocketReturn {
 
     // ── Connection (declared after handleServerEvent) ──
 
+    const connectRef = useRef<() => void>();
+
     const connect = useCallback(() => {
         if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
@@ -274,7 +276,10 @@ export function useSanctumSocket(): UseSanctumSocketReturn {
                 30000,
             );
             reconnectAttempt.current++;
-            reconnectRef.current = setTimeout(connect, delay);
+            reconnectRef.current = setTimeout(
+                () => connectRef.current?.(),
+                delay,
+            );
         };
 
         ws.onerror = () => {
@@ -290,6 +295,11 @@ export function useSanctumSocket(): UseSanctumSocketReturn {
             }
         };
     }, [getWsUrl, handleServerEvent]);
+
+    // Keep connectRef in sync with latest connect function
+    useEffect(() => {
+        connectRef.current = connect;
+    }, [connect]);
 
     // Connect on mount
     useEffect(() => {

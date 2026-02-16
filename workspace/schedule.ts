@@ -235,6 +235,7 @@ export const SUBCULT_OFFICE_SCHEDULE: OfficeSlot[] = [
 
 // ---------- helpers you implement ----------
 function threeRandom(pool: readonly string[]): string[] {
-    // placeholder: implement your own sampling without replacement
-    return [] as any;
+    // sampling without replacement
+    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, 3);
 }
