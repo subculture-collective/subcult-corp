@@ -25,7 +25,9 @@ import {
     ArchiveIcon,
     LinkIcon,
     CheckIcon,
+    MessageCircleIcon,
 } from '@/lib/icons';
+import Link from 'next/link';
 
 export type ViewMode =
     | 'feed'
@@ -179,26 +181,36 @@ export function StageHeader({
                     </p>
                 </div>
 
-                {/* Share link button */}
-                <button
-                    onClick={handleShareClick}
-                    className='flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors border border-zinc-700/50 cursor-pointer'
-                    title='Copy /live link (Alt+click to open)'
-                >
-                    {copied ?
-                        <>
-                            <CheckIcon
-                                size={14}
-                                className='text-accent-green'
-                            />
-                            <span className='text-accent-green'>Copied!</span>
-                        </>
-                    :   <>
-                            <LinkIcon size={14} />
-                            <span className='hidden sm:inline'>Share Live</span>
-                        </>
-                    }
-                </button>
+                {/* Navigation buttons */}
+                <div className='flex items-center gap-2'>
+                    <Link
+                        href='/sanctum'
+                        className='flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors border border-zinc-700/50 cursor-pointer'
+                        title='Open Sanctum chat'
+                    >
+                        <MessageCircleIcon size={14} />
+                        <span className='hidden sm:inline'>Sanctum</span>
+                    </Link>
+                    <button
+                        onClick={handleShareClick}
+                        className='flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors border border-zinc-700/50 cursor-pointer'
+                        title='Copy /live link (Alt+click to open)'
+                    >
+                        {copied ?
+                            <>
+                                <CheckIcon
+                                    size={14}
+                                    className='text-accent-green'
+                                />
+                                <span className='text-accent-green'>Copied!</span>
+                            </>
+                        :   <>
+                                <LinkIcon size={14} />
+                                <span className='hidden sm:inline'>Share Live</span>
+                            </>
+                        }
+                    </button>
+                </div>
             </div>
 
             {/* View toggle - separate row */}

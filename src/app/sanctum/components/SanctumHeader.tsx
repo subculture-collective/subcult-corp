@@ -1,6 +1,7 @@
 'use client';
 
-import { VolumeOffIcon, XIcon, MenuIcon } from '@/lib/icons';
+import Link from 'next/link';
+import { VolumeOffIcon, XIcon, MenuIcon, SignalIcon } from '@/lib/icons';
 
 interface SanctumHeaderProps {
     sidebarOpen: boolean;
@@ -57,9 +58,14 @@ export function SanctumHeader({
                 </div>
             )}
 
-            <div className='flex items-center gap-2 text-[10px] text-white/20 font-mono'>
-                SUBCULT OPS
-            </div>
+            <Link
+                href='/stage'
+                className='flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-white/40 hover:text-white/70 hover:bg-white/[0.06] transition-colors border border-white/[0.08] cursor-pointer'
+                title='Back to Stage'
+            >
+                <SignalIcon size={14} />
+                <span className='hidden sm:inline'>Stage</span>
+            </Link>
         </header>
     );
 }
