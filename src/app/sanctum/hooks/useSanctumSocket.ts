@@ -52,19 +52,17 @@ export function useSanctumSocket(): UseSanctumSocketReturn {
     );
 
     const getWsUrl = useCallback(() => {
-        const protocol =
-            (
-                typeof window !== 'undefined' &&
-                window.location.protocol === 'https:'
-            ) ?
-                'wss'
-            :   'ws';
-        const host =
-            typeof window !== 'undefined' ?
-                window.location.hostname
-            :   'localhost';
-        const port = process.env.NEXT_PUBLIC_SANCTUM_WS_PORT || '3011';
-        return `${protocol}://${host}:${port}`;
+        if (typeof window === 'undefined') return 'ws://localhost:3011';
+        const { protocol, hostname } = window.location;
+        // In production, WebSocket is proxied through Caddy at /ws
+        // In dev, connect directly to the sanctum server port
+        const isDev = hostname === 'localhost' || hostname === '127.0.0.1';
+        if (isDev) {
+            const port = process.env.NEXT_PUBLIC_SANCTUM_WS_PORT || '3011';
+            return `ws://${hostname}:${port}`;
+        }
+        const wsProtocol = protocol === 'https:' ? 'wss' : 'ws';
+        return `${wsProtocol}://${hostname}/ws`;
     }, []);
 
     // ── Event handler (declared before connect so connect can reference it) ──

@@ -53,6 +53,66 @@ export async function queryAgentMemories(
     return rows;
 }
 
+/**
+ * Query memories by semantic relevance to a topic, blended with recency.
+ * Uses pgvector cosine similarity when embeddings are available.
+ * Falls back to pure recency if embedding fails.
+ *
+ * Returns: top K by relevance + top N by recency (deduplicated).
+ */
+export async function queryRelevantMemories(
+    agentId: string,
+    topic: string,
+    options?: { relevantLimit?: number; recentLimit?: number },
+): Promise<MemoryEntry[]> {
+    const relevantLimit = options?.relevantLimit ?? 3;
+    const recentLimit = options?.recentLimit ?? 2;
+
+    // Always fetch recent memories as baseline
+    const recentRows = await sql<MemoryEntry[]>`
+        SELECT * FROM ops_agent_memory
+        WHERE agent_id = ${agentId}
+          AND superseded_by IS NULL
+        ORDER BY created_at DESC
+        LIMIT ${recentLimit + relevantLimit}
+    `;
+
+    // Try semantic search
+    const embedding = await getEmbedding(topic);
+    if (!embedding) {
+        // No embedding available — return recency only
+        return recentRows.slice(0, relevantLimit + recentLimit);
+    }
+
+    try {
+        const vectorStr = `[${embedding.join(',')}]`;
+        const relevantRows = await sql<MemoryEntry[]>`
+            SELECT * FROM ops_agent_memory
+            WHERE agent_id = ${agentId}
+              AND superseded_by IS NULL
+              AND embedding IS NOT NULL
+            ORDER BY embedding <=> ${vectorStr}::vector
+            LIMIT ${relevantLimit}
+        `;
+
+        // Merge: relevant first, then recent (deduplicated)
+        const seen = new Set(relevantRows.map(r => r.id));
+        const merged = [...relevantRows];
+        for (const row of recentRows) {
+            if (!seen.has(row.id)) {
+                merged.push(row);
+                seen.add(row.id);
+                if (merged.length >= relevantLimit + recentLimit) break;
+            }
+        }
+
+        return merged;
+    } catch {
+        // Vector search failed — fall back to recency
+        return recentRows.slice(0, relevantLimit + recentLimit);
+    }
+}
+
 export async function writeMemory(input: MemoryInput): Promise<string | null> {
     const confidence = input.confidence ?? 0.5;
 

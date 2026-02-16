@@ -2,18 +2,30 @@
 // Supports direct (@mention), open (multi-agent), whisper, and roundtable modes
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { AGENTS, AGENT_IDS, isValidAgent } from '@/lib/agents';
-import type { AgentId, MemoryCache } from '@/lib/types';
-import { llmGenerate } from '@/lib/llm';
-import { queryAgentMemories } from '@/lib/ops/memory';
+import { AGENTS, isValidAgent } from '@/lib/agents';
+import type { AgentId } from '@/lib/types';
+import { llmGenerateWithTools } from '@/lib/llm';
+import { queryRelevantMemories } from '@/lib/ops/memory';
+import { getScratchpad } from '@/lib/ops/scratchpad';
+import { buildBriefing } from '@/lib/ops/situational-briefing';
 import {
     loadAffinityMap,
-    getAffinityFromMap,
-    getInteractionType,
 } from '@/lib/ops/relationships';
+import { getAgentTools } from '@/lib/tools/registry';
 import { logger } from '@/lib/logger';
+import type { ToolDefinition } from '@/lib/types';
 
 const log = logger.child({ module: 'sanctum-router' });
+
+/** Strip XML function-call tags and other LLM artifacts from agent responses */
+function cleanResponse(text: string): string {
+    return text
+        // Strip XML-style tool call blocks (function_calls, invoke, parameter, etc.)
+        .replace(/<\/?(?:function_?calls?|invoke|parameter|tool_call|antml:[a-z_]+)[^>]*>/gi, '')
+        // Collapse runs of whitespace left behind
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+}
 
 // ─── Types ───
 
@@ -33,6 +45,7 @@ export interface AgentResponse {
         model: string;
         tokensUsed: number;
         responseTimeMs: number;
+        toolCalls?: number;
     };
 }
 
@@ -253,6 +266,9 @@ function buildSanctumSystemPrompt(
     conversationHistory: ConversationMessage[],
     memories: string[],
     interactionHint?: string,
+    scratchpad?: string,
+    briefing?: string,
+    availableTools?: ToolDefinition[],
 ): string {
     const agent = AGENTS[agentId];
     const personality = loadPersonality(agentId);
@@ -271,6 +287,14 @@ Do NOT use asterisks for actions or stage directions.
 Keep responses under 500 characters unless the question demands depth.
 `;
 
+    if (scratchpad) {
+        prompt += `\n═══ YOUR SCRATCHPAD ═══\n${scratchpad}\n`;
+    }
+
+    if (briefing) {
+        prompt += `\n═══ CURRENT SITUATION ═══\n${briefing}\n`;
+    }
+
     if (memories.length > 0) {
         prompt += `\n═══ YOUR MEMORIES ═══\n`;
         prompt += memories
@@ -278,6 +302,16 @@ Keep responses under 500 characters unless the question demands depth.
             .map(m => `- ${m}`)
             .join('\n');
         prompt += '\n';
+    }
+
+    if (availableTools && availableTools.length > 0) {
+        prompt += `\n═══ AVAILABLE TOOLS ═══\n`;
+        prompt += `You have tools you can use during this conversation:\n`;
+        prompt += availableTools.map(t => `- ${t.name}: ${t.description}`).join('\n');
+        prompt += `\n\nUse memory_write to remember important insights from this conversation.\n`;
+        prompt += `Use scratchpad_update to track your current working context or notes.\n`;
+        prompt += `Use memory_search to recall relevant past experiences.\n`;
+        prompt += `Use tools naturally — do NOT mention tool names in your dialogue.\n`;
     }
 
     if (interactionHint) {
@@ -314,47 +348,61 @@ async function generateDirectResponse(
 ): Promise<AgentResponse> {
     const startTime = Date.now();
 
-    // Load agent memories
+    // Load agent memories (semantic retrieval based on message)
     let memories: string[] = [];
     try {
-        const memEntries = await queryAgentMemories({
-            agentId,
-            limit: 5,
-            minConfidence: 0.5,
+        const memEntries = await queryRelevantMemories(agentId, message, {
+            relevantLimit: 3,
+            recentLimit: 2,
         });
         memories = memEntries.map(m => m.content);
     } catch {
         // Continue without memories
     }
 
+    // Load scratchpad, briefing, and tools
+    const tools = getAgentTools(agentId);
+    const [scratchpad, briefing] = await Promise.all([
+        getScratchpad(agentId).catch(() => ''),
+        buildBriefing(agentId).catch(() => ''),
+    ]);
+
     const systemPrompt = buildSanctumSystemPrompt(
         agentId,
         conversationHistory,
         memories,
+        undefined,
+        scratchpad,
+        briefing,
+        tools,
     );
 
-    const content = await llmGenerate({
+    const result = await llmGenerateWithTools({
         messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: message },
         ],
         temperature: 0.8,
         maxTokens: 300,
+        tools: tools.length > 0 ? tools : undefined,
+        maxToolRounds: 2,
         trackingContext: {
             agentId,
             context: 'sanctum-direct',
         },
     });
 
+    const cleaned = cleanResponse(result.text);
     return {
         agentId,
         content:
-            content ||
+            cleaned ||
             `*${AGENTS[agentId].displayName} considers this silently*`,
         metadata: {
             model: 'auto',
             tokensUsed: 0,
             responseTimeMs: Date.now() - startTime,
+            toolCalls: result.toolCalls.length || undefined,
         },
     };
 }
@@ -368,24 +416,31 @@ async function generateOpenResponses(
     message: string,
     conversationHistory: ConversationMessage[],
 ): Promise<AgentResponse[]> {
-    const affinityMap = await loadAffinityMap();
+    await loadAffinityMap();
 
     const responses = await Promise.all(
-        agents.map(async (agentId, index) => {
+        agents.map(async (agentId) => {
             const startTime = Date.now();
 
-            // Load memories
+            // Load memories (semantic retrieval based on message)
             let memories: string[] = [];
             try {
-                const memEntries = await queryAgentMemories({
+                const memEntries = await queryRelevantMemories(
                     agentId,
-                    limit: 3,
-                    minConfidence: 0.5,
-                });
+                    message,
+                    { relevantLimit: 2, recentLimit: 1 },
+                );
                 memories = memEntries.map(m => m.content);
             } catch {
                 // Continue without memories
             }
+
+            // Load scratchpad, briefing, and tools
+            const tools = getAgentTools(agentId);
+            const [scratchpad, briefing] = await Promise.all([
+                getScratchpad(agentId).catch(() => ''),
+                buildBriefing(agentId).catch(() => ''),
+            ]);
 
             // Determine interaction hint based on other responding agents
             const otherAgents = agents.filter(a => a !== agentId);
@@ -399,31 +454,38 @@ async function generateOpenResponses(
                 conversationHistory,
                 memories,
                 interactionHint,
+                scratchpad,
+                briefing,
+                tools,
             );
 
             try {
-                const content = await llmGenerate({
+                const result = await llmGenerateWithTools({
                     messages: [
                         { role: 'system', content: systemPrompt },
                         { role: 'user', content: message },
                     ],
                     temperature: 0.8,
                     maxTokens: 300,
+                    tools: tools.length > 0 ? tools : undefined,
+                    maxToolRounds: 2,
                     trackingContext: {
                         agentId,
                         context: 'sanctum-open',
                     },
                 });
 
+                const cleaned = cleanResponse(result.text);
                 return {
                     agentId,
                     content:
-                        content ||
+                        cleaned ||
                         `*${AGENTS[agentId].displayName} defers on this one*`,
                     metadata: {
                         model: 'auto',
                         tokensUsed: 0,
                         responseTimeMs: Date.now() - startTime,
+                        toolCalls: result.toolCalls.length || undefined,
                     },
                 };
             } catch (err) {

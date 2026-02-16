@@ -188,7 +188,7 @@ function GroupSelector({ groupMode, onChange }: { groupMode: GroupMode; onChange
 function LoadingSkeleton() {
     return (
         <div className="space-y-4 animate-pulse">
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {[1, 2, 3].map(i => (
                     <div key={i} className="rounded-lg bg-zinc-800/50 border border-zinc-700/50 px-4 py-3 h-16" />
                 ))}
@@ -237,7 +237,7 @@ export function CostTracker() {
             ) : costs ? (
                 <>
                     {/* Summary cards */}
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <SummaryCard
                             label="Total Cost"
                             value={formatCost(costs.totalCost)}

@@ -1,7 +1,7 @@
 # ─── SUBCULT OPS — Makefile ───
 
 .PHONY: dev build start lint typecheck clean \
-        seed seed-policy seed-triggers seed-proactive seed-roundtable seed-relationships \
+        seed seed-agents seed-policy seed-triggers seed-relationships \
         verify up down restart status logs logs-app logs-worker logs-db \
         heartbeat db-migrate db-shell help
 
@@ -85,23 +85,20 @@ db-shell: ## Open psql shell in the Postgres container
 
 DB_URL := postgresql://subcult:$(shell grep POSTGRES_PASSWORD .env.local | cut -d= -f2)@127.0.0.1:5433/subcult_ops
 
-seed: ## Run ALL seed scripts in order
-	DATABASE_URL="$(DB_URL)" node scripts/go-live/seed-all.mjs
+seed: ## Seed everything (agents, policies, triggers, relationships)
+	DATABASE_URL="$(DB_URL)" node scripts/go-live/seed.mjs
 
-seed-policy: ## Seed core policies
-	DATABASE_URL="$(DB_URL)" node scripts/go-live/seed-ops-policy.mjs
+seed-agents: ## Seed agent registry only
+	DATABASE_URL="$(DB_URL)" node scripts/go-live/seed.mjs --only agents
 
-seed-triggers: ## Seed reactive trigger rules
-	DATABASE_URL="$(DB_URL)" node scripts/go-live/seed-trigger-rules.mjs
+seed-policy: ## Seed policies only
+	DATABASE_URL="$(DB_URL)" node scripts/go-live/seed.mjs --only policy
 
-seed-proactive: ## Seed proactive triggers (disabled by default)
-	DATABASE_URL="$(DB_URL)" node scripts/go-live/seed-proactive-triggers.mjs
+seed-triggers: ## Seed trigger rules only
+	DATABASE_URL="$(DB_URL)" node scripts/go-live/seed.mjs --only triggers
 
-seed-roundtable: ## Seed roundtable policies
-	DATABASE_URL="$(DB_URL)" node scripts/go-live/seed-roundtable-policy.mjs
-
-seed-relationships: ## Seed agent relationships (15 pairs)
-	DATABASE_URL="$(DB_URL)" node scripts/go-live/seed-relationships.mjs
+seed-relationships: ## Seed agent relationships only
+	DATABASE_URL="$(DB_URL)" node scripts/go-live/seed.mjs --only relationships
 
 # ──────────────────────────────────────────
 # Verification & Monitoring

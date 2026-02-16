@@ -76,11 +76,13 @@ async function pollAgentSessions(): Promise<boolean> {
                 >`
                     SELECT result FROM ops_agent_sessions WHERE id = ${session.id}
                 `;
-                const artifactText =
+                const artifactText = (
                     (completed?.result as Record<string, string>)?.text ??
                     (completed?.result as Record<string, string>)?.output ??
-                    '';
-                if (artifactText) {
+                    ''
+                ).trim();
+                // Only post if there's meaningful content (not just XML residue or empty)
+                if (artifactText && artifactText.length > 20) {
                     await postArtifactToDiscord(
                         session.source_id,
                         '',
@@ -349,6 +351,46 @@ async function pollMissionSteps(): Promise<boolean> {
         const agentId = step.assigned_agent ?? mission?.created_by ?? 'mux';
 
         const { emitEvent } = await import('../../src/lib/ops/events');
+
+        // ── Special case: memory_archaeology — call performDig() directly ──
+        if (step.kind === 'memory_archaeology') {
+            const { performDig } = await import('../../src/lib/ops/memory-archaeology');
+            const result = await performDig({
+                agent_id: agentId,
+                max_memories: 100,
+            });
+
+            await sql`
+                UPDATE ops_mission_steps
+                SET status = 'succeeded',
+                    result = ${sql.json({
+                        dig_id: result.dig_id,
+                        finding_count: result.findings.length,
+                        memories_analyzed: result.memories_analyzed,
+                    })}::jsonb,
+                    completed_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = ${step.id}
+            `;
+
+            await emitEvent({
+                agent_id: agentId,
+                kind: 'archaeology_complete',
+                title: `Memory archaeology dig completed — ${result.findings.length} findings`,
+                tags: ['archaeology', 'memory', 'complete'],
+                metadata: {
+                    dig_id: result.dig_id,
+                    finding_count: result.findings.length,
+                    memories_analyzed: result.memories_analyzed,
+                    missionId: step.mission_id,
+                    stepId: step.id,
+                },
+            });
+
+            await finalizeMissionIfComplete(step.mission_id);
+            return true;
+        }
+
         const { buildStepPrompt } =
             await import('../../src/lib/ops/step-prompts');
 

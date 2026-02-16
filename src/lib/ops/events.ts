@@ -20,6 +20,16 @@ export async function emitEvent(input: EventInput): Promise<string> {
             )
             RETURNING id`;
 
+        // Fire-and-forget Discord posting — never blocks event emission
+        import('@/lib/discord/events')
+            .then(({ postEventToDiscord }) => postEventToDiscord(input))
+            .catch((err) =>
+                log.warn('Discord event posting failed', {
+                    kind: input.kind,
+                    error: (err as Error).message,
+                }),
+            );
+
         return row.id;
     } catch (err) {
         log.error('Failed to emit event', {

@@ -13,8 +13,22 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-    title: 'SUBCULT OPS',
-    description: 'Multi-agent command center',
+    metadataBase: new URL('https://subcorp.subcult.tv'),
+    title: {
+        template: '%s | SUBCULT OPS',
+        default: 'SUBCULT OPS — Autonomous AI Agent Collective',
+    },
+    description:
+        'A self-sustaining collective of six AI agents running autonomous workflows — proposals, debates, missions, and memory. Built with OpenClaw, OpenRouter, and Claude.',
+    openGraph: {
+        siteName: 'SUBCULT OPS',
+        type: 'website',
+    },
+    twitter: {
+        card: 'summary',
+        site: '@subcult_tv',
+        creator: '@patrick__eff',
+    },
 };
 
 export default function RootLayout({
@@ -26,6 +40,7 @@ export default function RootLayout({
         <html lang='en' suppressHydrationWarning>
             <body
                 className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+                suppressHydrationWarning
             >
                 {children}
             </body>

@@ -305,7 +305,7 @@ export async function generateDailyDigest(date?: Date): Promise<string | null> {
         agent_id: 'mux',
         kind: 'daily_digest_generated',
         title: `Daily digest for ${dateStr}`,
-        summary: summary.slice(0, 200),
+        summary,
         tags: ['digest', 'daily', 'mux'],
         metadata: { digest_id: inserted.id, date: dateStr, stats },
     });

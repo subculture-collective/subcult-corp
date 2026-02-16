@@ -67,6 +67,7 @@ export async function GET(request: NextRequest) {
                     COUNT(*)::text as calls
                 FROM ops_llm_usage
                 WHERE created_at >= ${dateFilter.toISOString()}
+                  AND agent_id NOT LIKE 'oc-%'
             `
             : await sql<TotalRow[]>`
                 SELECT
@@ -74,6 +75,7 @@ export async function GET(request: NextRequest) {
                     COALESCE(SUM(total_tokens), 0)::text as tokens,
                     COUNT(*)::text as calls
                 FROM ops_llm_usage
+                WHERE agent_id NOT LIKE 'oc-%'
             `;
 
         const totalRow = totals[0];
@@ -96,6 +98,7 @@ export async function GET(request: NextRequest) {
                         COUNT(*)::text as calls
                     FROM ops_llm_usage
                     WHERE created_at >= ${dateFilter.toISOString()}
+                      AND agent_id NOT LIKE 'oc-%'
                     GROUP BY ${sql(groupColumn)}
                     ORDER BY SUM(cost_usd) DESC NULLS LAST
                 `
@@ -106,6 +109,7 @@ export async function GET(request: NextRequest) {
                         COALESCE(SUM(total_tokens), 0)::text as tokens,
                         COUNT(*)::text as calls
                     FROM ops_llm_usage
+                    WHERE agent_id NOT LIKE 'oc-%'
                     GROUP BY ${sql(groupColumn)}
                     ORDER BY SUM(cost_usd) DESC NULLS LAST
                 `;

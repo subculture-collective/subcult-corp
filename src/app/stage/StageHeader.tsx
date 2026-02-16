@@ -28,6 +28,7 @@ import {
     MessageCircleIcon,
 } from '@/lib/icons';
 import Link from 'next/link';
+import { AgentAvatar } from './AgentAvatar';
 
 export type ViewMode =
     | 'feed'
@@ -126,10 +127,15 @@ export function StageHeader({
             return;
         }
 
-        navigator.clipboard.writeText(liveUrl).then(() => {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        });
+        navigator.clipboard.writeText(liveUrl).then(
+            () => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            },
+            () => {
+                // Clipboard API not available (HTTP context, permissions denied)
+            },
+        );
     }, []);
 
     const views: { key: ViewMode; label: string; icon: React.ReactNode }[] = [
@@ -202,11 +208,15 @@ export function StageHeader({
                                     size={14}
                                     className='text-accent-green'
                                 />
-                                <span className='text-accent-green'>Copied!</span>
+                                <span className='text-accent-green'>
+                                    Copied!
+                                </span>
                             </>
                         :   <>
                                 <LinkIcon size={14} />
-                                <span className='hidden sm:inline'>Share Live</span>
+                                <span className='hidden sm:inline'>
+                                    Share Live
+                                </span>
                             </>
                         }
                     </button>
@@ -219,6 +229,8 @@ export function StageHeader({
                     <button
                         key={v.key}
                         onClick={() => onViewChange(v.key)}
+                        aria-label={v.label}
+                        aria-current={view === v.key ? 'page' : undefined}
                         className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
                             view === v.key ?
                                 'bg-zinc-700 text-zinc-100'
@@ -251,7 +263,7 @@ function StatsBar({ stats }: { stats: SystemStats }) {
                 <div className='text-[10px] uppercase tracking-wider text-zinc-500'>
                     Agent Memories
                 </div>
-                <div className='flex gap-2 mt-1 flex-wrap overflow-hidden max-h-6'>
+                <div className='flex gap-x-3 gap-y-1 mt-1 flex-wrap'>
                     {Object.entries(stats.agentMemories).map(
                         ([agent, count]) => {
                             const agentId = agent as AgentId;
@@ -261,9 +273,10 @@ function StatsBar({ stats }: { stats: SystemStats }) {
                             return (
                                 <span
                                     key={agent}
-                                    className={`text-xs font-medium ${color}`}
+                                    className={`flex items-center gap-1 text-xs font-medium ${color}`}
                                 >
-                                    {agent}: {count}
+                                    <AgentAvatar agentId={agentId} size='xs' showBorder={false} />
+                                    {count}
                                 </span>
                             );
                         },

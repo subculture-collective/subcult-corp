@@ -8,6 +8,7 @@ import { useTTS } from './useTTS';
 import { AGENTS } from '@/lib/agents';
 import type { AgentId, RoundtableSession, RoundtableTurn } from '@/lib/types';
 import type { TTSState, TTSControls } from './useTTS';
+import { AgentAvatar } from './AgentAvatar';
 
 // ─── Agent voice symbols ───
 
@@ -110,7 +111,6 @@ function TurnEntry({
     const agentId = turn.speaker as AgentId;
     const agent = AGENTS[agentId];
     const textColor = agent?.tailwindTextColor ?? 'text-zinc-400';
-    const symbol = VOICE_SYMBOLS[turn.speaker] ?? '';
     const isSpeaking = ttsState?.activeTurnIndex === index;
 
     return (
@@ -119,14 +119,15 @@ function TurnEntry({
                 isSpeaking ? 'bg-zinc-800/80 ring-1 ring-zinc-600/50' : ''
             }`}
         >
-            <div className='turn-header flex items-baseline gap-2'>
+            <div className='turn-header flex items-center gap-2'>
                 <span className='turn-number text-[10px] text-zinc-600 font-mono tabular-nums w-6 text-right shrink-0'>
                     {index + 1}.
                 </span>
+                <AgentAvatar agentId={turn.speaker} size='sm' />
                 <span
                     className={`text-xs font-bold uppercase tracking-wide ${textColor}`}
                 >
-                    {symbol} {agent?.displayName ?? turn.speaker}
+                    {agent?.displayName ?? turn.speaker}
                 </span>
                 <span className='turn-time text-[10px] text-zinc-600 font-mono'>
                     [{formatTime(turn.created_at)}]
@@ -441,21 +442,25 @@ export function TranscriptViewer({
                             <div className='participants-title text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-2'>
                                 Present
                             </div>
-                            {session.participants.map(p => {
-                                const agent = AGENTS[p as AgentId];
-                                const color =
-                                    agent?.tailwindTextColor ?? 'text-zinc-400';
-                                const symbol = VOICE_SYMBOLS[p] ?? '';
-                                return (
-                                    <div
-                                        key={p}
-                                        className={`participant ml-4 text-xs ${color}`}
-                                    >
-                                        {symbol} {agent?.displayName ?? p}
-                                        {agent?.role ? ` — ${agent.role}` : ''}
-                                    </div>
-                                );
-                            })}
+                            <div className='space-y-1.5'>
+                                {session.participants.map(p => {
+                                    const agent = AGENTS[p as AgentId];
+                                    const color =
+                                        agent?.tailwindTextColor ?? 'text-zinc-400';
+                                    return (
+                                        <div
+                                            key={p}
+                                            className='participant ml-4 flex items-center gap-2'
+                                        >
+                                            <AgentAvatar agentId={p} size='md' />
+                                            <span className={`text-xs ${color}`}>
+                                                {agent?.displayName ?? p}
+                                                {agent?.role ? ` — ${agent.role}` : ''}
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         </div>
 
                         {/* Proceedings */}

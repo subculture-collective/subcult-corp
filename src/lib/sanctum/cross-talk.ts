@@ -1,6 +1,6 @@
 // Sanctum cross-talk — agent summoning and inter-agent responses
 // Detects when agents reference each other and generates follow-up turns
-import { AGENTS, isValidAgent } from '@/lib/agents';
+import { AGENTS } from '@/lib/agents';
 import type { AgentId } from '@/lib/types';
 import { loadAffinityMap, getAffinityFromMap } from '@/lib/ops/relationships';
 import { llmGenerate } from '@/lib/llm';
@@ -8,6 +8,14 @@ import { logger } from '@/lib/logger';
 import type { AgentResponse, ConversationMessage } from './agent-router';
 
 const log = logger.child({ module: 'sanctum-crosstalk' });
+
+/** Strip XML function-call tags from LLM output */
+function cleanResponse(text: string): string {
+    return text
+        .replace(/<\/?(?:function_?calls?|invoke|parameter|tool_call|antml:[a-z_]+)[^>]*>/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+}
 
 // ─── Types ───
 
@@ -34,8 +42,6 @@ export function detectSummons(
     response: string,
 ): SummonSignal[] {
     const signals: SummonSignal[] = [];
-    const lower = response.toLowerCase();
-
     for (const otherId of Object.keys(AGENTS) as AgentId[]) {
         if (otherId === agentId) continue;
         const otherName = AGENTS[otherId].displayName.toLowerCase();
@@ -143,7 +149,7 @@ Do NOT prefix your response with your name.`;
 
     return {
         agentId: summon.target,
-        content: content || `*${target.displayName} acknowledges the summon*`,
+        content: cleanResponse(content) || `*${target.displayName} acknowledges the summon*`,
         metadata: {
             model: 'auto',
             tokensUsed: 0,
@@ -162,7 +168,8 @@ Do NOT prefix your response with your name.`;
 export async function generateCrossTalk(
     originalResponses: AgentResponse[],
     userMessage: string,
-    conversationHistory: ConversationMessage[],
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _conversationHistory: ConversationMessage[],
 ): Promise<CrossTalkResponse[]> {
     if (originalResponses.length < 2) return [];
 
@@ -239,7 +246,7 @@ Under 300 characters. Do NOT prefix with your name.`;
 
                 crossTalkResponses.push({
                     agentId: reactor.agentId,
-                    content: content || `*${reactorAgent.displayName} nods*`,
+                    content: cleanResponse(content) || `*${reactorAgent.displayName} nods*`,
                     metadata: {
                         model: 'auto',
                         tokensUsed: 0,

@@ -69,7 +69,7 @@ export interface StoredFinding {
 const DEFAULT_MAX_MEMORIES = 100;
 const MEMORIES_PER_BATCH = 25;
 const ANALYSIS_TEMPERATURE = 0.7;
-const ANALYSIS_MAX_TOKENS = 2000;
+const ANALYSIS_MAX_TOKENS = 4000;
 
 // Token estimation constants for overflow detection
 const CHARS_PER_TOKEN_ESTIMATE = 4; // Rough approximation: ~4 characters per token
@@ -289,11 +289,15 @@ Respond with valid JSON only:
 }
 
 Rules:
+- Report your top 3-5 most significant findings only — quality over quantity
 - Only report genuine findings backed by evidence from the provided memories
 - Each finding must reference at least 2 memories as evidence
 - Be specific — vague findings are not useful
+- Keep descriptions to 2-3 sentences max
+- Keep evidence excerpts under 50 words each
 - Confidence should reflect the strength of evidence
-- If you find nothing meaningful, return { "findings": [] }`;
+- If you find nothing meaningful, return { "findings": [] }
+- CRITICAL: Your response must be complete, valid JSON. Do not exceed 5 findings.`;
 
     const result = await llmGenerate({
         messages: [
@@ -316,17 +320,33 @@ Rules:
         return [];
     }
 
-    // Parse LLM response
+    // Parse LLM response (with truncation recovery)
     try {
-        const jsonMatch = result.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) {
-            log.warn('No JSON found in archaeology response', {
-                responsePreview: result.slice(0, 200),
-            });
-            return [];
+        let jsonStr = result.match(/\{[\s\S]*\}/)?.[0];
+        if (!jsonStr) {
+            // Try to recover truncated JSON by finding the last complete finding
+            const openBrace = result.indexOf('{');
+            if (openBrace >= 0) {
+                jsonStr = result.slice(openBrace);
+                // Find the last complete object in the findings array
+                const lastCompleteObj = jsonStr.lastIndexOf('}');
+                if (lastCompleteObj > 0) {
+                    // Close the array and outer object
+                    jsonStr = jsonStr.slice(0, lastCompleteObj + 1) + ']}';
+                }
+                log.info('Attempting truncated JSON recovery', {
+                    originalLength: result.length,
+                    recoveredLength: jsonStr.length,
+                });
+            } else {
+                log.warn('No JSON found in archaeology response', {
+                    responsePreview: result.slice(0, 200),
+                });
+                return [];
+            }
         }
 
-        const parsed = JSON.parse(jsonMatch[0]) as {
+        const parsed = JSON.parse(jsonStr) as {
             findings: Array<{
                 finding_type: string;
                 title: string;
@@ -405,8 +425,10 @@ Rules:
             });
     } catch (err) {
         log.error('Failed to parse archaeology findings', {
-            error: err,
+            error: (err as Error).message,
+            responseLength: result.length,
             responsePreview: result.slice(0, 300),
+            responseTail: result.slice(-200),
         });
         return [];
     }

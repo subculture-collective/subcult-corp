@@ -23,16 +23,6 @@ function buildSynthesisPrompt(
     history: ConversationTurnEntry[],
     artifact: FormatArtifactConfig,
 ): string {
-    const today = new Date().toISOString().split('T')[0];
-    const topicSlug = session.topic
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '')
-        .slice(0, 40);
-
-    const filename = `${today}__meeting__${artifact.type}__${topicSlug}__${artifact.synthesizer}__v01.md`;
-    const outputPath = `${artifact.outputDir}/${filename}`;
-
     // Build transcript
     const transcript = history.map(t => {
         const voice = getVoice(t.speaker);
@@ -50,20 +40,10 @@ function buildSynthesisPrompt(
     prompt += `Your task: Synthesize this conversation into a structured ${artifact.type}.\n\n`;
 
     prompt += `Requirements:\n`;
-    prompt += `1. Write the artifact with YAML front matter including:\n`;
-    prompt += `   - artifact_id: (generate a UUID)\n`;
-    prompt += `   - created_at: ${new Date().toISOString()}\n`;
-    prompt += `   - agent_id: ${artifact.synthesizer}\n`;
-    prompt += `   - workflow_stage: "meeting"\n`;
-    prompt += `   - status: "draft"\n`;
-    prompt += `   - retention_class: "standard"\n`;
-    prompt += `   - source_refs:\n`;
-    prompt += `     - kind: "roundtable_session"\n`;
-    prompt += `       id: "${session.id}"\n`;
-    prompt += `2. Include a clear title and summary\n`;
-    prompt += `3. Capture key points, decisions, action items, and disagreements\n`;
-    prompt += `4. Be concise but thorough — aim for 300-800 words\n`;
-    prompt += `5. Write the artifact using file_write to path: ${outputPath}\n\n`;
+    prompt += `1. Include a clear title and summary\n`;
+    prompt += `2. Capture key points, decisions, action items, and disagreements\n`;
+    prompt += `3. Be concise but thorough — aim for 300-800 words\n`;
+    prompt += `4. Output the artifact content directly as your response — do NOT use any tools or XML tags\n\n`;
 
     prompt += `Do NOT just repeat the transcript. Synthesize, structure, and add value.\n`;
 
@@ -96,7 +76,7 @@ export async function synthesizeArtifact(
                 'conversation',
                 ${session.id},
                 180,
-                8,
+                1,
                 'pending'
             )
             RETURNING id

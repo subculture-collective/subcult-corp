@@ -174,14 +174,15 @@ function DigCard({
     dig,
     isExpanded,
     onToggle,
+    fetchFindings,
 }: {
     dig: ArchaeologyDigEntry;
     isExpanded: boolean;
     onToggle: () => void;
+    fetchFindings: (digId: string) => Promise<ArchaeologyFinding[]>;
 }) {
     const [findings, setFindings] = useState<ArchaeologyFinding[]>([]);
     const [findingsLoading, setFindingsLoading] = useState(false);
-    const { fetchFindings } = useArchaeology();
     const agent = AGENTS[dig.agent_id as AgentId];
     const created = new Date(dig.started_at);
 
@@ -305,7 +306,7 @@ const FINDING_TYPES = [
 // ─── Main Component ───
 
 export function MemoryArchaeology() {
-    const { digs, loading, error, triggerLoading, triggerDig } =
+    const { digs, loading, error, triggerLoading, triggerDig, fetchFindings } =
         useArchaeology();
     const [expandedDig, setExpandedDig] = useState<string | null>(null);
     const [typeFilter, setTypeFilter] = useState<string>('all');
@@ -407,6 +408,7 @@ export function MemoryArchaeology() {
                             key={dig.dig_id}
                             dig={dig}
                             isExpanded={expandedDig === dig.dig_id}
+                            fetchFindings={fetchFindings}
                             onToggle={() =>
                                 setExpandedDig(
                                     expandedDig === dig.dig_id ?

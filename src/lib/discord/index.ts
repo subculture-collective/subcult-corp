@@ -4,5 +4,7 @@ export {
     postConversationSummary,
     postArtifactToDiscord,
 } from './roundtable';
-export { getWebhookUrl, getChannelForFormat } from './channels';
+export { getWebhookUrl, getChannelInfo, getChannelForFormat } from './channels';
 export type { DiscordChannelName } from './channels';
+export { postEventToDiscord } from './events';
+export { runWatercoolerDrop } from './watercooler-drop';

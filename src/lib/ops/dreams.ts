@@ -44,12 +44,13 @@ const DREAM_SEED_COUNT_MAX = 5;
 const DREAM_TEMPERATURE = 0.9;
 const DREAM_CONFIDENCE = 0.50;
 
-const DREAM_TYPES: DreamType[] = [
+const DREAM_TYPES: readonly DreamType[] = [
     'recombination',
     'extrapolation',
     'contradiction',
     'synthesis',
-];
+] as const;
+void DREAM_TYPES; // used for type-safe reference
 
 // ─── Helpers ───
 
@@ -214,7 +215,7 @@ Rules for dreaming:
         agent_id: agentId,
         kind: 'dream_cycle_completed',
         title: `${agentId} dreamed (${dreamType})`,
-        summary: dreamContent.trim().slice(0, 200),
+        summary: dreamContent.trim(),
         tags: ['dream', dreamType],
         metadata: {
             dream_id: row.id,

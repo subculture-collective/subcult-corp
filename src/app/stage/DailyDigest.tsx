@@ -5,7 +5,9 @@
 import { useState, useMemo } from 'react';
 import { useDigest, type DigestEntry } from './hooks';
 import { AGENTS } from '@/lib/agents';
+import { ChevronDownIcon } from '@/lib/icons';
 import type { AgentId } from '@/lib/types';
+import { AgentAvatar } from './AgentAvatar';
 
 // ─── Formatting helpers ───
 
@@ -177,7 +179,7 @@ export function DailyDigest() {
         return (
             <div className='rounded-lg border border-zinc-800/80 bg-zinc-900/50 p-4'>
                 <div className='flex items-center gap-2 text-zinc-500 text-sm'>
-                    <span>🗂️</span>
+                    <AgentAvatar agentId='mux' size='lg' />
                     <span>
                         No digest available yet. Digests generate nightly around
                         11PM CST.
@@ -192,9 +194,11 @@ export function DailyDigest() {
             {/* Header */}
             <button
                 onClick={() => setCollapsed(!collapsed)}
-                className='w-full flex items-center gap-2 px-4 py-3 hover:bg-zinc-800/30 transition-colors'
+                aria-expanded={!collapsed}
+                aria-label="Mux's Daily Digest"
+                className='w-full flex items-center gap-2 px-4 py-3 hover:bg-zinc-800/30 transition-colors cursor-pointer'
             >
-                <span className='text-base'>🗂️</span>
+                <AgentAvatar agentId='mux' size='lg' />
                 <span
                     className='text-sm font-medium'
                     style={{ color: muxColor }}
@@ -204,9 +208,10 @@ export function DailyDigest() {
                 <span className='text-[11px] text-zinc-500 ml-1'>
                     {formatDate(digest.digest_date)}
                 </span>
-                <span className='ml-auto text-[10px] text-zinc-600'>
-                    {collapsed ? '▸' : '▾'}
-                </span>
+                <ChevronDownIcon
+                    size={16}
+                    className={`ml-auto text-zinc-500 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}
+                />
             </button>
 
             {/* Collapsible content */}

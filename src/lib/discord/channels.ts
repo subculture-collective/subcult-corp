@@ -16,7 +16,7 @@ export type DiscordChannelName =
     | 'research'
     | 'insights'
     | 'proposals'
-    | 'projects';
+    | 'project';
 
 /** Map conversation formats to Discord channel names */
 const FORMAT_CHANNEL_MAP: Record<ConversationFormat, DiscordChannelName> = {
@@ -121,6 +121,19 @@ export async function getWebhookUrl(
     }
 
     return webhookUrl;
+}
+
+/** Get both the webhook URL and Discord channel ID for a named channel. */
+export async function getChannelInfo(
+    channelName: DiscordChannelName,
+): Promise<{ webhookUrl: string; channelId: string } | null> {
+    const webhookUrl = await getWebhookUrl(channelName);
+    if (!webhookUrl) return null;
+
+    const cached = channelCache.get(channelName);
+    if (!cached?.discordChannelId) return null;
+
+    return { webhookUrl, channelId: cached.discordChannelId };
 }
 
 /** Resolve which channel a conversation format posts to. */

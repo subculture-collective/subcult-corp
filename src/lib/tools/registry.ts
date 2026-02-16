@@ -11,6 +11,16 @@ import { spawnDroidTool } from './tools/spawn-droid';
 import { checkDroidTool } from './tools/check-droid';
 import { memorySearchTool } from './tools/memory-search';
 import {
+    memoryWriteTool,
+    createMemoryWriteExecute,
+} from './tools/memory-write';
+import {
+    scratchpadReadTool,
+    scratchpadUpdateTool,
+    createScratchpadReadExecute,
+    createScratchpadUpdateExecute,
+} from './tools/scratchpad';
+import {
     proposePolicyChangeTool,
     createProposePolicyChangeExecute,
 } from './tools/propose-policy-change';
@@ -26,6 +36,9 @@ const ALL_TOOLS: NativeTool[] = [
     spawnDroidTool,
     checkDroidTool,
     memorySearchTool,
+    memoryWriteTool,
+    scratchpadReadTool,
+    scratchpadUpdateTool,
     proposePolicyChangeTool,
 ];
 
@@ -50,6 +63,16 @@ export function getAgentTools(agentId: AgentId): ToolDefinition[] {
                     ...tool,
                     execute: createProposePolicyChangeExecute(agentId),
                 };
+            }
+            // Bind agentId into memory tools
+            if (tool.name === 'memory_write') {
+                return { ...tool, execute: createMemoryWriteExecute(agentId) };
+            }
+            if (tool.name === 'scratchpad_read') {
+                return { ...tool, execute: createScratchpadReadExecute(agentId) };
+            }
+            if (tool.name === 'scratchpad_update') {
+                return { ...tool, execute: createScratchpadUpdateExecute(agentId) };
             }
             return tool;
         });

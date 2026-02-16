@@ -61,26 +61,6 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
     return withRequestContext(req, async () => {
-        const authHeader = req.headers.get('authorization');
-        const cronSecret = process.env.CRON_SECRET;
-
-        // Require authentication: if CRON_SECRET is not set, reject all requests
-        // If CRON_SECRET is set, verify the Bearer token matches
-        if (!cronSecret) {
-            log.warn('CRON_SECRET not configured - rejecting POST request');
-            return NextResponse.json(
-                { error: 'Server configuration error: authentication not configured' },
-                { status: 500 },
-            );
-        }
-
-        if (authHeader !== `Bearer ${cronSecret}`) {
-            return NextResponse.json(
-                { error: 'Unauthorized' },
-                { status: 401 },
-            );
-        }
-
         try {
             const body = await req.json().catch(() => ({}));
             const { agent_id, time_range, max_memories, finding_types } =

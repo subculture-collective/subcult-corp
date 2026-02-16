@@ -4,6 +4,13 @@
 import { useState } from 'react';
 import { useMissions, useMissionSteps } from './hooks';
 import { MissionsListSkeleton } from './StageSkeletons';
+import {
+    ClipboardListIcon,
+    ZapIcon,
+    CheckCircleIcon,
+    XCircleIcon,
+    BanIcon,
+} from '@/lib/icons';
 import type { Mission, MissionStep } from '@/lib/types';
 
 const STATUS_STYLES: Record<string, string> = {
@@ -14,12 +21,12 @@ const STATUS_STYLES: Record<string, string> = {
     cancelled: 'bg-zinc-800 text-zinc-500 border-zinc-700',
 };
 
-const STATUS_ICONS: Record<string, string> = {
-    approved: '📋',
-    running: '⚡',
-    succeeded: '✅',
-    failed: '❌',
-    cancelled: '🚫',
+const STATUS_ICONS: Record<string, React.ReactNode> = {
+    approved: <ClipboardListIcon size={16} className='text-accent-blue' />,
+    running: <ZapIcon size={16} className='text-accent-yellow' />,
+    succeeded: <CheckCircleIcon size={16} className='text-accent-green' />,
+    failed: <XCircleIcon size={16} className='text-accent-red' />,
+    cancelled: <BanIcon size={16} className='text-zinc-500' />,
 };
 
 const STEP_STATUS_DOT: Record<string, string> = {
@@ -56,7 +63,7 @@ function MissionCard({
 
     const statusStyle =
         STATUS_STYLES[mission.status] ?? STATUS_STYLES.cancelled;
-    const statusIcon = STATUS_ICONS[mission.status] ?? '📋';
+    const statusIcon = STATUS_ICONS[mission.status] ?? <ClipboardListIcon size={16} className='text-zinc-400' />;
 
     return (
         <div className='rounded-lg border border-zinc-800 bg-zinc-900/50 overflow-hidden transition-colors hover:border-zinc-700'>
@@ -66,7 +73,7 @@ function MissionCard({
                 className='flex w-full items-center justify-between px-4 py-3 text-left'
             >
                 <div className='flex items-center gap-3 min-w-0'>
-                    <span className='text-base'>{statusIcon}</span>
+                    <span className='shrink-0'>{statusIcon}</span>
                     <div className='min-w-0'>
                         <p className='text-sm font-medium text-zinc-200 truncate'>
                             {mission.title}
@@ -169,10 +176,20 @@ export function MissionsList({
 }: {
     onPlayback: (missionId: string) => void;
 }) {
-    const { missions, loading } = useMissions();
+    const { missions, loading, error } = useMissions();
     const [expandedId, setExpandedId] = useState<string | null>(null);
 
     if (loading) return <MissionsListSkeleton />;
+
+    if (error) {
+        return (
+            <div className='rounded-lg border border-accent-red/50 bg-accent-red/10 p-4'>
+                <p className='text-sm text-accent-red'>
+                    Failed to load missions: {error}
+                </p>
+            </div>
+        );
+    }
 
     if (missions.length === 0) {
         return (

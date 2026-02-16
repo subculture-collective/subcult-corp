@@ -1,8 +1,9 @@
 // AskTheRoom — collapsible text input for submitting user questions to the collective
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { ConversationFormat } from '@/lib/types';
+import { SubcorpAvatar } from './AgentAvatar';
 
 const FORMAT_OPTIONS: { value: ConversationFormat; label: string }[] = [
     { value: 'debate', label: 'Debate' },
@@ -87,6 +88,24 @@ export function AskTheRoom() {
         setRetryAfter(0);
     }, []);
 
+    // Countdown timer for retry-after
+    const retryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    useEffect(() => {
+        if (retryAfter <= 0) return;
+        retryTimerRef.current = setInterval(() => {
+            setRetryAfter(prev => {
+                if (prev <= 1) {
+                    if (retryTimerRef.current) clearInterval(retryTimerRef.current);
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+        return () => {
+            if (retryTimerRef.current) clearInterval(retryTimerRef.current);
+        };
+    }, [retryAfter > 0]); // eslint-disable-line react-hooks/exhaustive-deps
+
     return (
         <div className='rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden'>
             {/* Toggle header */}
@@ -97,7 +116,7 @@ export function AskTheRoom() {
                 className='w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/30 transition-colors'
             >
                 <div className='flex items-center gap-2'>
-                    <span className='text-sm'>🎤</span>
+                    <SubcorpAvatar size='lg' />
                     <span className='text-xs font-medium text-zinc-300'>
                         Ask the Collective
                     </span>
@@ -187,12 +206,13 @@ export function AskTheRoom() {
                                         )
                                     }
                                     disabled={submitState === 'loading'}
-                                    className='flex-shrink-0 rounded-lg border border-zinc-700/50 bg-zinc-800/30 px-2 py-1.5 text-[11px] text-zinc-300 focus:outline-none focus:border-zinc-600 disabled:opacity-50 appearance-none cursor-pointer'
+                                    className='flex-shrink-0 rounded-lg border border-zinc-700/50 bg-zinc-800 px-2 py-1.5 text-[11px] text-zinc-300 focus:outline-none focus:border-zinc-600 disabled:opacity-50 cursor-pointer'
                                 >
                                     {FORMAT_OPTIONS.map(opt => (
                                         <option
                                             key={opt.value}
                                             value={opt.value}
+                                            className='bg-zinc-800 text-zinc-300'
                                         >
                                             {opt.label}
                                         </option>

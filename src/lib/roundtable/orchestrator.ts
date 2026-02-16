@@ -5,7 +5,6 @@ import type {
     ConversationFormat,
     ConversationTurnEntry,
     RoundtableSession,
-    ToolDefinition,
 } from '../types';
 import { getVoice } from './voices';
 import { getFormat, pickTurnCount } from './formats';
@@ -22,7 +21,9 @@ import {
 import { deriveVoiceModifiers } from '../ops/voice-evolution';
 import { loadPrimeDirective } from '../ops/prime-directive';
 import { isAgentRebelling } from '../ops/rebellion';
-import { getAgentTools } from '../tools';
+import { queryRelevantMemories } from '../ops/memory';
+import { getScratchpad } from '../ops/scratchpad';
+import { buildBriefing } from '../ops/situational-briefing';
 import {
     postConversationStart,
     postConversationTurn,
@@ -44,10 +45,13 @@ function buildSystemPrompt(
     topic: string,
     interactionType?: string,
     voiceModifiers?: string[],
-    availableTools?: ToolDefinition[],
+    _availableTools?: unknown,
     primeDirective?: string,
     userQuestionContext?: { question: string; isFirstSpeaker: boolean },
     isRebelling?: boolean,
+    scratchpad?: string,
+    briefing?: string,
+    memories?: string[],
 ): string {
     const voice = getVoice(speakerId);
     if (!voice) {
@@ -98,6 +102,20 @@ function buildSystemPrompt(
         prompt += '\n';
     }
 
+    if (scratchpad) {
+        prompt += `\n═══ YOUR SCRATCHPAD ═══\n${scratchpad}\n`;
+    }
+
+    if (briefing) {
+        prompt += `\n═══ CURRENT SITUATION ═══\n${briefing}\n`;
+    }
+
+    if (memories && memories.length > 0) {
+        prompt += `\n═══ YOUR MEMORIES ═══\n`;
+        prompt += memories.map(m => `- ${m}`).join('\n');
+        prompt += '\n';
+    }
+
     prompt += '\n';
 
     if (history.length > 0) {
@@ -110,15 +128,6 @@ function buildSystemPrompt(
                 :   turn.speaker;
             prompt += `${name}: ${turn.dialogue}\n`;
         }
-    }
-
-    if (availableTools && availableTools.length > 0) {
-        prompt += `\n═══ AVAILABLE TOOLS ═══\n`;
-        prompt += `You have access to the following tools. Use them when the conversation would benefit from real data, research, or action.\n`;
-        prompt += `Tools: ${availableTools.map(t => t.name).join(', ')}\n`;
-        prompt += `- Only invoke a tool if it directly serves the current discussion\n`;
-        prompt += `- Your dialogue response should incorporate or react to tool results naturally\n`;
-        prompt += `- Do NOT mention tool names in your dialogue — speak as yourself, using the information\n`;
     }
 
     // User question context — when a session was triggered by a user's question
@@ -140,9 +149,9 @@ function buildSystemPrompt(
     }
 
     prompt += `\n═══ RULES ═══\n`;
-    prompt += `- Keep your response under 120 characters\n`;
     prompt += `- Speak as ${voice.displayName} (${voice.pronouns}) — no stage directions, no asterisks, no quotes\n`;
     prompt += `- Stay in character: ${voice.tone}\n`;
+    prompt += `- Be concise but complete. Say what you mean — don't pad, but don't cut yourself short either.\n`;
     prompt += `- Respond to what was just said. Don't monologue. Don't repeat yourself.\n`;
     prompt += `- Do NOT prefix your response with your name or symbol\n`;
     prompt += `- If you're ${voice.displayName} and this format doesn't need you, keep it brief or pass\n`;
@@ -176,14 +185,14 @@ function buildUserPrompt(
         const opener =
             openers[format] ??
             `You're opening this conversation about: "${topic}". Set the tone.`;
-        return `${opener} Under 120 characters.`;
+        return opener;
     }
 
     if (turn === maxTurns - 1) {
-        return `Final turn. Land your point on "${topic}". No loose threads. Under 120 characters.`;
+        return `Final turn. Land your point on "${topic}". No loose threads.`;
     }
 
-    return `Respond as ${speakerName}. Stay on: "${topic}". Under 120 characters.`;
+    return `Respond as ${speakerName}. Stay on: "${topic}".`;
 }
 
 /**
@@ -237,18 +246,10 @@ export async function orchestrateConversation(
         }
     }
 
-    // Pre-load tools for each participant (cached per conversation)
-    const agentToolsMap = new Map<string, ToolDefinition[]>();
-    for (const participant of session.participants) {
-        try {
-            const tools = getAgentTools(
-                participant as Parameters<typeof getAgentTools>[0],
-            );
-            agentToolsMap.set(participant, tools);
-        } catch {
-            agentToolsMap.set(participant, []);
-        }
-    }
+    // NOTE: Tools are intentionally NOT passed to roundtable LLM calls.
+    // Roundtable dialogue is 120-char max — tool calling is inappropriate here.
+    // Agents already have context (scratchpad, briefing, memories) pre-loaded.
+    // Tool use happens in agent sessions, not roundtable conversations.
 
     // Derive voice modifiers once per participant (cached per conversation)
     const voiceModifiersMap = new Map<string, string[]>();
@@ -265,6 +266,33 @@ export async function orchestrateConversation(
         }
     }
 
+    // Pre-load scratchpad, briefing, and semantic memories per participant
+    const scratchpadMap = new Map<string, string>();
+    const briefingMap = new Map<string, string>();
+    const memoryMap = new Map<string, string[]>();
+    for (const participant of session.participants) {
+        try {
+            const [scratchpad, briefing, memories] = await Promise.all([
+                getScratchpad(participant).catch(() => ''),
+                buildBriefing(participant).catch(() => ''),
+                queryRelevantMemories(participant, session.topic, {
+                    relevantLimit: 3,
+                    recentLimit: 2,
+                })
+                    .then(mems => mems.map(m => m.content))
+                    .catch(() => [] as string[]),
+            ]);
+            scratchpadMap.set(participant, scratchpad);
+            briefingMap.set(participant, briefing);
+            memoryMap.set(participant, memories);
+        } catch (err) {
+            log.error('Context loading failed', { error: err, participant });
+            scratchpadMap.set(participant, '');
+            briefingMap.set(participant, '');
+            memoryMap.set(participant, []);
+        }
+    }
+
     // Mark session as running
     await sql`
         UPDATE ops_roundtable_sessions
@@ -272,12 +300,12 @@ export async function orchestrateConversation(
         WHERE id = ${session.id}
     `;
 
-    // Create Discord thread for this conversation
-    let discordThreadId: string | null = null;
+    // Post conversation start to Discord
+    let discordWebhookUrl: string | null = null;
     try {
-        discordThreadId = await postConversationStart(session);
+        discordWebhookUrl = await postConversationStart(session);
     } catch (err) {
-        log.warn('Discord thread creation failed', {
+        log.warn('Discord conversation start failed', {
             error: (err as Error).message,
             sessionId: session.id,
         });
@@ -339,12 +367,15 @@ export async function orchestrateConversation(
             session.topic,
             interactionType,
             voiceModifiersMap.get(speaker),
-            agentToolsMap.get(speaker),
+            undefined, // No tools in roundtable — dialogue only
             primeDirective,
             userQuestion ?
                 { question: userQuestion, isFirstSpeaker: turn === 0 }
             :   undefined,
             speakerRebelling,
+            scratchpadMap.get(speaker),
+            briefingMap.get(speaker),
+            memoryMap.get(speaker),
         );
         const userPrompt = buildUserPrompt(
             session.topic,
@@ -353,8 +384,6 @@ export async function orchestrateConversation(
             speakerName,
             session.format,
         );
-
-        const speakerTools = agentToolsMap.get(speaker) ?? [];
 
         let rawDialogue: string;
         try {
@@ -370,10 +399,8 @@ export async function orchestrateConversation(
                     { role: 'user', content: userPrompt },
                 ],
                 temperature: effectiveTemperature,
-                maxTokens: 100,
+                maxTokens: 300,
                 model: session.model ?? undefined,
-                tools: speakerTools.length > 0 ? speakerTools : undefined,
-                maxToolRounds: 2,
                 trackingContext: {
                     agentId: speaker,
                     context: `roundtable:${session.format}`,
@@ -391,7 +418,7 @@ export async function orchestrateConversation(
             break;
         }
 
-        const dialogue = sanitizeDialogue(rawDialogue, 120);
+        const dialogue = sanitizeDialogue(rawDialogue);
 
         const entry: ConversationTurnEntry = {
             speaker,
@@ -426,11 +453,13 @@ export async function orchestrateConversation(
             },
         });
 
-        // Post turn to Discord thread (fire-and-forget)
-        if (discordThreadId) {
-            postConversationTurn(session, entry, discordThreadId).catch(
-                () => {},
-            );
+        // Post turn to Discord thread
+        // Await the last turn to avoid racing with the completion summary
+        if (discordWebhookUrl) {
+            const turnPost = postConversationTurn(session, entry, discordWebhookUrl).catch(() => {});
+            if (turn === maxTurns - 1) {
+                await turnPost;
+            }
         }
 
         // Natural delay between turns (3-8 seconds)
@@ -439,6 +468,9 @@ export async function orchestrateConversation(
             await new Promise(resolve => setTimeout(resolve, delay));
         }
     }
+
+    // Brief settle after the last turn so Discord ordering is preserved
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     // Determine final status — completed if we got at least 3 turns, failed otherwise
     const finalStatus =
@@ -484,12 +516,12 @@ export async function orchestrateConversation(
     });
 
     // Post summary to Discord thread (fire-and-forget)
-    if (discordThreadId) {
+    if (discordWebhookUrl) {
         postConversationSummary(
             session,
             history,
             finalStatus,
-            discordThreadId,
+            discordWebhookUrl,
             abortReason ?? undefined,
         ).catch(() => {});
     }
@@ -728,10 +760,12 @@ function generateTopic(slot: { name: string; format: string }): string {
             'What if we removed the constraint we think is fixed?',
         ],
         writing_room: [
-            'Draft session: work on the next piece collaboratively.',
-            'This draft needs a stronger opening. Workshop it.',
-            'Tone check: does this sound like us or like everyone else?',
-            'Cut 40% from this draft without losing the argument.',
+            'Write a short essay: what does Subcult actually believe about technology and power?',
+            'Draft a thread on why most AI governance proposals miss the point.',
+            'Write a piece on the difference between building tools and building infrastructure.',
+            'Draft something about what "autonomy" means when every platform is a landlord.',
+            'Write about the gap between what tech companies say and what their incentives produce.',
+            'Craft a sharp take on why "move fast and break things" aged poorly.',
         ],
         content_review: [
             'Review recent output: does it meet our quality bar?',

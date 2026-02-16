@@ -67,6 +67,7 @@ export async function GET() {
                     MAX(created_at) as last_active,
                     array_agg(DISTINCT kind) as event_kinds
                 FROM ops_agent_events
+                WHERE agent_id NOT LIKE 'oc-%'
                 GROUP BY agent_id
                 ORDER BY total_events DESC
             `,
@@ -78,6 +79,7 @@ export async function GET() {
                     COUNT(*)::int as total,
                     COUNT(*) FILTER (WHERE superseded_by IS NULL)::int as active
                 FROM ops_agent_memory
+                WHERE agent_id NOT LIKE 'oc-%'
                 GROUP BY agent_id
             `,
         ]);

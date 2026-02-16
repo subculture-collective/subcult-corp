@@ -82,9 +82,10 @@ services:
                 condition: service_healthy
         env_file:
             - .env.local
-        ports:
-            - '127.0.0.1:3011:3011'
+        volumes:
+            - workspace:/workspace
         networks:
+            - web
             - internal
 
 volumes:

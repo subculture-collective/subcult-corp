@@ -3,17 +3,29 @@
 // executes tool calls, feeds results back until done or timeout.
 
 import { sql, jsonb } from '@/lib/db';
-import { llmGenerateWithTools } from '@/lib/llm/client';
+import { llmGenerateWithTools, extractFromXml } from '@/lib/llm/client';
 import { getVoice } from '@/lib/roundtable/voices';
 import { getAgentTools, getDroidTools } from './registry';
 import { emitEvent } from '@/lib/ops/events';
-import { queryAgentMemories } from '@/lib/ops/memory';
+import { queryRelevantMemories } from '@/lib/ops/memory';
+import { getScratchpad } from '@/lib/ops/scratchpad';
+import { buildBriefing } from '@/lib/ops/situational-briefing';
 import { loadPrimeDirective } from '@/lib/ops/prime-directive';
 import { logger } from '@/lib/logger';
 import type { AgentId, LLMMessage, ToolCallRecord } from '../types';
 import type { AgentSession } from './types';
 
 const log = logger.child({ module: 'agent-session' });
+
+/** Strip XML function-call tags and other LLM artifacts from text */
+function sanitizeSummary(text: string): string {
+    return text
+        // Remove XML-style tags (e.g. <function_calls>, <invoke>, <parameter>)
+        .replace(/<\/?[a-z_][a-z0-9_-]*(?:\s[^>]*)?\s*>/gi, '')
+        // Collapse runs of whitespace
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+}
 
 /**
  * Execute an agent session: load voice, tools, and run the LLM+tools loop.
@@ -45,12 +57,16 @@ export async function executeAgentSession(session: AgentSession): Promise<void> 
             ? getDroidTools(session.agent_id)
             : getAgentTools(agentId);
 
-        // Load recent memories for context (skip for droids — they have no memory)
-        const memories = isDroid ? [] : await queryAgentMemories({
+        // Load memories via semantic relevance to the prompt (skip for droids)
+        const memories = isDroid ? [] : await queryRelevantMemories(
             agentId,
-            limit: 10,
-            minConfidence: 0.5,
-        });
+            session.prompt,
+            { relevantLimit: 5, recentLimit: 3 },
+        );
+
+        // Load scratchpad (working memory) and situational briefing
+        const scratchpad = isDroid ? '' : await getScratchpad(agentId);
+        const briefing = isDroid ? '' : await buildBriefing(agentId);
 
         // Load recent session outputs for context injection (skip for droids)
         const recentSessions = isDroid ? [] : await sql`
@@ -83,21 +99,24 @@ export async function executeAgentSession(session: AgentSession): Promise<void> 
         }
 
         systemPrompt += `You are ${voiceName}, operating in an autonomous agent session.\n`;
-        systemPrompt += `You have tools available to accomplish your task. Use them as needed.\n`;
+        systemPrompt += `You have tools available to accomplish your task. Use them through the provided function calling interface.\n`;
         systemPrompt += `When your task is complete, provide a clear summary of what you accomplished.\n`;
-        systemPrompt += `When producing artifacts, write them to the workspace using file_write.\n`;
-        systemPrompt += `Use the naming convention: YYYY-MM-DD__<workflow>__<type>__<slug>__<agent>__v01.md\n\n`;
+        systemPrompt += `IMPORTANT: Never output raw XML tags like <function_calls> or <invoke>. Use the structured tool calling API instead.\n\n`;
 
-        if (tools.length > 0) {
-            systemPrompt += `Available tools: ${tools.map(t => t.name).join(', ')}\n\n`;
+        if (scratchpad) {
+            systemPrompt += `═══ YOUR SCRATCHPAD (working memory) ═══\n${scratchpad}\n\n`;
+        }
+
+        if (briefing) {
+            systemPrompt += `═══ CURRENT SITUATION ═══\n${briefing}\n\n`;
         }
 
         if (memories.length > 0) {
-            systemPrompt += `Your recent memories:\n`;
-            for (const m of memories.slice(0, 5)) {
+            systemPrompt += `═══ YOUR MEMORIES ═══\n`;
+            for (const m of memories) {
                 systemPrompt += `- [${m.type}] ${m.content.slice(0, 200)}\n`;
             }
-            systemPrompt += '\n';
+            systemPrompt += `\n`;
         }
 
         if (recentSessions.length > 0) {
@@ -178,10 +197,11 @@ export async function executeAgentSession(session: AgentSession): Promise<void> 
             });
         }
 
-        // Success
+        // Success — extract content from XML wrappers if present
+        const cleanedText = extractFromXml(lastText);
         await completeSession(session.id, 'succeeded', {
-            text: lastText,
-            summary: lastText.slice(0, 500),
+            text: cleanedText,
+            summary: sanitizeSummary(cleanedText),
             rounds: llmRounds,
         }, allToolCalls, llmRounds, totalTokens, totalCost);
 
@@ -190,7 +210,7 @@ export async function executeAgentSession(session: AgentSession): Promise<void> 
             agent_id: agentId,
             kind: 'agent_session_completed',
             title: `${voiceName} session completed`,
-            summary: lastText.slice(0, 200),
+            summary: sanitizeSummary(cleanedText) || undefined,
             tags: ['agent_session', 'completed', session.source],
             metadata: {
                 sessionId: session.id,

@@ -12,10 +12,10 @@ const webhookCache = new Map<string, string>();
 interface WebhookPostOptions {
     webhookUrl: string;
     username?: string;
+    avatarUrl?: string;
     content?: string;
     embeds?: DiscordEmbed[];
     threadId?: string;
-    threadName?: string;
 }
 
 export interface DiscordEmbed {
@@ -39,9 +39,9 @@ export async function postToWebhook(
 
     const body: Record<string, unknown> = {};
     if (options.username) body.username = options.username;
+    if (options.avatarUrl) body.avatar_url = options.avatarUrl;
     if (options.content) body.content = options.content;
     if (options.embeds) body.embeds = options.embeds;
-    if (options.threadName) body.thread_name = options.threadName;
 
     try {
         const res = await fetch(url.toString(), {
@@ -67,26 +67,48 @@ export async function postToWebhook(
 }
 
 /**
- * Create a thread via webhook by posting with thread_name.
- * Returns the thread/channel ID from the response.
+ * Create a thread in a text channel via the Bot API.
+ * Uses POST /channels/{channelId}/threads (type 11 = PUBLIC_THREAD).
+ * Returns the new thread ID, or null on failure.
  */
 export async function createThread(
-    webhookUrl: string,
+    channelId: string,
     threadName: string,
-    content: string,
-    embeds?: DiscordEmbed[],
-    username?: string,
 ): Promise<string | null> {
-    const result = await postToWebhook({
-        webhookUrl,
-        threadName,
-        content,
-        embeds,
-        username,
-    });
+    if (!BOT_TOKEN) {
+        log.warn('DISCORD_BOT_TOKEN not set, cannot create thread');
+        return null;
+    }
 
-    // When creating a thread via webhook, the response message's channel_id is the thread ID
-    return result?.channel_id ?? null;
+    try {
+        const res = await discordFetch(`/channels/${channelId}/threads`, {
+            method: 'POST',
+            body: JSON.stringify({
+                name: threadName.slice(0, 100), // Discord limit: 100 chars
+                type: 11, // PUBLIC_THREAD
+                auto_archive_duration: 1440, // 24 hours
+            }),
+        });
+
+        if (!res.ok) {
+            const text = await res.text().catch(() => '');
+            log.warn('Thread creation failed', {
+                status: res.status,
+                channelId,
+                body: text.slice(0, 200),
+            });
+            return null;
+        }
+
+        const thread = (await res.json()) as { id: string };
+        return thread.id;
+    } catch (err) {
+        log.warn('Thread creation error', {
+            error: (err as Error).message,
+            channelId,
+        });
+        return null;
+    }
 }
 
 /** Internal helper for bot API calls. */

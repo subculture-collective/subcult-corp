@@ -1,7 +1,7 @@
 // Agent Spawner — materialize approved proposals into real agents
 // Creates workspace files, registers in ops_agent_registry, and inserts skills.
 // REQUIRES human_approved === true before execution.
-import { sql, jsonb } from '@/lib/db';
+import { sql } from '@/lib/db';
 import { llmGenerate } from '@/lib/llm/client';
 import { emitEventAndCheckReactions } from './events';
 import { logger } from '@/lib/logger';
@@ -104,7 +104,6 @@ async function generateIdentityMarkdown(
     proposal: AgentProposal,
     personality: AgentPersonality,
 ): Promise<string> {
-    const nameUpper = proposal.agent_name.toUpperCase();
     const nameCapitalized =
         proposal.agent_name.charAt(0).toUpperCase() +
         proposal.agent_name.slice(1);

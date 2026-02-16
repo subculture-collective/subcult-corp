@@ -13,5 +13,4 @@ CREATE TABLE IF NOT EXISTS ops_acl_grants (
 );
 
 CREATE INDEX IF NOT EXISTS idx_acl_grants_active
-    ON ops_acl_grants (agent_id)
-    WHERE expires_at > now();
+    ON ops_acl_grants (agent_id, expires_at);

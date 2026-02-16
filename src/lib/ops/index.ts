@@ -8,11 +8,14 @@ export { checkReactionMatrix, processReactionQueue } from './reaction-matrix';
 export { recoverStaleSteps, maybeFinalializeMission } from './recovery';
 export {
     queryAgentMemories,
+    queryRelevantMemories,
     writeMemory,
     enforceMemoryCap,
     getCachedMemories,
     countTodayMemories,
 } from './memory';
+export { getScratchpad, updateScratchpad } from './scratchpad';
+export { buildBriefing } from './situational-briefing';
 export { distillConversationMemories } from './memory-distiller';
 export { learnFromOutcomes } from './outcome-learner';
 export { enrichTopicWithMemory } from './memory-enrichment';

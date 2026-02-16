@@ -23,6 +23,7 @@ import { MemoryArchaeology } from './MemoryArchaeology';
 import { StageErrorBoundary, SectionErrorBoundary } from './StageErrorBoundary';
 import { AskTheRoom } from './AskTheRoom';
 import { DailyDigest } from './DailyDigest';
+import { StageIntro } from './StageIntro';
 import {
     MissionsListSkeleton,
     EventLogFeedSkeleton,
@@ -36,7 +37,7 @@ export default function StagePage() {
     );
     const [officeMode, setOfficeMode] = useState<'svg' | '3d'>('svg');
     const [connectionStatus, setConnectionStatus] =
-        useState<ConnectionStatus>('connected');
+        useState<ConnectionStatus>('reconnecting');
     const handleConnectionStatus = useCallback((status: ConnectionStatus) => {
         setConnectionStatus(status);
     }, []);
@@ -89,6 +90,7 @@ export default function StagePage() {
                     {/* ── Feed View ── */}
                     {view === 'feed' && (
                         <>
+                            <StageIntro />
                             <AskTheRoom />
                             <SectionErrorBoundary label='Daily Digest'>
                                 <DailyDigest />

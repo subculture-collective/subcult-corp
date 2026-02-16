@@ -121,10 +121,17 @@ function stripThinking(text: string): string {
     return text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 }
 
+interface OllamaUsage {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+}
+
 interface OllamaChatResult {
     text: string;
     toolCalls: ToolCallRecord[];
     model: string;
+    usage?: OllamaUsage;
 }
 
 /**
@@ -259,6 +266,7 @@ async function ollamaChatWithModel(
                         };
                     },
                 ];
+                usage?: OllamaUsage;
             };
 
             const msg = data.choices?.[0]?.message;
@@ -266,13 +274,13 @@ async function ollamaChatWithModel(
 
             const pendingToolCalls = msg.tool_calls;
 
-            // No tool calls → return text
+            // No tool calls → return text (extract content from XML wrappers if present)
             if (!pendingToolCalls || pendingToolCalls.length === 0) {
                 const raw = msg.content ?? '';
-                const text = stripThinking(raw).trim();
+                const text = extractFromXml(stripThinking(raw)).trim();
                 if (text.length === 0 && toolCallRecords.length === 0)
                     return null;
-                return { text, toolCalls: toolCallRecords, model };
+                return { text, toolCalls: toolCallRecords, model, usage: data.usage };
             }
 
             // Execute tool calls
@@ -323,7 +331,7 @@ async function ollamaChatWithModel(
     }
 
     // Exhausted tool rounds — return what we have
-    return { text: '', toolCalls: toolCallRecords, model };
+    return { text: '', toolCalls: toolCallRecords, model, usage: undefined };
 }
 
 /**
@@ -491,10 +499,15 @@ export async function llmGenerate(
             maxToolRounds: options.maxToolRounds,
         });
         if (ollamaResult?.text) {
-            // Track usage (fire-and-forget)
+            // Track usage (fire-and-forget) — map Ollama usage fields to SDK format
+            const ollamaUsage = ollamaResult.usage ? {
+                inputTokens: ollamaResult.usage.prompt_tokens ?? 0,
+                outputTokens: ollamaResult.usage.completion_tokens ?? 0,
+                totalTokens: ollamaResult.usage.total_tokens ?? 0,
+            } as unknown as OpenResponsesUsage : null;
             void trackUsage(
                 `ollama/${ollamaResult.model}`,
-                null,
+                ollamaUsage,
                 Date.now() - startTime,
                 trackingContext,
             );
@@ -540,7 +553,8 @@ export async function llmGenerate(
         const result = client.callModel(
             buildCallOpts(spec) as Parameters<typeof client.callModel>[0],
         );
-        const text = (await result.getText())?.trim() ?? '';
+        const rawText = (await result.getText())?.trim() ?? '';
+        const text = extractFromXml(rawText);
 
         // Track usage after successful getText
         const durationMs = Date.now() - startTime;
@@ -608,6 +622,7 @@ export async function llmGenerateWithTools(
     } = options;
 
     const startTime = Date.now();
+    const hasTools = tools.length > 0;
 
     // ── Try Ollama first (free cloud + local inference) ──
     if (OLLAMA_API_KEY || OLLAMA_LOCAL_URL) {
@@ -616,17 +631,34 @@ export async function llmGenerateWithTools(
             tools,
             maxToolRounds,
         });
+
         if (ollamaResult?.text) {
-            void trackUsage(
-                `ollama/${ollamaResult.model}`,
-                null,
-                Date.now() - startTime,
-                trackingContext,
-            );
-            return {
-                text: ollamaResult.text,
-                toolCalls: ollamaResult.toolCalls,
-            };
+            // If Ollama actually used tools, or no tools were requested → return immediately
+            if (!hasTools || ollamaResult.toolCalls.length > 0) {
+                const ollamaUsage = ollamaResult.usage ? {
+                    inputTokens: ollamaResult.usage.prompt_tokens ?? 0,
+                    outputTokens: ollamaResult.usage.completion_tokens ?? 0,
+                    totalTokens: ollamaResult.usage.total_tokens ?? 0,
+                } as unknown as OpenResponsesUsage : null;
+                void trackUsage(
+                    `ollama/${ollamaResult.model}`,
+                    ollamaUsage,
+                    Date.now() - startTime,
+                    trackingContext,
+                );
+                return {
+                    text: ollamaResult.text,
+                    toolCalls: ollamaResult.toolCalls,
+                };
+            }
+
+            // Ollama returned text but didn't use any tools — this is likely a search
+            // query or command as text (Ollama cloud models don't support function calling).
+            // Fall through to OpenRouter for proper tool execution.
+            log.debug('Ollama text-only response (tools not used), trying OpenRouter', {
+                model: ollamaResult.model,
+                textLen: ollamaResult.text.length,
+            });
         }
     }
 
@@ -688,7 +720,8 @@ export async function llmGenerateWithTools(
             callOptions as Parameters<typeof client.callModel>[0],
         );
 
-        const text = (await result.getText())?.trim() ?? '';
+        const rawText = (await result.getText())?.trim() ?? '';
+        const text = extractFromXml(rawText);
 
         // Track usage after successful getText
         const durationMs = Date.now() - startTime;
@@ -702,6 +735,32 @@ export async function llmGenerateWithTools(
         return { text, toolCalls: toolCallRecords };
     } catch (error: unknown) {
         const err = error as { statusCode?: number; message?: string };
+
+        // If OpenRouter failed, try Ollama text-only as last resort.
+        // Retrying WITHOUT tools gives a proper conversational response
+        // instead of the garbage search-query text from the tool-calling attempt.
+        if (OLLAMA_API_KEY || OLLAMA_LOCAL_URL) {
+            log.debug('OpenRouter failed, trying Ollama text-only fallback', {
+                error: err.message,
+                statusCode: err.statusCode,
+            });
+            const retryResult = await ollamaChat(messages, temperature, { maxTokens });
+            if (retryResult?.text) {
+                const ollamaUsage = retryResult.usage ? {
+                    inputTokens: retryResult.usage.prompt_tokens ?? 0,
+                    outputTokens: retryResult.usage.completion_tokens ?? 0,
+                    totalTokens: retryResult.usage.total_tokens ?? 0,
+                } as unknown as OpenResponsesUsage : null;
+                void trackUsage(
+                    `ollama/${retryResult.model}`,
+                    ollamaUsage,
+                    Date.now() - startTime,
+                    trackingContext,
+                );
+                return { text: retryResult.text, toolCalls: [] };
+            }
+        }
+
         if (err.statusCode === 401) {
             throw new Error(
                 'Invalid OpenRouter API key — check your OPENROUTER_API_KEY',
@@ -720,17 +779,63 @@ export async function llmGenerateWithTools(
 }
 
 /**
+ * Extract meaningful content from LLM output that may contain XML function call wrappers.
+ *
+ * Models trained on Anthropic's XML format sometimes emit tool calls as text:
+ *   <function_calls><invoke name="file_write"><parameter name="content">...actual content...</parameter></invoke></function_calls>
+ *
+ * Instead of destroying this content by stripping tags, we extract it:
+ * 1. Look for content inside <parameter name="content"> tags — that's the real output
+ * 2. If no content parameter, collect all text outside XML tags
+ * 3. If no XML detected, return text as-is
+ */
+export function extractFromXml(text: string): string {
+    // Quick check — if no XML function call patterns, return as-is
+    if (!/<(?:function_?calls?|invoke|parameter)\b/i.test(text)) {
+        return text;
+    }
+
+    // Extract content from <parameter name="content"...>...</parameter> (greedy — gets the longest match)
+    const contentMatch = text.match(
+        /<parameter\s+name=["']content["'][^>]*>([\s\S]*?)<\/parameter>/i,
+    );
+    if (contentMatch?.[1]) {
+        return contentMatch[1].trim();
+    }
+
+    // No content parameter — extract all parameter values as fallback
+    const paramMatches = [
+        ...text.matchAll(/<parameter\s+name=["'][^"']*["'][^>]*>([\s\S]*?)<\/parameter>/gi),
+    ];
+    if (paramMatches.length > 0) {
+        // Return the longest parameter value (most likely to be the real content)
+        return paramMatches
+            .map(m => m[1].trim())
+            .sort((a, b) => b.length - a.length)[0];
+    }
+
+    // XML detected but no parameter tags — strip tags and return what's left
+    const stripped = text
+        .replace(/<\/?(?:function_?calls?|invoke|parameter|tool_call|antml:[a-z_]+)[^>]*>/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+    // Return stripped text even if empty — don't fall back to raw XML
+    return stripped;
+}
+
+/**
  * Sanitize dialogue output:
- * - Cap at maxLength characters
+ * - Extract content from XML function call wrappers (if present)
+ * - Strip any remaining XML-like tags
  * - Strip URLs
  * - Remove markdown formatting
  * - Trim whitespace
+ * Does NOT truncate — the full response is preserved.
  */
-export function sanitizeDialogue(
-    text: string,
-    maxLength: number = 120,
-): string {
-    let cleaned = text
+export function sanitizeDialogue(text: string): string {
+    return extractFromXml(text)
+        // Strip any remaining XML-style tags
+        .replace(/<\/?[a-z_][a-z0-9_-]*(?:\s[^>]*)?\s*>/gi, '')
         // Remove URLs
         .replace(/https?:\/\/\S+/g, '')
         // Remove markdown bold/italic
@@ -740,23 +845,4 @@ export function sanitizeDialogue(
         // Collapse whitespace
         .replace(/\s+/g, ' ')
         .trim();
-
-    // Cap at maxLength — try to break at a word boundary
-    if (cleaned.length > maxLength) {
-        cleaned = cleaned.substring(0, maxLength);
-        const lastSpace = cleaned.lastIndexOf(' ');
-        if (lastSpace > maxLength * 0.7) {
-            cleaned = cleaned.substring(0, lastSpace);
-        }
-        // Add ellipsis if we truncated mid-thought
-        if (
-            !cleaned.endsWith('.') &&
-            !cleaned.endsWith('!') &&
-            !cleaned.endsWith('?')
-        ) {
-            cleaned += '…';
-        }
-    }
-
-    return cleaned;
 }

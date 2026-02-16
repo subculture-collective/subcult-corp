@@ -20,6 +20,7 @@ export async function GET() {
                 SELECT agent_id, COUNT(*)::int as count
                 FROM ops_agent_memory
                 WHERE superseded_by IS NULL
+                  AND agent_id NOT LIKE 'oc-%'
                 GROUP BY agent_id
             `,
         ]);

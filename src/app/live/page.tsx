@@ -22,7 +22,9 @@ export default function LivePage() {
                                 <span
                                     key={id}
                                     className='inline-block h-1.5 w-1.5 rounded-full'
-                                    style={{ backgroundColor: AGENTS[id].color }}
+                                    style={{
+                                        backgroundColor: AGENTS[id].color,
+                                    }}
                                 />
                             ))}
                         </div>

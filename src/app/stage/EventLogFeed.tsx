@@ -1,7 +1,6 @@
 // EventLogFeed — detailed chronological event log with expandable metadata
 // Displayed under the OfficeRoom in the office view
 'use client';
-'use no memo';
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import {
@@ -46,6 +45,7 @@ import {
     HourglassIcon,
     RefreshIcon,
 } from '@/lib/icons';
+import { AgentAvatar, AgentAvatarStack } from './AgentAvatar';
 
 // ─── Constants ───
 
@@ -144,6 +144,14 @@ const KIND_LABELS: Record<string, string> = {
 
 // ─── Helpers ───
 
+/** Strip XML tags and LLM artifacts from event summaries for clean display */
+function cleanSummary(text: string): string {
+    return text
+        .replace(/<\/?[a-z_][a-z0-9_-]*(?:\s[^>]*)?\s*>/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+}
+
 function formatTimestamp(dateStr: string): string {
     const d = new Date(dateStr);
     return d.toLocaleTimeString('en-US', {
@@ -234,7 +242,7 @@ function DetailedEventRow({
     const agentId = event.agent_id as AgentId;
     const agent = AGENTS[agentId];
     const textColor = agent?.tailwindTextColor ?? 'text-zinc-400';
-    const icon = getKindIcon(event.kind);
+    getKindIcon(event.kind);
     const severity = getKindSeverity(event.kind);
     const kindLabel = KIND_LABELS[event.kind] ?? event.kind;
     const hasMetadata =
@@ -266,9 +274,9 @@ function DetailedEventRow({
                     />
                 </div>
 
-                {/* Icon + Agent badge */}
-                <div className='flex flex-col items-center gap-0.5 shrink-0 w-10'>
-                    <span className='text-zinc-500'>{icon}</span>
+                {/* Agent avatar */}
+                <div className='flex flex-col items-center gap-0.5 shrink-0 w-12'>
+                    <AgentAvatar agentId={event.agent_id} size='md' />
                     <span
                         className={`text-[9px] font-semibold ${textColor} uppercase tracking-wide`}
                     >
@@ -291,7 +299,7 @@ function DetailedEventRow({
                     </p>
                     {event.summary && (
                         <p className='text-xs text-zinc-500 mt-0.5 leading-relaxed'>
-                            {event.summary}
+                            {cleanSummary(event.summary)}
                         </p>
                     )}
                     {event.tags?.length > 0 && (
@@ -408,19 +416,7 @@ function SessionCard({
                         <span className='text-[10px] text-zinc-600'>
                             &middot;
                         </span>
-                        <div className='flex gap-1'>
-                            {session.participants.map(p => {
-                                const agent = AGENTS[p as AgentId];
-                                return (
-                                    <span
-                                        key={p}
-                                        className={`text-[9px] font-semibold ${agent?.tailwindTextColor ?? 'text-zinc-400'}`}
-                                    >
-                                        {p}
-                                    </span>
-                                );
-                            })}
-                        </div>
+                        <AgentAvatarStack agentIds={session.participants} size='md' />
                     </div>
                 </div>
                 <div className='shrink-0 text-right'>
@@ -628,7 +624,7 @@ export function EventLogFeed({
     return (
         <div className='rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden'>
             {/* Header */}
-            <div className='flex items-center justify-between gap-3 px-4 py-3 border-b border-zinc-800'>
+            <div className='flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-4 py-3 border-b border-zinc-800'>
                 <div className='flex items-center gap-2'>
                     <ChartBarIcon size={14} className='text-zinc-500' />
                     <span className='text-xs font-medium text-zinc-400'>
@@ -639,11 +635,13 @@ export function EventLogFeed({
                         {filteredEvents.length} events
                     </span>
                 </div>
-                <div className='flex items-center gap-2'>
+                <div className='flex items-center gap-2 overflow-x-auto w-full sm:w-auto'>
                     <FeedTabs active={activeTab} onChange={setActiveTab} />
                     <button
                         onClick={() => setShowSessions(s => !s)}
-                        className={`flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors border cursor-pointer ${
+                        aria-expanded={showSessions}
+                        aria-label='Toggle sessions panel'
+                        className={`flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors border cursor-pointer shrink-0 ${
                             showSessions ?
                                 'border-zinc-600 bg-zinc-700 text-zinc-200'
                             :   'border-zinc-700/50 text-zinc-500 hover:text-zinc-300'

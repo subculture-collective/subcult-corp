@@ -1,24 +1,20 @@
-// Discord roundtable posting — thread creation, per-turn messages, summaries
-import { postToWebhook, createThread, hexToDecimal } from './client';
-import type { DiscordEmbed } from './client';
+// Discord roundtable posting — plain messages in channel (no threads)
+import { postToWebhook } from './client';
 import { getWebhookUrl, getChannelForFormat } from './channels';
 import { getVoice } from '../roundtable/voices';
-import { AGENTS } from '../agents';
-import { sql, jsonb } from '@/lib/db';
+import { getAgentAvatarUrl } from './avatars';
 import { logger } from '@/lib/logger';
 import type {
     RoundtableSession,
     ConversationTurnEntry,
     SessionStatus,
-    AgentId,
 } from '../types';
 
 const log = logger.child({ module: 'discord-roundtable' });
 
 /**
- * Create a Discord thread for a new conversation.
- * Posts a header embed and returns the thread ID.
- * Stores the thread ID in session metadata.
+ * Post a conversation start message to the channel.
+ * Returns a channel identifier (webhook URL) for subsequent posts.
  */
 export async function postConversationStart(
     session: RoundtableSession,
@@ -27,7 +23,6 @@ export async function postConversationStart(
     const webhookUrl = await getWebhookUrl(channelName);
     if (!webhookUrl) return null;
 
-    // Build participant list with symbols
     const participantList = session.participants
         .map((p) => {
             const voice = getVoice(p);
@@ -35,60 +30,32 @@ export async function postConversationStart(
         })
         .join(', ');
 
-    const threadTitle = `${session.format.toUpperCase()}: ${session.topic.slice(0, 90)}`;
+    const content = `📡 **${session.format}** — *starting*\n> ${session.topic}\n-# ${participantList}`;
 
-    const embed: DiscordEmbed = {
-        title: `${session.format} — starting`,
-        description: session.topic,
-        color: 0x313244, // neutral dark
-        fields: [
-            {
-                name: 'Participants',
-                value: participantList,
-                inline: false,
-            },
-        ],
-        timestamp: new Date().toISOString(),
-    };
-
-    const threadId = await createThread(
+    await postToWebhook({
         webhookUrl,
-        threadTitle,
-        '',
-        [embed],
-        '📡 Subcult Roundtable',
-    );
+        username: '📡 Subcult Roundtable',
+        content,
+    });
 
-    if (threadId) {
-        // Store thread ID in session metadata
-        await sql`
-            UPDATE ops_roundtable_sessions
-            SET metadata = COALESCE(metadata, '{}'::jsonb) || ${jsonb({ discordThreadId: threadId })}
-            WHERE id = ${session.id}
-        `;
-        log.info('Discord thread created', {
-            sessionId: session.id,
-            threadId,
-            channel: channelName,
-        });
-    }
+    log.info('Roundtable start posted to Discord', {
+        sessionId: session.id,
+        channel: channelName,
+    });
 
-    return threadId;
+    // Return the webhook URL as the "thread" identifier — reused for turns and summary
+    return webhookUrl;
 }
 
 /**
- * Post a single conversation turn to the Discord thread.
- * Uses the speaker's voice symbol + name as the webhook username.
+ * Post a single conversation turn to the channel.
+ * Uses the speaker's symbol + name as the webhook username.
  */
 export async function postConversationTurn(
     session: RoundtableSession,
     entry: ConversationTurnEntry,
-    threadId: string,
+    webhookUrl: string,
 ): Promise<void> {
-    const channelName = getChannelForFormat(session.format);
-    const webhookUrl = await getWebhookUrl(channelName);
-    if (!webhookUrl) return;
-
     const voice = getVoice(entry.speaker);
     const username = voice
         ? `${voice.symbol} ${voice.displayName}`
@@ -96,30 +63,23 @@ export async function postConversationTurn(
 
     await postToWebhook({
         webhookUrl,
-        threadId,
         username,
+        avatarUrl: getAgentAvatarUrl(entry.speaker),
         content: entry.dialogue,
     });
 }
 
 /**
- * Post a summary embed when the conversation ends.
- * Includes turn count, speakers, duration, and a transcript snippet.
+ * Post a summary message when the conversation ends.
  */
 export async function postConversationSummary(
     session: RoundtableSession,
     history: ConversationTurnEntry[],
     status: SessionStatus,
-    threadId: string,
+    webhookUrl: string,
     abortReason?: string,
 ): Promise<void> {
-    const channelName = getChannelForFormat(session.format);
-    const webhookUrl = await getWebhookUrl(channelName);
-    if (!webhookUrl) return;
-
-    const speakers = [
-        ...new Set(history.map((h) => h.speaker)),
-    ];
+    const speakers = [...new Set(history.map((h) => h.speaker))];
     const speakerNames = speakers
         .map((s) => {
             const voice = getVoice(s);
@@ -128,74 +88,37 @@ export async function postConversationSummary(
         .join(', ');
 
     const statusIcon = status === 'completed' ? '✅' : '❌';
-    const title = `${statusIcon} ${session.format} — ${status}`;
-
-    // Last 3 exchanges as transcript snippet
-    const lastExchanges = history
-        .slice(-3)
-        .map((h) => {
-            const voice = getVoice(h.speaker);
-            const name = voice?.displayName ?? h.speaker;
-            return `**${name}:** ${h.dialogue}`;
-        })
-        .join('\n');
-
-    const fields: DiscordEmbed['fields'] = [
-        { name: 'Turns', value: `${history.length}`, inline: true },
-        { name: 'Speakers', value: speakerNames, inline: true },
-    ];
+    let content = `${statusIcon} **${session.format}** — *${status}* · ${history.length} turns\n-# ${speakerNames}`;
 
     if (abortReason) {
-        fields.push({
-            name: 'Abort Reason',
-            value: abortReason.slice(0, 200),
-            inline: false,
-        });
+        content += `\n> ⚠️ *${abortReason}*`;
     }
-
-    if (lastExchanges) {
-        fields.push({
-            name: 'Last Exchanges',
-            value: lastExchanges.slice(0, 1000),
-            inline: false,
-        });
-    }
-
-    const embed: DiscordEmbed = {
-        title,
-        color: status === 'completed' ? 0xa6e3a1 : 0xf38ba8,
-        fields,
-        footer: { text: `Session ${session.id}` },
-        timestamp: new Date().toISOString(),
-    };
 
     await postToWebhook({
         webhookUrl,
-        threadId,
         username: '📡 Subcult Roundtable',
-        embeds: [embed],
+        content,
     });
 }
 
 /**
- * Post an artifact embed to the conversation's Discord thread.
- * Called after the artifact synthesizer agent session completes.
+ * Post an artifact to the channel.
+ * Called after the artifact synthesizer completes.
+ * Splits long artifacts into multiple messages to avoid Discord's 2000 char limit.
  */
 export async function postArtifactToDiscord(
     roundtableSessionId: string,
     format: string,
     artifactText: string,
 ): Promise<void> {
-    // Look up thread ID from the roundtable session metadata
+    const { sql } = await import('@/lib/db');
+
     const [session] = await sql<
-        [{ metadata: Record<string, unknown>; format: string } | undefined]
+        [{ format: string } | undefined]
     >`
-        SELECT metadata, format FROM ops_roundtable_sessions
+        SELECT format FROM ops_roundtable_sessions
         WHERE id = ${roundtableSessionId}
     `;
-
-    const threadId = session?.metadata?.discordThreadId as string | undefined;
-    if (!threadId) return;
 
     const channelName = getChannelForFormat(
         (session?.format ?? format) as RoundtableSession['format'],
@@ -203,29 +126,50 @@ export async function postArtifactToDiscord(
     const webhookUrl = await getWebhookUrl(channelName);
     if (!webhookUrl) return;
 
-    // Truncate to Discord embed limit (4096 for description, leave margin)
-    const truncated =
-        artifactText.length > 3800
-            ? artifactText.slice(0, 3800) + '\n\n*...truncated*'
-            : artifactText;
+    const username = '📋 Subcult Artifact';
 
-    const embed: DiscordEmbed = {
-        title: '📋 Artifact',
-        description: truncated,
-        color: 0x74c7ec, // mux blue
-        footer: { text: `Source: ${roundtableSessionId}` },
-        timestamp: new Date().toISOString(),
-    };
+    // Split into chunks that fit Discord's 2000 char limit
+    const header = '📋 **Artifact**\n';
+    const maxChunk = 2000 - header.length - 10; // margin for safety
+    const chunks = splitAtBoundaries(artifactText, maxChunk);
 
-    await postToWebhook({
-        webhookUrl,
-        threadId,
-        username: '📋 Subcult Artifact',
-        embeds: [embed],
-    });
+    for (let i = 0; i < chunks.length; i++) {
+        const prefix = i === 0 ? header : '';
+        const content = `${prefix}${chunks[i]}`;
+        await postToWebhook({ webhookUrl, username, content });
+    }
 
     log.info('Artifact posted to Discord', {
         roundtableSessionId,
-        threadId,
+        chunks: chunks.length,
     });
+}
+
+/** Split text into chunks at paragraph/line boundaries to stay under maxLen. */
+function splitAtBoundaries(text: string, maxLen: number): string[] {
+    if (text.length <= maxLen) return [text];
+
+    const chunks: string[] = [];
+    let remaining = text;
+
+    while (remaining.length > 0) {
+        if (remaining.length <= maxLen) {
+            chunks.push(remaining);
+            break;
+        }
+
+        // Try to split at a paragraph break
+        let splitIdx = remaining.lastIndexOf('\n\n', maxLen);
+        // Fall back to any newline
+        if (splitIdx <= 0) splitIdx = remaining.lastIndexOf('\n', maxLen);
+        // Last resort: split at space
+        if (splitIdx <= 0) splitIdx = remaining.lastIndexOf(' ', maxLen);
+        // Absolute fallback: hard cut
+        if (splitIdx <= 0) splitIdx = maxLen;
+
+        chunks.push(remaining.slice(0, splitIdx));
+        remaining = remaining.slice(splitIdx).replace(/^\n+/, '');
+    }
+
+    return chunks;
 }

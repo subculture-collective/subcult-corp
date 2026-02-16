@@ -10,7 +10,6 @@ import {
     getHistory,
     buildLLMContext,
     resetConversation,
-    updateConversationMode,
 } from '../../src/lib/sanctum/conversation-manager.ts';
 import {
     routeMessage,
@@ -21,6 +20,10 @@ import {
     executeSummon,
     generateCrossTalk,
 } from '../../src/lib/sanctum/cross-talk.ts';
+import {
+    shouldDistill,
+    distillSanctumMemories,
+} from '../../src/lib/sanctum/memory-distiller.ts';
 import {
     enqueueConversation,
     orchestrateConversation,
@@ -307,6 +310,14 @@ async function handleChatSend(client, msg) {
                 },
             });
         }
+    }
+
+    // Memory distillation — extract lasting memories from the conversation
+    // Runs async (fire-and-forget) every N agent messages
+    if (await shouldDistill(conversation.id)) {
+        distillSanctumMemories(conversation.id).catch(err => {
+            log.error('Sanctum memory distillation failed', { error: err, conversationId: conversation.id });
+        });
     }
 }
 

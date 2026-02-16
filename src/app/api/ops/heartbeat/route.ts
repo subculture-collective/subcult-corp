@@ -279,6 +279,36 @@ export async function GET(req: NextRequest) {
             log.error('Rebellion resolution check failed', { error: err });
         }
 
+        // ── Phase 14: Watercooler drops (waking hours, 15% probability) ──
+        try {
+            const nowUtc = new Date();
+            const cstHour = (nowUtc.getUTCHours() - 6 + 24) % 24;
+            if (cstHour >= 8 && cstHour < 22) {
+                if (Math.random() < 0.15) {
+                    const { runWatercoolerDrop } = await import(
+                        '@/lib/discord/watercooler-drop'
+                    );
+                    const dropped = await runWatercoolerDrop();
+                    results.watercooler = dropped
+                        ? { posted: true, agent: dropped }
+                        : { posted: false, reason: 'skipped_or_deduped' };
+                } else {
+                    results.watercooler = {
+                        posted: false,
+                        reason: 'probability_skip',
+                    };
+                }
+            } else {
+                results.watercooler = {
+                    posted: false,
+                    reason: 'outside_waking_hours',
+                };
+            }
+        } catch (err) {
+            results.watercooler = { error: (err as Error).message };
+            log.error('Watercooler drop failed', { error: err });
+        }
+
         const durationMs = Date.now() - startTime;
 
         // ── Write audit log + heartbeat event ──

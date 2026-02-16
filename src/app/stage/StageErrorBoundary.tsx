@@ -55,6 +55,33 @@ export function StageErrorBoundary({ children }: { children: ReactNode }) {
  * Wrap any section of the Stage in its own error boundary
  * so a crash in one panel won't take down the whole page.
  */
+function SectionErrorFallback({
+    error,
+    resetErrorBoundary,
+    label,
+}: {
+    error: unknown;
+    resetErrorBoundary: () => void;
+    label: string;
+}) {
+    return (
+        <div className='rounded-lg border border-zinc-800 bg-zinc-900/50 p-4'>
+            <p className='text-sm text-zinc-400 mb-1'>
+                <span className='text-accent-red'>Error</span> in {label}
+            </p>
+            <p className='text-xs text-zinc-500 font-mono mb-2'>
+                {error instanceof Error ? error.message : String(error)}
+            </p>
+            <button
+                onClick={resetErrorBoundary}
+                className='text-xs text-accent hover:text-accent/80 cursor-pointer'
+            >
+                Retry
+            </button>
+        </div>
+    );
+}
+
 export function SectionErrorBoundary({
     children,
     label,
@@ -64,27 +91,8 @@ export function SectionErrorBoundary({
 }) {
     return (
         <ErrorBoundary
-            FallbackComponent={({
-                error,
-                resetErrorBoundary,
-            }: {
-                error: unknown;
-                resetErrorBoundary: () => void;
-            }) => (
-                <div className='rounded-lg border border-zinc-800 bg-zinc-900/50 p-4'>
-                    <p className='text-sm text-zinc-400 mb-1'>
-                        <span className='text-accent-red'>Error</span> in {label}
-                    </p>
-                    <p className='text-xs text-zinc-500 font-mono mb-2'>
-                        {error instanceof Error ? error.message : String(error)}
-                    </p>
-                    <button
-                        onClick={resetErrorBoundary}
-                        className='text-xs text-accent hover:text-accent/80'
-                    >
-                        Retry
-                    </button>
-                </div>
+            FallbackComponent={props => (
+                <SectionErrorFallback {...props} label={label} />
             )}
         >
             {children}

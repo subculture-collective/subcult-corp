@@ -11,6 +11,7 @@ import {
 } from './hooks';
 import { AGENTS } from '@/lib/agents';
 import type { AgentId, MemoryType, MemoryEntry } from '@/lib/types';
+import { AgentAvatar } from './AgentAvatar';
 
 type ExplorerTab = 'memories' | 'archaeology';
 
@@ -128,7 +129,7 @@ function ConfidenceBar({ value }: { value: number }) {
     const color =
         pct >= 80 ? 'bg-accent-green'
         : pct >= 60 ? 'bg-accent-yellow'
-        : pct >= 40 ? 'bg-accent-orange'
+        : pct >= 40 ? 'bg-accent-peach'
         : 'bg-accent-red';
 
     return (
@@ -173,12 +174,14 @@ function AgentFilterTabs({
                 <button
                     key={agent.id}
                     onClick={() => onChange(agent.id)}
-                    className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                    className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium transition-colors hover:bg-zinc-800 ${
                         selected === agent.id ?
-                            `bg-zinc-700 ${agent.tailwindTextColor}`
-                        :   `${agent.tailwindTextColor}/50 hover:${agent.tailwindTextColor} hover:bg-zinc-800`
+                            'bg-zinc-700'
+                        :   'opacity-50 hover:opacity-80'
                     }`}
+                    style={{ color: agent.color }}
                 >
+                    <AgentAvatar agentId={agent.id} size='sm' showBorder={selected === agent.id} />
                     {agent.displayName}
                 </button>
             ))}
@@ -620,9 +623,9 @@ function MemoryCard({
                     </div>
                 </div>
 
-                {/* Agent dot + icon */}
-                <div className='flex flex-col items-center gap-0.5 shrink-0 w-10'>
-                    <span className='text-sm'>{typeCfg.icon}</span>
+                {/* Agent avatar */}
+                <div className='flex flex-col items-center gap-1 shrink-0 w-12'>
+                    <AgentAvatar agentId={memory.agent_id} size='sm' />
                     <span
                         className={`text-[9px] font-semibold ${textColor} uppercase tracking-wide`}
                     >

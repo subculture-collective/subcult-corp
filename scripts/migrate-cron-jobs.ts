@@ -251,8 +251,8 @@ function computeNextFireAt(cronExpr: string, timezone: string): Date {
 function matchField(
     field: string,
     value: number,
-    _min: number,
-    _max: number,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- cron-field contract signature
+    ..._bounds: number[]
 ): boolean {
     if (field === '*') return true;
     if (field.startsWith('*/')) return value % parseInt(field.slice(2)) === 0;
