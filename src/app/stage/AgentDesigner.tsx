@@ -26,12 +26,28 @@ const STATUS_TABS: {
     label: string;
     icon: ReactNode;
 }[] = [
-    { key: 'all', label: 'All', icon: <ClipboardListIcon className='w-4 h-4' /> },
+    {
+        key: 'all',
+        label: 'All',
+        icon: <ClipboardListIcon className='w-4 h-4' />,
+    },
     { key: 'voting', label: 'Voting', icon: <VoteIcon className='w-4 h-4' /> },
-    { key: 'approved', label: 'Approved', icon: <CheckCircleIcon className='w-4 h-4' /> },
+    {
+        key: 'approved',
+        label: 'Approved',
+        icon: <CheckCircleIcon className='w-4 h-4' />,
+    },
     { key: 'spawned', label: 'Spawned', icon: <DnaIcon className='w-4 h-4' /> },
-    { key: 'rejected', label: 'Rejected', icon: <XCircleIcon className='w-4 h-4' /> },
-    { key: 'proposed', label: 'Proposed', icon: <FileTextIcon className='w-4 h-4' /> },
+    {
+        key: 'rejected',
+        label: 'Rejected',
+        icon: <XCircleIcon className='w-4 h-4' />,
+    },
+    {
+        key: 'proposed',
+        label: 'Proposed',
+        icon: <FileTextIcon className='w-4 h-4' />,
+    },
 ];
 
 const STATUS_COLORS: Record<AgentProposalStatus, string> = {
@@ -380,17 +396,16 @@ function ProposalCard({
                                     disabled={isThisLoading}
                                     className='flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-500/20 text-violet-300 border border-violet-500/30 hover:bg-violet-500/30 transition-colors disabled:opacity-50 cursor-pointer'
                                 >
-                                    {isThisLoading ? (
+                                    {isThisLoading ?
                                         <>
                                             <LoaderIcon className='w-3 h-3 animate-spin' />
                                             Spawning...
                                         </>
-                                    ) : (
-                                        <>
+                                    :   <>
                                             <DnaIcon className='w-3 h-3' />
                                             Spawn Agent
                                         </>
-                                    )}
+                                    }
                                 </button>
                             </div>
                         )}

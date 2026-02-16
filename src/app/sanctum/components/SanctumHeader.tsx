@@ -27,8 +27,7 @@ export function SanctumHeader({
                 >
                     {sidebarOpen ?
                         <XIcon size={20} className='text-white/50' />
-                    :   <MenuIcon size={20} className='text-white/50' />
-                    }
+                    :   <MenuIcon size={20} className='text-white/50' />}
                 </button>
 
                 <div className='flex items-center gap-2'>
@@ -44,9 +43,7 @@ export function SanctumHeader({
             {whisperTarget && (
                 <div className='flex items-center gap-2 px-3 py-1.5 bg-white/[0.04] rounded-full border border-white/[0.08]'>
                     <VolumeOffIcon size={12} className='text-white/40' />
-                    <span className='text-xs text-white/40'>
-                        Whispering to
-                    </span>
+                    <span className='text-xs text-white/40'>Whispering to</span>
                     <span className='text-xs font-medium text-white/70 capitalize'>
                         {whisperTarget}
                     </span>

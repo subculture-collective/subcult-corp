@@ -495,7 +495,11 @@ function FeedTabs({
 }) {
     const tabs: { key: FeedTab; label: string; icon: React.ReactNode }[] = [
         { key: 'all', label: 'All', icon: <ClipboardListIcon size={12} /> },
-        { key: 'conversations', label: 'Conversations', icon: <MessageCircleIcon size={12} /> },
+        {
+            key: 'conversations',
+            label: 'Conversations',
+            icon: <MessageCircleIcon size={12} />,
+        },
         { key: 'missions', label: 'Missions', icon: <TargetIcon size={12} /> },
         { key: 'system', label: 'System', icon: <GearIcon size={12} /> },
         { key: 'sessions', label: 'Sessions', icon: <BotIcon size={12} /> },
@@ -553,7 +557,7 @@ export function EventLogFeed({
 } = {}) {
     const [activeTab, setActiveTab] = useState<FeedTab>('all');
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-    const [showSessions, setShowSessions] = useState(true);
+    const [showSessions, setShowSessions] = useState(false);
     const [selectedSession, setSelectedSession] =
         useState<RoundtableSession | null>(null);
     const [transcriptEventId, setTranscriptEventId] = useState<string | null>(

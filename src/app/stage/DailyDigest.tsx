@@ -157,7 +157,7 @@ function DigestContent({ digest }: { digest: DigestEntry }) {
 // ─── Main Component ───
 
 export function DailyDigest() {
-    const [collapsed, setCollapsed] = useState(false);
+    const [collapsed, setCollapsed] = useState(true);
     const [selectedDate, setSelectedDate] = useState<string | undefined>(
         undefined,
     );

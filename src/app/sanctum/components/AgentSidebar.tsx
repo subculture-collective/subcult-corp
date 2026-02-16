@@ -82,7 +82,10 @@ export function AgentSidebar({
                                             {agent.displayName}
                                         </span>
                                         {isWhisper && (
-                                            <VolumeOffIcon size={10} className='text-white/30' />
+                                            <VolumeOffIcon
+                                                size={10}
+                                                className='text-white/30'
+                                            />
                                         )}
                                     </div>
                                     <span className='text-[10px] text-white/25 leading-none'>
