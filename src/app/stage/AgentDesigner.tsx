@@ -13,7 +13,7 @@ import {
     ClipboardListIcon,
     VoteIcon,
     CheckCircleIcon,
-    DNAIcon,
+    DnaIcon,
     XCircleIcon,
     FileTextIcon,
     LoaderIcon,
@@ -29,7 +29,7 @@ const STATUS_TABS: {
     { key: 'all', label: 'All', icon: <ClipboardListIcon className='w-4 h-4' /> },
     { key: 'voting', label: 'Voting', icon: <VoteIcon className='w-4 h-4' /> },
     { key: 'approved', label: 'Approved', icon: <CheckCircleIcon className='w-4 h-4' /> },
-    { key: 'spawned', label: 'Spawned', icon: <DNAIcon className='w-4 h-4' /> },
+    { key: 'spawned', label: 'Spawned', icon: <DnaIcon className='w-4 h-4' /> },
     { key: 'rejected', label: 'Rejected', icon: <XCircleIcon className='w-4 h-4' /> },
     { key: 'proposed', label: 'Proposed', icon: <FileTextIcon className='w-4 h-4' /> },
 ];
@@ -387,7 +387,7 @@ function ProposalCard({
                                         </>
                                     ) : (
                                         <>
-                                            <DNAIcon className='w-3 h-3' />
+                                            <DnaIcon className='w-3 h-3' />
                                             Spawn Agent
                                         </>
                                     )}
@@ -494,7 +494,7 @@ export function AgentDesigner() {
             <div className='flex items-center justify-between'>
                 <div>
                     <h2 className='text-lg font-semibold text-zinc-100 flex items-center gap-2'>
-                        <DNAIcon className='w-5 h-5 text-violet-400' />
+                        <DnaIcon className='w-5 h-5 text-violet-400' />
                         Agent Designer
                     </h2>
                     <p className='text-xs text-zinc-500 mt-0.5'>

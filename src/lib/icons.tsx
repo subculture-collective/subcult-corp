@@ -457,3 +457,51 @@ export function ChevronDownIcon(props: IconProps) {
         </Icon>
     );
 }
+
+// ─── Additional Icons ───
+
+export function VoteIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d='M9 11V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-5' />
+            <path d='M3 15v4a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2z' />
+            <path d='M14 10h.01' />
+            <path d='M18 10h.01' />
+            <path d='M14 6h.01' />
+            <path d='M18 6h.01' />
+        </Icon>
+    );
+}
+
+export function LoaderIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d='M12 2v4' />
+            <path d='m16.2 7.8 2.9-2.9' />
+            <path d='M18 12h4' />
+            <path d='m16.2 16.2 2.9 2.9' />
+            <path d='M12 18v4' />
+            <path d='m4.9 19.1 2.9-2.9' />
+            <path d='M2 12h4' />
+            <path d='m4.9 4.9 2.9 2.9' />
+        </Icon>
+    );
+}
+
+export function BanIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <circle cx='12' cy='12' r='10' />
+            <path d='m4.9 4.9 14.2 14.2' />
+        </Icon>
+    );
+}
+
+export function SettingsIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d='M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z' />
+            <circle cx='12' cy='12' r='3' />
+        </Icon>
+    );
+}

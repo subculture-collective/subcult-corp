@@ -256,7 +256,7 @@ export function useSanctumSocket(): UseSanctumSocketReturn {
 
     // ── Connection (declared after handleServerEvent) ──
 
-    const connectRef = useRef<() => void>();
+    const connectRef = useRef<() => void>(undefined);
 
     const connect = useCallback(() => {
         if (wsRef.current?.readyState === WebSocket.OPEN) return;
