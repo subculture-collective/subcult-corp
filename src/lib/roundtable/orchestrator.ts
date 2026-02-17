@@ -247,7 +247,7 @@ export async function orchestrateConversation(
     }
 
     // NOTE: Tools are intentionally NOT passed to roundtable LLM calls.
-    // Roundtable dialogue is 120-char max — tool calling is inappropriate here.
+    // Roundtable dialogue is ~500 tokens — tool calling is inappropriate here.
     // Agents already have context (scratchpad, briefing, memories) pre-loaded.
     // Tool use happens in agent sessions, not roundtable conversations.
 
@@ -399,7 +399,7 @@ export async function orchestrateConversation(
                     { role: 'user', content: userPrompt },
                 ],
                 temperature: effectiveTemperature,
-                maxTokens: 300,
+                maxTokens: 500,
                 model: session.model ?? undefined,
                 trackingContext: {
                     agentId: speaker,

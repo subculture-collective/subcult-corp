@@ -15,12 +15,15 @@ export function OfficeWhiteboard({
     stats: SystemStats | null;
     onClick?: () => void;
 }) {
+    // Content occupies 512x320 within 512x512 power-of-2 canvas.
+    // UV repeat.y = 320/512 = 0.625 to only show the content portion.
     const texture = useMemo(() => {
         const canvas = document.createElement('canvas');
         canvas.width = 512;
-        canvas.height = 320;
+        canvas.height = 512;
         const ctx = canvas.getContext('2d')!;
 
+        // Draw content in top 320px (bottom 192px stays transparent)
         // Board background
         ctx.fillStyle = '#f5f5f0';
         ctx.fillRect(0, 0, 512, 320);
@@ -113,7 +116,12 @@ export function OfficeWhiteboard({
             ctx.fillText('Loading data...', 256, 120);
         }
 
-        return new THREE.CanvasTexture(canvas);
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        // Only show the top 320/512 of the texture (content region)
+        tex.repeat.set(1, 320 / 512);
+        tex.offset.set(0, 1 - 320 / 512);
+        return tex;
     }, [stats]);
 
     // Dispose texture on unmount or when stats change
@@ -124,7 +132,12 @@ export function OfficeWhiteboard({
     }, [texture]);
 
     return (
-        <group position={PROPS.whiteboard} onClick={onClick}>
+        <group
+            position={PROPS.whiteboard}
+            onClick={(e) => { e.stopPropagation(); onClick?.(); }}
+            onPointerOver={() => { document.body.style.cursor = 'pointer'; }}
+            onPointerOut={() => { document.body.style.cursor = 'auto'; }}
+        >
             {/* Board frame */}
             <mesh position={[0, 0, -0.03]}>
                 <boxGeometry args={[4.5, 2.8, 0.06]} />

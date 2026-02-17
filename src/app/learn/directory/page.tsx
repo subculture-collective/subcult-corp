@@ -1,12 +1,17 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { directory } from '@/data/learn/directory';
-import { Breadcrumbs, CategoryBadge } from '../components';
+import { Breadcrumbs, CategoryBadge, ItemListJsonLd } from '../components';
+
+const BASE = 'https://subcorp.subcult.tv';
 
 export const metadata: Metadata = {
     title: 'AI Agent Tools Directory',
     description:
         'Curated directory of frameworks, platforms, and protocols for building AI agent systems.',
+    alternates: {
+        canonical: '/learn/directory',
+    },
 };
 
 const CATEGORIES = [
@@ -33,6 +38,14 @@ export default async function DirectoryIndex(props: {
 
     return (
         <>
+            <ItemListJsonLd
+                name='AI Agent Tools Directory'
+                items={directory.map(e => ({
+                    url: `${BASE}/learn/directory/${e.slug}`,
+                    name: e.name,
+                }))}
+            />
+
             <Breadcrumbs
                 items={[
                     { label: 'Learn', href: '/learn' },

@@ -8,9 +8,7 @@ import type { AgentId, AgentEvent, Mission } from '@/lib/types';
 import {
     DESK_CONFIGS,
     PROPS,
-    AGENT_MOVE_SPEED,
-    AGENT_ARRIVED_THRESHOLD,
-    SPEECH_BUBBLE_DURATION_FRAMES,
+    SPEECH_BUBBLE_DURATION_MS,
     BEHAVIOR_UPDATE_INTERVAL_MIN,
     BEHAVIOR_UPDATE_INTERVAL_MAX,
     type AgentBehavior,
@@ -29,9 +27,8 @@ export interface Agent3DState {
     position: [number, number, number];
     targetPosition: [number, number, number];
     behavior: AgentBehavior;
-    frame: number;
     speechBubble?: string;
-    speechTick: number;
+    speechExpiresAt: number; // Date.now() timestamp when bubble should hide
     deskPosition: [number, number, number];
 }
 
@@ -62,9 +59,8 @@ function createInitialAgents(): Agent3DState[] {
             position: [cfg.position[0], 0.01, cfg.position[2] + 1.2] as [number, number, number],
             targetPosition: [cfg.position[0], 0.01, cfg.position[2] + 1.2] as [number, number, number],
             behavior: 'working' as AgentBehavior,
-            frame: 0,
             speechBubble: undefined,
-            speechTick: 0,
+            speechExpiresAt: 0,
             deskPosition: cfg.position,
         };
     });
@@ -175,9 +171,9 @@ export function useOfficeState() {
 
                     if (newBehavior === 'walking') {
                         targetPosition = [
-                            -8 + Math.random() * 16,
+                            -16 + Math.random() * 32,
                             0.01,
-                            -2 + Math.random() * 6,
+                            -8 + Math.random() * 18,
                         ];
                     } else if (newBehavior === 'coffee') {
                         targetPosition = [PROPS.coffeeMachine[0] - 0.5, 0.01, PROPS.coffeeMachine[2] + 1];
@@ -198,7 +194,7 @@ export function useOfficeState() {
                         behavior: newBehavior,
                         targetPosition,
                         speechBubble,
-                        speechTick: speechBubble ? SPEECH_BUBBLE_DURATION_FRAMES : 0,
+                        speechExpiresAt: speechBubble ? Date.now() + SPEECH_BUBBLE_DURATION_MS : 0,
                     };
                 }),
             );
@@ -207,37 +203,19 @@ export function useOfficeState() {
         return () => clearInterval(interval);
     }, [deriveBehavior, draggingAgent, recentTurns]);
 
-    // Animation tick — move agents toward targets
+    // Speech bubble cleanup — clear expired bubbles (visual position is handled by AgentSprite's useFrame)
     useInterval(() => {
-        setAgents(prev =>
-            prev.map(agent => {
-                if (draggingAgent === agent.id) return { ...agent, frame: agent.frame + 1 };
-
-                const dx = agent.targetPosition[0] - agent.position[0];
-                const dz = agent.targetPosition[2] - agent.position[2];
-                const dist = Math.sqrt(dx * dx + dz * dz);
-
-                let newPosition = agent.position;
-                if (dist > AGENT_ARRIVED_THRESHOLD) {
-                    newPosition = [
-                        agent.position[0] + (dx / dist) * Math.min(AGENT_MOVE_SPEED, dist),
-                        0.01,
-                        agent.position[2] + (dz / dist) * Math.min(AGENT_MOVE_SPEED, dist),
-                    ];
-                }
-
-                const newSpeechTick = agent.speechTick > 0 ? agent.speechTick - 1 : 0;
-
-                return {
-                    ...agent,
-                    position: newPosition,
-                    frame: agent.frame + 1,
-                    speechBubble: newSpeechTick > 0 ? agent.speechBubble : undefined,
-                    speechTick: newSpeechTick,
-                };
-            }),
-        );
-    }, 50);
+        setAgents(prev => {
+            const now = Date.now();
+            const hasExpired = prev.some(a => a.speechBubble && now >= a.speechExpiresAt);
+            if (!hasExpired) return prev;
+            return prev.map(a =>
+                a.speechBubble && now >= a.speechExpiresAt
+                    ? { ...a, speechBubble: undefined, speechExpiresAt: 0 }
+                    : a,
+            );
+        });
+    }, 500);
 
     // Move agent during drag
     const moveAgent = useCallback((agentId: AgentId, x: number, z: number) => {

@@ -67,30 +67,68 @@ async function pollAgentSessions(): Promise<boolean> {
 
         // Post artifact to Discord if this was a conversation synthesis session
         if (session.source === 'conversation' && session.source_id) {
-            try {
-                const { postArtifactToDiscord } =
-                    await import('../../src/lib/discord/roundtable');
-                // Read the completed session to get the result text
-                const [completed] = await sql<
-                    [{ result: Record<string, unknown> | null }]
-                >`
-                    SELECT result FROM ops_agent_sessions WHERE id = ${session.id}
-                `;
-                const artifactText = (
-                    (completed?.result as Record<string, string>)?.text ??
-                    (completed?.result as Record<string, string>)?.output ??
-                    ''
-                ).trim();
-                // Only post if there's meaningful content (not just XML residue or empty)
-                if (artifactText && artifactText.length > 20) {
+            // Read the completed session to get the result text
+            const [completed] = await sql<
+                [{ result: Record<string, unknown> | null }]
+            >`
+                SELECT result FROM ops_agent_sessions WHERE id = ${session.id}
+            `;
+            const artifactText = (
+                (completed?.result as Record<string, string>)?.text ??
+                (completed?.result as Record<string, string>)?.output ??
+                ''
+            ).trim();
+
+            // Post to Discord
+            if (artifactText && artifactText.length > 20) {
+                try {
+                    const { postArtifactToDiscord } =
+                        await import('../../src/lib/discord/roundtable');
                     await postArtifactToDiscord(
                         session.source_id,
                         '',
                         artifactText,
                     );
+                } catch {
+                    // Non-fatal — Discord posting should never stall the worker
                 }
-            } catch {
-                // Non-fatal — Discord posting should never stall the worker
+            }
+
+            // Extract action items from artifact and create mission proposals
+            if (artifactText && artifactText.length > 50) {
+                try {
+                    // Look up the roundtable session to get format and topic
+                    const [rtSession] = await sql<
+                        [{ format: string; topic: string } | undefined]
+                    >`
+                        SELECT format, topic FROM ops_roundtable_sessions
+                        WHERE id = ${session.source_id}
+                    `;
+                    if (rtSession) {
+                        const { extractActionsFromArtifact } =
+                            await import('../../src/lib/roundtable/action-extractor');
+                        const actionCount = await extractActionsFromArtifact(
+                            session.source_id,
+                            rtSession.format,
+                            artifactText,
+                            rtSession.topic,
+                        );
+                        if (actionCount > 0) {
+                            log.info('Actions extracted from roundtable artifact', {
+                                sessionId: session.id,
+                                roundtableId: session.source_id,
+                                format: rtSession.format,
+                                actionCount,
+                            });
+                        }
+                    }
+                } catch (extractErr) {
+                    // Non-fatal — action extraction should never stall the worker
+                    log.error('Action extraction failed (non-fatal)', {
+                        error: extractErr,
+                        sessionId: session.id,
+                    });
+                }
             }
         }
     } catch (err) {
@@ -689,7 +727,7 @@ async function pollInitiatives(): Promise<boolean> {
                     .join('\n');
         }
 
-        const userPrompt = `Based on your role, personality, and accumulated experience, propose a mission.${memoryContext}\n\nRespond with:\n1. A clear mission title\n2. A brief description of why this matters\n3. 2-4 concrete steps to accomplish it\n\nFormat as JSON: { "title": "...", "description": "...", "steps": [{ "kind": "...", "payload": {} }] }`;
+        const userPrompt = `Based on your role, personality, and accumulated experience, propose a mission.${memoryContext}\n\nRespond with:\n1. A clear mission title\n2. A brief description of why this matters\n3. 2-4 concrete steps to accomplish it\n\nValid step kinds (you MUST use only these exact strings):\n- research_topic: Research a topic using web search\n- scan_signals: Scan for signals and trends\n- draft_essay: Write a long-form piece\n- draft_thread: Write a short thread/post\n- patch_code: Make code changes to the project\n- audit_system: Run system checks and audits\n- critique_content: Review and critique content\n- distill_insight: Synthesize insights from recent work\n- document_lesson: Document knowledge or lessons\n- consolidate_memory: Consolidate and organize memories\n\nFormat as JSON: { "title": "...", "description": "...", "steps": [{ "kind": "<valid_step_kind>", "payload": { "topic": "..." } }] }`;
 
         const result = await llmGenerate({
             messages: [
@@ -714,20 +752,16 @@ async function pollInitiatives(): Promise<boolean> {
         }
 
         if (parsed?.title) {
-            // Create proposal via direct DB insert
-            await sql`
-                INSERT INTO ops_mission_proposals (
-                    agent_id, title, description, proposed_steps,
-                    source, auto_approved
-                ) VALUES (
-                    ${entry.agent_id},
-                    ${parsed.title},
-                    ${parsed.description ?? ''},
-                    ${sql.json(parsed.steps ?? [])}::jsonb,
-                    'initiative',
-                    false
-                )
-            `;
+            // Route through proposal service for auto-approval evaluation
+            const { createProposalAndMaybeAutoApprove } =
+                await import('../../src/lib/ops/proposal-service');
+            await createProposalAndMaybeAutoApprove({
+                agent_id: entry.agent_id,
+                title: parsed.title,
+                description: parsed.description ?? '',
+                proposed_steps: parsed.steps ?? [],
+                source: 'initiative',
+            });
         }
 
         await sql`

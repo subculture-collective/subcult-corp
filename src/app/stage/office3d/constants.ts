@@ -46,45 +46,65 @@ export const AGENT_SKIN_TONES: Record<AgentId, string> = {
 
 // ─── Office Dimensions ───
 export const OFFICE = {
-    width: 20,
-    depth: 10,
+    width: 40,
+    depth: 24,
     wallHeight: 4,
     floorY: 0,
 } as const;
 
-// ─── Desk Positions (isometric grid) ───
+// ─── Desk Positions (pod layout — 3 clusters of 2) ───
 export interface DeskConfig {
     agentId: AgentId;
     position: [number, number, number]; // [x, y, z]
+    rotation?: number; // y-axis rotation in radians
 }
 
 export const DESK_CONFIGS: DeskConfig[] = [
-    { agentId: 'chora',   position: [-7.5, 0, 1] },
-    { agentId: 'subrosa', position: [-4.5, 0, 1] },
-    { agentId: 'thaum',   position: [-1.5, 0, 1] },
-    { agentId: 'primus',  position: [1.5,  0, 1] },
-    { agentId: 'mux',     position: [4.5,  0, 1] },
-    { agentId: 'praxis',  position: [7.5,  0, 1] },
+    // Pod A (left) — chora + subrosa
+    { agentId: 'chora',   position: [-13, 0, 1],  rotation: 0 },
+    { agentId: 'subrosa', position: [-10, 0, 1],  rotation: 0 },
+    // Pod B (center) — thaum + primus
+    { agentId: 'thaum',   position: [-1.5, 0, 1], rotation: 0 },
+    { agentId: 'primus',  position: [1.5,  0, 1], rotation: 0 },
+    // Pod C (right) — mux + praxis
+    { agentId: 'mux',     position: [10, 0, 1],   rotation: 0 },
+    { agentId: 'praxis',  position: [13, 0, 1],   rotation: 0 },
 ];
 
 // ─── Prop Positions ───
 export const PROPS = {
-    coffeeMachine:  [8.5, 0, 3.5] as [number, number, number],
-    serverRack:     [9.2, 0, -3.5] as [number, number, number],
-    plant1:         [-8.5, 0, 3] as [number, number, number],
-    plant2:         [0, 0, 3.5] as [number, number, number],
-    whiteboard:     [3, 2.2, -4.7] as [number, number, number],
-    poster:         [-5, 2.5, -4.7] as [number, number, number],
-    clock:          [0, 3, -4.7] as [number, number, number],
-    window:         [-7.5, 2, -4.7] as [number, number, number],
+    // Break zone (front-left)
+    coffeeMachine:  [-15, 0, 8] as [number, number, number],
+    couch:          [-12, 0, 9] as [number, number, number],
+    // Server corner (back-right)
+    serverRack:     [17, 0, -10] as [number, number, number],
+    serverRack2:    [18.5, 0, -10] as [number, number, number],
+    // Plants scattered
+    plant1:         [-17, 0, 6] as [number, number, number],
+    plant2:         [5, 0, 8] as [number, number, number],
+    plant3:         [16, 0, 4] as [number, number, number],
+    plant4:         [-8, 0, -9] as [number, number, number],
+    // Meeting area (center-back)
+    meetingTable:   [0, 0, -7] as [number, number, number],
+    // Wall decorations
+    whiteboard:     [5, 2.2, -11.8] as [number, number, number],
+    poster:         [-8, 2.5, -11.8] as [number, number, number],
+    clock:          [-2, 3, -11.8] as [number, number, number],
+    window:         [-14, 2, -11.8] as [number, number, number],
+    window2:        [14, 2, -11.8] as [number, number, number],
+    // Bookshelf (back wall)
+    bookshelf:      [10, 0, -11] as [number, number, number],
+    // Partition walls between pods
+    partition1:     [-6.5, 0, 1.5] as [number, number, number],
+    partition2:     [6.5, 0, 1.5] as [number, number, number],
 } as const;
 
 // ─── Camera Settings ───
 export const CAMERA = {
-    position: [15, 15, 15] as [number, number, number],
-    zoom: 40,
+    position: [30, 25, 30] as [number, number, number],
+    zoom: 22,
     near: 0.1,
-    far: 100,
+    far: 200,
 } as const;
 
 // ─── Agent Behavior Types ───
@@ -101,14 +121,14 @@ export const BEHAVIOR_EMOJIS: Record<AgentBehavior, string> = {
 };
 
 // ─── Animation & Behavior Constants ───
-export const AGENT_MOVE_SPEED = 0.08;
-export const AGENT_ARRIVED_THRESHOLD = 0.1; // distance in units
-export const SPEECH_BUBBLE_DURATION_FRAMES = 40; // ~2 seconds at 20 FPS
-export const BEHAVIOR_UPDATE_INTERVAL_MIN = 8000; // ms
-export const BEHAVIOR_UPDATE_INTERVAL_MAX = 13000; // ms
+export const AGENT_MOVE_SPEED = 2.4; // units per second
+export const AGENT_EASE_DISTANCE = 1.0; // start easing within this distance of target
+export const SPEECH_BUBBLE_DURATION_MS = 2000;
+export const BEHAVIOR_UPDATE_INTERVAL_MIN = 8000;
+export const BEHAVIOR_UPDATE_INTERVAL_MAX = 13000;
 export const AGENT_MEMORY_BAR_MULTIPLIER = 10;
 export const AGENT_MEMORY_BAR_MAX_WIDTH = 100;
-export const SERVER_RACK_ACTIVE_LEDS = 3; // Number of blinking LEDs on server rack
+export const SERVER_RACK_ACTIVE_LEDS = 3;
 
 // ─── Sky Colors by Time of Day ───
 export const SKY_COLORS = {

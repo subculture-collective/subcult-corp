@@ -1,7 +1,7 @@
 // Stage — main dashboard page composing all components
 'use client';
 
-import { useState, Suspense, useCallback } from 'react';
+import { useState, useEffect, Suspense, useCallback } from 'react';
 import { StageHeader, type ViewMode } from './StageHeader';
 import type { ConnectionStatus } from './hooks';
 import type { RoundtableSession, RoundtableTurn } from '@/lib/types';
@@ -65,6 +65,22 @@ export default function StagePage() {
         setReplayTurns([]);
         setCurrentTurnIndex(0);
     }, []);
+
+    // ── Fullscreen 3D state ──
+    const [office3DFullscreen, setOffice3DFullscreen] = useState(false);
+    const toggleOffice3DFullscreen = useCallback(() => {
+        setOffice3DFullscreen(prev => !prev);
+    }, []);
+
+    // Close fullscreen on Escape
+    useEffect(() => {
+        if (!office3DFullscreen) return;
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setOffice3DFullscreen(false);
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [office3DFullscreen]);
 
     return (
         <StageErrorBoundary>
@@ -165,7 +181,10 @@ export default function StagePage() {
                                         currentTurnIndex={currentTurnIndex}
                                         isReplaying={isReplaying}
                                     />
-                                :   <Office3DScene />}
+                                :   <Office3DScene
+                                        fullscreen={office3DFullscreen}
+                                        onToggleFullscreen={toggleOffice3DFullscreen}
+                                    />}
                             </SectionErrorBoundary>
 
                             {/* Replay controller overlay */}

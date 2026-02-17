@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { comparisons } from '@/data/learn/comparisons';
+import { comparisons, comparisonLabelMap } from '@/data/learn/comparisons';
 import { glossary } from '@/data/learn/glossary';
 import { directory } from '@/data/learn/directory';
 import {
@@ -96,8 +96,7 @@ export default async function CompareDetail(props: {
     const entry = comparisons.find(e => e.slug === slug);
     if (!entry) notFound();
 
-    const labelMap: Record<string, string> = {};
-    for (const e of comparisons) labelMap[e.slug] = e.title;
+    const labelMap = comparisonLabelMap;
 
     const { glossaryLinks, directoryLinks } = buildCrossSectionLinks(entry);
 

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { glossary } from '@/data/learn/glossary';
+import { glossary, glossaryLabelMap } from '@/data/learn/glossary';
 import { directory } from '@/data/learn/directory';
 import {
     Breadcrumbs,
@@ -45,8 +45,7 @@ export default async function GlossaryDetail(props: {
     const entry = glossary.find(e => e.slug === slug);
     if (!entry) notFound();
 
-    const labelMap: Record<string, string> = {};
-    for (const e of glossary) labelMap[e.slug] = e.term;
+    const labelMap = glossaryLabelMap;
 
     // Build cross-section links to directory
     const directoryLinks: { href: string; label: string }[] = [];

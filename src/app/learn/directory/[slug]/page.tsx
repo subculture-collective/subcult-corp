@@ -1,13 +1,18 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { directory } from '@/data/learn/directory';
+import { directory, directoryLabelMap } from '@/data/learn/directory';
+import { glossary } from '@/data/learn/glossary';
 import {
     Breadcrumbs,
+    BreadcrumbJsonLd,
     BodyText,
     CategoryBadge,
     RelatedLinks,
+    CrossSectionLinks,
     JsonLd,
 } from '../../components';
+
+const BASE = 'https://subcorp.subcult.tv';
 
 export function generateStaticParams() {
     return directory.map(e => ({ slug: e.slug }));
@@ -25,6 +30,14 @@ export async function generateMetadata(props: {
     };
 }
 
+// Map directory slugs to matching glossary slugs
+const DIRECTORY_TO_GLOSSARY: Record<string, string> = {
+    openclaw: 'openclaw',
+    openrouter: 'openrouter',
+    ollama: 'ollama',
+    'anthropic-mcp': 'mcp-protocol',
+};
+
 export default async function DirectoryDetail(props: {
     params: Promise<{ slug: string }>;
 }) {
@@ -32,8 +45,20 @@ export default async function DirectoryDetail(props: {
     const entry = directory.find(e => e.slug === slug);
     if (!entry) notFound();
 
-    const labelMap: Record<string, string> = {};
-    for (const e of directory) labelMap[e.slug] = e.name;
+    const labelMap = directoryLabelMap;
+
+    // Build cross-section links to glossary
+    const glossaryLinks: { href: string; label: string }[] = [];
+    const gSlug = DIRECTORY_TO_GLOSSARY[entry.slug];
+    if (gSlug) {
+        const gEntry = glossary.find(g => g.slug === gSlug);
+        if (gEntry) {
+            glossaryLinks.push({
+                href: `/learn/glossary/${gSlug}`,
+                label: gEntry.term,
+            });
+        }
+    }
 
     return (
         <>
@@ -45,7 +70,23 @@ export default async function DirectoryDetail(props: {
                     description: entry.shortDesc,
                     url: entry.url,
                     applicationCategory: 'DeveloperApplication',
+                    operatingSystem: 'Cross-platform',
+                    offers: {
+                        '@type': 'Offer',
+                        price: entry.pricing === 'paid' ? undefined : '0',
+                        priceCurrency: 'USD',
+                    },
                 }}
+            />
+            <BreadcrumbJsonLd
+                items={[
+                    { name: 'Learn', url: `${BASE}/learn` },
+                    { name: 'Directory', url: `${BASE}/learn/directory` },
+                    {
+                        name: entry.name,
+                        url: `${BASE}/learn/directory/${entry.slug}`,
+                    },
+                ]}
             />
 
             <Breadcrumbs
@@ -140,6 +181,12 @@ export default async function DirectoryDetail(props: {
                 slugs={entry.related}
                 basePath='/learn/directory'
                 labelMap={labelMap}
+            />
+
+            <CrossSectionLinks
+                sections={[
+                    { title: 'In the Glossary', links: glossaryLinks },
+                ]}
             />
         </>
     );

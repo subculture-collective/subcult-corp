@@ -24,6 +24,10 @@ import {
     proposePolicyChangeTool,
     createProposePolicyChangeExecute,
 } from './tools/propose-policy-change';
+import {
+    proposeMissionTool,
+    createProposeMissionExecute,
+} from './tools/propose-mission';
 
 /** All registered native tools */
 const ALL_TOOLS: NativeTool[] = [
@@ -40,6 +44,7 @@ const ALL_TOOLS: NativeTool[] = [
     scratchpadReadTool,
     scratchpadUpdateTool,
     proposePolicyChangeTool,
+    proposeMissionTool,
 ];
 
 /**
@@ -62,6 +67,13 @@ export function getAgentTools(agentId: AgentId): ToolDefinition[] {
                 return {
                     ...tool,
                     execute: createProposePolicyChangeExecute(agentId),
+                };
+            }
+            // Bind agentId into propose_mission's execute to track proposer
+            if (tool.name === 'propose_mission') {
+                return {
+                    ...tool,
+                    execute: createProposeMissionExecute(agentId),
                 };
             }
             // Bind agentId into memory tools

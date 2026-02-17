@@ -5,18 +5,19 @@ import { useMemo, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { Billboard, Text } from '@react-three/drei';
-import { BEHAVIOR_EMOJIS, COLORS } from './constants';
+import { BEHAVIOR_EMOJIS, COLORS, AGENT_MOVE_SPEED, AGENT_EASE_DISTANCE } from './constants';
 import type { Agent3DState } from './useOfficeState';
 
-// Generate a pixel-art agent sprite texture on canvas
+// Generate a pixel-art agent sprite texture on canvas (32x64 power-of-2)
+// Sprite is drawn in the top 48px; bottom 16px are transparent padding
 function generateAgentTexture(color: string, skinColor: string): THREE.CanvasTexture {
     const canvas = document.createElement('canvas');
     canvas.width = 32;
-    canvas.height = 48;
+    canvas.height = 64;
     const ctx = canvas.getContext('2d')!;
 
-    // Clear
-    ctx.clearRect(0, 0, 32, 48);
+    // Clear entire canvas (bottom 16px stays transparent)
+    ctx.clearRect(0, 0, 32, 64);
 
     // Shadow (ellipse at feet)
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
@@ -56,8 +57,10 @@ function generateAgentTexture(color: string, skinColor: string): THREE.CanvasTex
     ctx.fillRect(17, 10, 2, 2);
 
     const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
     texture.magFilter = THREE.NearestFilter;
     texture.minFilter = THREE.NearestFilter;
+    texture.generateMipmaps = false;
     return texture;
 }
 
@@ -75,6 +78,10 @@ export function AgentSprite({
     onPointerLeave?: () => void;
 }) {
     const groupRef = useRef<THREE.Group>(null);
+    const smoothPos = useRef({ x: agent.position[0], z: agent.position[2] });
+    const agentRef = useRef(agent);
+    agentRef.current = agent;
+
     const texture = useMemo(
         () => generateAgentTexture(agent.color, agent.skinColor),
         [agent.color, agent.skinColor],
@@ -87,16 +94,35 @@ export function AgentSprite({
         };
     }, [texture]);
 
-    // Bob animation
-    useFrame(({ clock }) => {
-        if (groupRef.current) {
-            const bob = agent.behavior === 'walking'
-                ? Math.sin(clock.elapsedTime * 4) * 0.06
-                : agent.behavior === 'celebrating'
-                ? Math.abs(Math.sin(clock.elapsedTime * 6)) * 0.15
-                : Math.sin(clock.elapsedTime * 1.5) * 0.02;
-            groupRef.current.position.y = agent.position[1] + bob;
+    // Smooth position interpolation + bob animation (runs every render frame)
+    useFrame(({ clock }, delta) => {
+        if (!groupRef.current) return;
+        const a = agentRef.current;
+        const sp = smoothPos.current;
+
+        // Interpolate XZ toward target with ease-out
+        const dx = a.targetPosition[0] - sp.x;
+        const dz = a.targetPosition[2] - sp.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+
+        if (dist > 0.01) {
+            // Constant speed, decelerating within AGENT_EASE_DISTANCE of target
+            const speed = dist > AGENT_EASE_DISTANCE
+                ? AGENT_MOVE_SPEED
+                : AGENT_MOVE_SPEED * (dist / AGENT_EASE_DISTANCE);
+            const step = Math.min(speed * delta, dist);
+            sp.x += (dx / dist) * step;
+            sp.z += (dz / dist) * step;
         }
+
+        // Bob animation
+        const bob = a.behavior === 'walking'
+            ? Math.sin(clock.elapsedTime * 4) * 0.06
+            : a.behavior === 'celebrating'
+            ? Math.abs(Math.sin(clock.elapsedTime * 6)) * 0.15
+            : Math.sin(clock.elapsedTime * 1.5) * 0.02;
+
+        groupRef.current.position.set(sp.x, 0.01 + bob, sp.z);
     });
 
     return (
@@ -112,13 +138,14 @@ export function AgentSprite({
                     onPointerEnter={onPointerEnter}
                     onPointerLeave={onPointerLeave}
                     position={[0, 0.7, 0]}
+                    geometry={SPRITE_PLANE}
                 >
-                    <planeGeometry args={[0.8, 1.2]} />
-                    <meshStandardMaterial
+                    <meshBasicMaterial
                         map={texture}
                         transparent
                         alphaTest={0.1}
                         side={THREE.DoubleSide}
+                        toneMapped={false}
                     />
                 </mesh>
 
@@ -146,8 +173,7 @@ export function AgentSprite({
 
                 {/* Glow ring for chatting/celebrating */}
                 {(agent.behavior === 'chatting' || agent.behavior === 'celebrating') && (
-                    <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                        <ringGeometry args={[0.4, 0.55, 16]} />
+                    <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]} geometry={GLOW_RING}>
                         <meshStandardMaterial
                             color={agent.color}
                             transparent
@@ -159,8 +185,8 @@ export function AgentSprite({
                     </mesh>
                 )}
 
-                {/* Speech bubble */}
-                {agent.speechBubble && (
+                {/* Speech bubble (check timestamp expiry for immediate hide) */}
+                {agent.speechBubble && Date.now() < agent.speechExpiresAt && (
                     <SpeechBubble3D
                         text={agent.speechBubble}
                         color={agent.color}
@@ -171,23 +197,28 @@ export function AgentSprite({
     );
 }
 
+// Shared geometry for speech bubble border — avoids allocating a new PlaneGeometry on every mount
+const BUBBLE_PLANE = new THREE.PlaneGeometry(2.2, 0.5);
+const BUBBLE_EDGES = new THREE.EdgesGeometry(BUBBLE_PLANE);
+const SPRITE_PLANE = new THREE.PlaneGeometry(0.8, 1.6);
+const GLOW_RING = new THREE.RingGeometry(0.4, 0.55, 16);
+
 function SpeechBubble3D({ text, color }: { text: string; color: string }) {
     const truncated = text.length > 40 ? text.slice(0, 38) + '…' : text;
 
     return (
         <group position={[0, 1.9, 0]}>
             {/* Bubble background */}
-            <mesh>
-                <planeGeometry args={[2.2, 0.5]} />
-                <meshStandardMaterial
+            <mesh geometry={BUBBLE_PLANE}>
+                <meshBasicMaterial
                     color={COLORS.mantle}
                     transparent
                     opacity={0.92}
+                    toneMapped={false}
                 />
             </mesh>
             {/* Border */}
-            <lineSegments>
-                <edgesGeometry args={[new THREE.PlaneGeometry(2.2, 0.5)]} />
+            <lineSegments geometry={BUBBLE_EDGES}>
                 <lineBasicMaterial color={color} transparent opacity={0.8} />
             </lineSegments>
             {/* Text */}

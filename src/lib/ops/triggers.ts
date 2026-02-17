@@ -384,8 +384,11 @@ async function checkWorkStalled(
             reason: `${count} step(s) stalled for ${stallMinutes}+ minutes`,
             proposal: {
                 agent_id: targetAgent,
-                title: `Reframe stalled work`,
-                proposed_steps: [{ kind: 'distill_insight' }],
+                title: `Diagnose and unblock stalled work`,
+                description: `${count} step(s) have been running for ${stallMinutes}+ minutes without progress. Audit what is blocking them and take corrective action.`,
+                proposed_steps: [
+                    { kind: 'audit_system', payload: { scope: 'stalled_steps' } },
+                ],
                 source: 'trigger',
             },
         };
@@ -470,8 +473,10 @@ async function checkProposalReady(
             proposal: {
                 agent_id: targetAgent,
                 title: `Review and action pending proposals`,
-                description: `${pending.length} proposal(s) waiting: ${pending.map(p => p.title).join(', ')}`,
-                proposed_steps: [{ kind: 'review_policy' }],
+                description: `${pending.length} proposal(s) waiting: ${pending.map(p => p.title).join(', ')}. Review each proposal, approve actionable ones, reject stale ones.`,
+                proposed_steps: [
+                    { kind: 'audit_system', payload: { scope: 'pending_proposals' } },
+                ],
                 source: 'trigger',
             },
         };
