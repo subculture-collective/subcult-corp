@@ -3,6 +3,7 @@ import { postToWebhook } from './client';
 import { getWebhookUrl, getChannelForFormat } from './channels';
 import { getVoice } from '../roundtable/voices';
 import { getAgentAvatarUrl } from './avatars';
+import { formatForDiscord } from './format';
 import { logger } from '@/lib/logger';
 import type {
     RoundtableSession,
@@ -128,10 +129,13 @@ export async function postArtifactToDiscord(
 
     const username = '📋 Subcult Artifact';
 
+    // Convert markdown tables to ASCII box tables for Discord
+    const formatted = formatForDiscord(artifactText);
+
     // Split into chunks that fit Discord's 2000 char limit
     const header = '📋 **Artifact**\n';
     const maxChunk = 2000 - header.length - 10; // margin for safety
-    const chunks = splitAtBoundaries(artifactText, maxChunk);
+    const chunks = splitAtBoundaries(formatted, maxChunk);
 
     for (let i = 0; i < chunks.length; i++) {
         const prefix = i === 0 ? header : '';
@@ -145,7 +149,8 @@ export async function postArtifactToDiscord(
     });
 }
 
-/** Split text into chunks at paragraph/line boundaries to stay under maxLen. */
+/** Split text into chunks at paragraph/line boundaries to stay under maxLen.
+ *  Avoids splitting inside code blocks (``` ... ```) so tables stay intact. */
 function splitAtBoundaries(text: string, maxLen: number): string[] {
     if (text.length <= maxLen) return [text];
 
@@ -156,6 +161,21 @@ function splitAtBoundaries(text: string, maxLen: number): string[] {
         if (remaining.length <= maxLen) {
             chunks.push(remaining);
             break;
+        }
+
+        // Find code block boundaries in the candidate window
+        const window = remaining.slice(0, maxLen);
+        const codeBlockStart = window.lastIndexOf('```\n');
+        const codeBlockEnd = window.lastIndexOf('\n```');
+
+        // If we're inside an unclosed code block, split before it starts
+        if (codeBlockStart > codeBlockEnd && codeBlockStart > 0) {
+            const splitIdx = remaining.lastIndexOf('\n\n', codeBlockStart);
+            if (splitIdx > 0) {
+                chunks.push(remaining.slice(0, splitIdx));
+                remaining = remaining.slice(splitIdx).replace(/^\n+/, '');
+                continue;
+            }
         }
 
         // Try to split at a paragraph break

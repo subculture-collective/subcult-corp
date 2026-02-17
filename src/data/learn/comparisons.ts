@@ -266,3 +266,7 @@ export const comparisons: ComparisonEntry[] = [
         related: ['langchain-vs-autogen', 'openclaw-vs-langchain', 'ollama-vs-cloud-llm'],
     },
 ];
+
+export const comparisonLabelMap: Record<string, string> = Object.fromEntries(
+    comparisons.map(e => [e.slug, e.title])
+);

@@ -8,6 +8,7 @@ export const directory: DirectoryEntry[] = [
             'Open-source AI gateway that connects agents to tools and messaging channels.',
         body: 'OpenClaw is an open-source gateway for AI agents. It provides a bridge between your agent logic and external tools (called skills), exposed over an OpenAI-compatible HTTP API and WebSocket connections.\n\nThe gateway supports multiple messaging channels — Discord, Telegram, WhatsApp, Mattermost — letting agents interact with users across platforms. Skills run in sandboxed environments, and the gateway handles authentication, rate limiting, and tool discovery.\n\nSUBCULT OPS uses OpenClaw to give its six agents access to web search, file operations, and other capabilities. The gateway runs as a lightweight systemd service with minimal configuration.',
         category: 'platform',
+        pricing: 'free',
         url: 'https://github.com/open-claw/openclaw',
         features: [
             'OpenAI-compatible HTTP API',
@@ -36,6 +37,7 @@ export const directory: DirectoryEntry[] = [
             'Frontier LLM family by Anthropic — known for long context, safety, and instruction following.',
         body: "Claude is Anthropic's family of large language models. The lineup includes Opus (most capable), Sonnet (balanced), and Haiku (fastest). Claude models are known for strong instruction following, 200K token context windows, and Constitutional AI safety training.\n\nFor agent systems, Claude offers tool use via tool_use content blocks, extended thinking mode for complex reasoning, and reliable structured output. The API is available directly from Anthropic or through aggregators like OpenRouter.\n\nClaude excels at long-document analysis, careful reasoning, and tasks that require following complex multi-step instructions — all critical capabilities for autonomous agents.",
         category: 'model-provider',
+        pricing: 'paid',
         url: 'https://anthropic.com',
         features: [
             '200K token context window',
@@ -64,6 +66,7 @@ export const directory: DirectoryEntry[] = [
             'The GPT model family — pioneered modern LLMs with the largest ecosystem of tools and integrations.',
         body: "OpenAI's GPT family (GPT-4o, GPT-4, o1, o3) defined the modern LLM landscape. GPT models pioneered function calling, the Assistants API, and many patterns that became industry standards.\n\nThe ecosystem around GPT is the largest in the industry — thousands of plugins, integrations, and tools work with OpenAI's API format. Most agent frameworks default to OpenAI-compatible APIs, making GPT the most broadly supported model family.\n\nGPT-4o offers strong multimodal capabilities (text, vision, audio), while the o-series models provide enhanced reasoning. The Assistants API adds built-in code execution, file handling, and retrieval.",
         category: 'model-provider',
+        pricing: 'paid',
         url: 'https://openai.com',
         features: [
             'Pioneered function calling pattern',
@@ -92,6 +95,7 @@ export const directory: DirectoryEntry[] = [
             'The most popular framework for building LLM applications — chains, agents, RAG, and more.',
         body: "LangChain is the most widely adopted framework for building applications powered by language models. It provides abstractions for chains (sequential LLM calls), agents (autonomous tool-using systems), RAG (retrieval-augmented generation), and memory.\n\nLangGraph, LangChain's agent orchestration layer, enables building stateful, multi-step agent workflows as graphs. LangSmith provides observability and tracing for debugging agent behavior in production.\n\nThe framework supports 700+ integrations with tools, vector stores, LLM providers, and data sources. While it adds abstraction overhead, it significantly speeds up development for complex LLM applications.",
         category: 'framework',
+        pricing: 'free',
         url: 'https://langchain.com',
         features: [
             'LangGraph for stateful agent workflows',
@@ -120,6 +124,7 @@ export const directory: DirectoryEntry[] = [
             'Microsoft\'s multi-agent conversation framework — built for agent-to-agent dialogue and coordination.',
         body: "AutoGen is Microsoft's open-source framework specifically designed for multi-agent conversations. Unlike general-purpose LLM frameworks, AutoGen was built from the ground up around the concept of agents talking to each other.\n\nThe framework provides primitives for agent-to-agent messaging, group chat with dynamic speaker selection, human-in-the-loop patterns, and code execution. AutoGen agents can be backed by different LLMs, allowing you to use the right model for each agent role.\n\nAutoGen is particularly strong for research-oriented multi-agent systems where agent dialogue and debate are core to the workflow.",
         category: 'framework',
+        pricing: 'free',
         url: 'https://github.com/microsoft/autogen',
         features: [
             'Native multi-agent conversation support',
@@ -148,6 +153,7 @@ export const directory: DirectoryEntry[] = [
             'Role-based multi-agent framework — define agents with roles, goals, and backstories, then let them collaborate.',
         body: "CrewAI takes a role-playing approach to multi-agent systems. You define agents with specific roles, goals, and backstories, then organize them into crews that execute tasks collaboratively.\n\nThe framework emphasizes simplicity — you describe what each agent should do in natural language, and CrewAI handles the orchestration. This makes it accessible to developers who want multi-agent capabilities without deep framework knowledge.\n\nCrewAI supports sequential and hierarchical task execution, inter-agent delegation, and memory. It integrates with LangChain tools, giving you access to a broad ecosystem of capabilities.",
         category: 'framework',
+        pricing: 'freemium',
         url: 'https://crewai.com',
         features: [
             'Role-based agent definition',
@@ -176,6 +182,7 @@ export const directory: DirectoryEntry[] = [
             'Unified API gateway for 200+ LLMs — one endpoint, all providers, with built-in routing and fallback.',
         body: "OpenRouter aggregates language models from every major provider behind a single OpenAI-compatible API. Send requests to one endpoint, specify any model, and OpenRouter handles the rest — provider selection, rate limiting, and billing.\n\nFor agent systems, OpenRouter's killer feature is the models array: specify multiple models and the API automatically falls back to the next one if the first fails. Combined with provider routing (choosing the fastest or cheapest endpoint for a model), this gives your agents high availability without complex client-side logic.\n\nThe platform tracks usage across all models in one dashboard, making it easy to optimize costs and identify which models perform best for your use cases.",
         category: 'platform',
+        pricing: 'paid',
         url: 'https://openrouter.ai',
         features: [
             '200+ models from all major providers',
@@ -204,6 +211,7 @@ export const directory: DirectoryEntry[] = [
             'Run open-source LLMs locally — download, serve, and use models on your own hardware with a simple CLI.',
         body: "Ollama makes local LLM deployment simple. Install it, pull a model, and you have a running inference server. It supports dozens of open-source models including Llama, Mistral, Qwen, DeepSeek, and Gemma.\n\nThe tool handles model management (downloading, updating, quantization), GPU acceleration (NVIDIA CUDA, Apple Metal), and serving via both a native API and an OpenAI-compatible endpoint. This makes it easy to integrate with existing tools and frameworks.\n\nFor agent systems, Ollama provides a privacy-preserving, zero-cost-per-token option for simpler tasks. Combined with cloud models for complex reasoning, it enables hybrid architectures that balance cost, privacy, and capability.",
         category: 'platform',
+        pricing: 'free',
         url: 'https://ollama.com',
         features: [
             'One-command model download and serving',
@@ -232,6 +240,7 @@ export const directory: DirectoryEntry[] = [
             'Model Context Protocol — an open standard for connecting AI to external tools and data sources.',
         body: "The Model Context Protocol (MCP) by Anthropic is an open standard that defines how AI applications connect to external tools and data. It provides a client-server architecture where MCP clients (AI apps) discover and use tools exposed by MCP servers.\n\nMCP standardizes tool discovery, invocation, and response handling. A tool written as an MCP server works with any MCP-compatible client — Claude Desktop, VS Code extensions, agent frameworks, and more. This eliminates the need for custom integrations per tool per client.\n\nThe protocol also supports resources (read-only data sources) and prompts (reusable prompt templates), making it a comprehensive interface between AI and external systems.",
         category: 'protocol',
+        pricing: 'free',
         url: 'https://modelcontextprotocol.io',
         features: [
             'Standardized tool discovery and invocation',
@@ -260,6 +269,7 @@ export const directory: DirectoryEntry[] = [
             'TypeScript toolkit for building AI applications — streaming, tool use, and multi-provider support for React and Next.js.',
         body: "The Vercel AI SDK is a TypeScript-first toolkit for building AI-powered applications, particularly with React and Next.js. It provides hooks and utilities for streaming LLM responses, managing conversations, handling tool calls, and rendering AI-generated UI.\n\nThe SDK supports multiple LLM providers through a unified interface, with first-class support for OpenAI, Anthropic, Google, and others. Its streaming architecture is optimized for web applications, providing real-time response rendering.\n\nFor TypeScript developers building web-facing AI applications, the Vercel AI SDK offers the tightest integration with the React/Next.js ecosystem. It handles the complexity of streaming, tool use, and multi-step agent workflows.",
         category: 'framework',
+        pricing: 'free',
         url: 'https://sdk.vercel.ai',
         features: [
             'React hooks for streaming AI responses',
@@ -282,3 +292,7 @@ export const directory: DirectoryEntry[] = [
         related: ['langchain', 'openrouter', 'anthropic-mcp'],
     },
 ];
+
+export const directoryLabelMap: Record<string, string> = Object.fromEntries(
+    directory.map(e => [e.slug, e.name])
+);

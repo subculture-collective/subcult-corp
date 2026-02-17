@@ -27,6 +27,26 @@ function sanitizeSummary(text: string): string {
         .trim();
 }
 
+/** Extract a short preview from text — first N chars, cut at sentence boundary */
+function truncateToFirstSentences(text: string, maxLen: number): string {
+    const clean = text
+        .replace(/<\/?[a-z_][a-z0-9_-]*(?:\s[^>]*)?\s*>/gi, '')
+        .replace(/^#+\s+.+$/gm, '')  // strip markdown headers
+        .replace(/\n{2,}/g, '\n')
+        .trim();
+    if (clean.length <= maxLen) return clean;
+    // Cut at last sentence-ending punctuation before maxLen
+    const truncated = clean.slice(0, maxLen);
+    const lastSentence = Math.max(
+        truncated.lastIndexOf('. '),
+        truncated.lastIndexOf('.\n'),
+        truncated.lastIndexOf('? '),
+        truncated.lastIndexOf('! '),
+    );
+    if (lastSentence > maxLen * 0.3) return truncated.slice(0, lastSentence + 1);
+    return truncated + '...';
+}
+
 /**
  * Execute an agent session: load voice, tools, and run the LLM+tools loop.
  * Updates the session row in-place as it progresses.
@@ -205,12 +225,13 @@ export async function executeAgentSession(session: AgentSession): Promise<void> 
             rounds: llmRounds,
         }, allToolCalls, llmRounds, totalTokens, totalCost);
 
-        // Emit completion event
+        // Emit completion event — short preview only, full artifact posts separately
+        const summaryPreview = truncateToFirstSentences(cleanedText, 200);
         await emitEvent({
             agent_id: agentId,
             kind: 'agent_session_completed',
             title: `${voiceName} session completed`,
-            summary: sanitizeSummary(cleanedText) || undefined,
+            summary: summaryPreview || undefined,
             tags: ['agent_session', 'completed', session.source],
             metadata: {
                 sessionId: session.id,

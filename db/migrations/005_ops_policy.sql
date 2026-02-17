@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS ops_policy (
 
 -- Insert core policies
 INSERT INTO ops_policy (key, value, description) VALUES
-  ('auto_approve', '{"enabled": true, "allowed_step_kinds": ["draft_tweet","crawl","analyze","write_content","research","scan_signals","summarize","review"]}', 'Which step kinds can be auto-approved'),
+  ('auto_approve', '{"enabled": true, "allowed_step_kinds": ["research_topic","scan_signals","draft_essay","draft_thread","audit_system","patch_code","distill_insight","document_lesson","critique_content","consolidate_memory","memory_archaeology"]}', 'Which step kinds can be auto-approved'),
   ('x_daily_quota', '{"limit": 5}', 'Daily tweet posting limit'),
   ('content_policy', '{"enabled": true, "max_drafts_per_day": 8}', 'Content creation controls'),
   ('initiative_policy', '{"enabled": false}', 'Agent initiative system (keep off until stable)'),

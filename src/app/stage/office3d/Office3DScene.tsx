@@ -1,12 +1,16 @@
-// office3d/Office3DScene.tsx — main Three.js scene container
+// office3d/Office3DScene.tsx — main Three.js scene container with OrbitControls and fullscreen
 'use client';
 
-import { Suspense, useCallback, useRef } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Suspense, useCallback, useRef, useState } from 'react';
+import * as THREE from 'three';
+import { Canvas, useThree } from '@react-three/fiber';
+import { OrbitControls } from '@react-three/drei';
+import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import { OfficeFloor } from './OfficeFloor';
 import { OfficeWalls } from './OfficeWalls';
 import { OfficeLighting } from './OfficeLighting';
 import { OfficeFurniture } from './OfficeFurniture';
+import { OfficeEnvironment } from './OfficeEnvironment';
 import { OfficeWhiteboard } from './OfficeWhiteboard';
 import { AgentSprite } from './AgentSprite';
 import { OverlayPanels } from './OverlayPanels';
@@ -28,9 +32,18 @@ function OfficeSceneContent({
         setSelected,
         setDraggingAgent,
         setHoveredObject,
+        moveAgent,
     } = state;
 
     const isDragging = useRef(false);
+    const { camera, gl } = useThree();
+    const controlsRef = useRef<any>(null);
+    const dragTools = useRef({
+        plane: new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
+        raycaster: new THREE.Raycaster(),
+        pointer: new THREE.Vector2(),
+        hit: new THREE.Vector3(),
+    });
 
     const handleDeskClick = useCallback(
         (agentId: AgentId) => {
@@ -65,51 +78,78 @@ function OfficeSceneContent({
             isDragging.current = false;
             setDraggingAgent(agentId);
 
-            const handlePointerMove = () => {
+            const canvas = gl.domElement;
+            const dt = dragTools.current;
+
+            const handlePointerMove = (ev: PointerEvent) => {
                 isDragging.current = true;
-                // We handle dragging via raycasting in the frame loop if needed
-                // For simplicity, we use a basic approach
+                if (controlsRef.current) controlsRef.current.enabled = false;
+                const rect = canvas.getBoundingClientRect();
+                dt.pointer.set(
+                    ((ev.clientX - rect.left) / rect.width) * 2 - 1,
+                    -((ev.clientY - rect.top) / rect.height) * 2 + 1,
+                );
+                dt.raycaster.setFromCamera(dt.pointer, camera);
+                if (dt.raycaster.ray.intersectPlane(dt.plane, dt.hit)) {
+                    const x = THREE.MathUtils.clamp(dt.hit.x, -18, 18);
+                    const z = THREE.MathUtils.clamp(dt.hit.z, -10, 10);
+                    moveAgent(agentId, x, z);
+                }
             };
 
             const handlePointerUp = () => {
                 setDraggingAgent(null);
+                if (controlsRef.current) controlsRef.current.enabled = true;
+                document.body.style.cursor = 'auto';
                 window.removeEventListener('pointermove', handlePointerMove);
                 window.removeEventListener('pointerup', handlePointerUp);
-                // Reset isDragging after a tick so click handler can check it
                 setTimeout(() => { isDragging.current = false; }, 50);
             };
 
             window.addEventListener('pointermove', handlePointerMove);
             window.addEventListener('pointerup', handlePointerUp);
         },
-        [setDraggingAgent],
+        [setDraggingAgent, gl, camera, moveAgent],
     );
 
-    // Click on empty floor to deselect
     const handleFloorClick = useCallback(() => {
         setSelected(null);
     }, [setSelected]);
 
     return (
         <>
+            {/* Camera controls */}
+            <OrbitControls
+                ref={controlsRef}
+                makeDefault
+                enableDamping
+                dampingFactor={0.1}
+                maxPolarAngle={Math.PI / 2.2}
+                minZoom={10}
+                maxZoom={80}
+                target={[0, 0, 0]}
+            />
+
             {/* Lighting */}
             <OfficeLighting period={period} />
 
+            {/* Procedural environment map for PBR reflections */}
+            <OfficeEnvironment period={period} />
+
             {/* Environment */}
             <color attach='background' args={[COLORS.crust]} />
-            <fog attach='fog' args={[COLORS.crust, 25, 50]} />
+            <fog attach='fog' args={[COLORS.crust, 40, 80]} />
 
             {/* Floor with click plane for deselection */}
             <group>
                 <OfficeFloor />
-                {/* Invisible interaction plane to reliably capture floor clicks */}
                 <mesh
                     rotation={[-Math.PI / 2, 0, 0]}
                     position={[0, 0.01, 0]}
                     onClick={handleFloorClick}
                 >
                     <planeGeometry args={[100, 100]} />
-                    <meshBasicMaterial visible={false} transparent opacity={0} />
+                    <meshBasicMaterial visible={false} />
                 </mesh>
             </group>
 
@@ -136,10 +176,24 @@ function OfficeSceneContent({
                     agent={agent}
                     onClick={() => handleAgentClick(agent.id)}
                     onPointerDown={() => handleAgentPointerDown(agent.id)}
-                    onPointerEnter={() => setHoveredObject(`agent:${agent.id}`)}
-                    onPointerLeave={() => setHoveredObject(null)}
+                    onPointerEnter={() => { setHoveredObject(`agent:${agent.id}`); document.body.style.cursor = 'pointer'; }}
+                    onPointerLeave={() => { setHoveredObject(null); document.body.style.cursor = 'auto'; }}
                 />
             ))}
+
+            {/* Post-processing */}
+            <EffectComposer>
+                <Bloom
+                    luminanceThreshold={0.6}
+                    luminanceSmoothing={0.4}
+                    intensity={period === 'night' ? 0.8 : period === 'dusk' ? 0.5 : 0.3}
+                    mipmapBlur
+                />
+                <Vignette
+                    offset={0.3}
+                    darkness={period === 'night' ? 0.7 : period === 'dusk' ? 0.5 : 0.35}
+                />
+            </EffectComposer>
         </>
     );
 }
@@ -218,13 +272,46 @@ function AgentStatusBar({
     );
 }
 
+// ─── WebGL Check ───
+function WebGLFallback() {
+    return (
+        <div className='flex h-full items-center justify-center px-4 text-center text-xs text-zinc-400'>
+            Your browser does not support WebGL, which is required to display the
+            interactive 3D office. Please use a modern browser and ensure that
+            hardware acceleration is enabled.
+        </div>
+    );
+}
+
+function checkWebGL(): boolean {
+    if (typeof window === 'undefined') return false;
+    try {
+        const canvas = document.createElement('canvas');
+        return !!(canvas.getContext('webgl') || canvas.getContext('experimental-webgl'));
+    } catch {
+        return false;
+    }
+}
+
 // ─── Main Export ───
-export function Office3DScene() {
+export function Office3DScene({ fullscreen, onToggleFullscreen }: {
+    fullscreen?: boolean;
+    onToggleFullscreen?: () => void;
+}) {
     const period = useTimeOfDay();
     const state = useOfficeState();
+    const [webglSupported] = useState(checkWebGL);
+
+    const containerClass = fullscreen
+        ? 'fixed inset-0 z-50 bg-[#11111b]'
+        : 'rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden';
+
+    const canvasHeight = fullscreen
+        ? 'calc(100vh - 80px)'
+        : 'min(600px, 75vh)';
 
     return (
-        <div className='rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden'>
+        <div className={containerClass}>
             {/* Header */}
             <div className='flex items-center justify-between px-4 py-2 border-b border-zinc-800'>
                 <span className='text-xs font-medium text-zinc-400'>
@@ -237,66 +324,45 @@ export function Office3DScene() {
                     <span className='text-[10px] text-zinc-700'>
                         {state.agents.filter(a => a.behavior !== 'idle').length} agents active
                     </span>
+                    {onToggleFullscreen && (
+                        <button
+                            onClick={onToggleFullscreen}
+                            className='text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors px-1.5 py-0.5 rounded border border-zinc-700/50 hover:border-zinc-600'
+                            title={fullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen'}
+                        >
+                            {fullscreen ? '✕ Exit' : '⛶ Fullscreen'}
+                        </button>
+                    )}
                 </div>
             </div>
 
             {/* 3D Canvas */}
             <div
                 className='relative'
-                style={{ height: 'min(420px, 60vh)' }}
+                style={{ height: canvasHeight }}
                 role='region'
                 aria-label='Interactive 3D office scene showing agent desks, behaviors, and operational stats'
             >
-                {(() => {
-                    // Detect WebGL support before attempting to render the 3D canvas.
-                    if (typeof window === 'undefined') {
-                        // On the server (or during very early hydration), avoid touching the DOM.
-                        return (
-                            <div className='flex h-full items-center justify-center px-4 text-center text-xs text-zinc-500'>
-                                Loading 3D scene...
-                            </div>
-                        );
-                    }
-
-                    try {
-                        const canvas = document.createElement('canvas');
-                        const gl =
-                            canvas.getContext('webgl') ||
-                            // Some older browsers expose WebGL only via this prefix.
-                            canvas.getContext('experimental-webgl');
-
-                        if (!gl) {
-                            throw new Error('WebGL not supported');
-                        }
-                    } catch {
-                        return (
-                            <div className='flex h-full items-center justify-center px-4 text-center text-xs text-zinc-400'>
-                                Your browser does not support WebGL, which is required to display the
-                                interactive 3D office. Please use a modern browser and ensure that
-                                hardware acceleration is enabled.
-                            </div>
-                        );
-                    }
-
-                    return (
-                        <Suspense fallback={<LoadingScreen />}>
-                            <Canvas
-                                orthographic
-                                camera={{
-                                    position: CAMERA.position,
-                                    zoom: CAMERA.zoom,
-                                    near: CAMERA.near,
-                                    far: CAMERA.far,
-                                }}
-                                style={{ background: COLORS.crust }}
-                                gl={{ antialias: true, alpha: false }}
-                                dpr={[1, 2]}
-                            >
-                                <OfficeSceneContent period={period} state={state} />
-                            </Canvas>
-                        </Suspense>
-                    );
-                })()}
+                {!webglSupported ? (
+                    <WebGLFallback />
+                ) : (
+                    <Suspense fallback={<LoadingScreen />}>
+                        <Canvas
+                            orthographic
+                            camera={{
+                                position: CAMERA.position,
+                                zoom: CAMERA.zoom,
+                                near: CAMERA.near,
+                                far: CAMERA.far,
+                            }}
+                            style={{ background: COLORS.crust }}
+                            gl={{ antialias: true, alpha: false }}
+                            dpr={[1, 2]}
+                        >
+                            <OfficeSceneContent period={period} state={state} />
+                        </Canvas>
+                    </Suspense>
+                )}
 
                 {/* Overlay panels (HTML positioned over canvas) */}
                 <OverlayPanels
@@ -317,6 +383,11 @@ export function Office3DScene() {
                         }
                     </div>
                 )}
+
+                {/* Controls hint */}
+                <div className='absolute bottom-3 right-3 px-2 py-1 rounded bg-zinc-800/60 text-[9px] text-zinc-600 pointer-events-none'>
+                    Drag to rotate · Scroll to zoom · Right-drag to pan
+                </div>
             </div>
 
             {/* Status bar */}

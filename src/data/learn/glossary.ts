@@ -149,3 +149,7 @@ export const glossary: GlossaryEntry[] = [
         ],
     },
 ];
+
+export const glossaryLabelMap: Record<string, string> = Object.fromEntries(
+    glossary.map(e => [e.slug, e.term])
+);

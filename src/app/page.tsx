@@ -56,7 +56,7 @@ export default function LandingPage() {
             <script
                 type='application/ld+json'
                 dangerouslySetInnerHTML={{
-                    __html: JSON.stringify(websiteJsonLd),
+                    __html: JSON.stringify(websiteJsonLd).replace(/</g, '\\u003c'),
                 }}
             />
             {/* Hero */}

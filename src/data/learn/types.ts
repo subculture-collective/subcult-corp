@@ -25,6 +25,7 @@ export interface DirectoryEntry {
     shortDesc: string;
     body: string;
     category: 'framework' | 'platform' | 'model-provider' | 'protocol';
+    pricing: 'free' | 'freemium' | 'paid';
     url: string;
     features: string[];
     pros: string[];
