@@ -1,4 +1,4 @@
-// verify-launch.mjs — Pre-flight check for SUBCULT OPS
+// verify-launch.mjs — Pre-flight check for SUBCORP
 // Validates database tables, policies, triggers, and connectivity.
 //
 // Run: node scripts/go-live/verify-launch.mjs
@@ -146,12 +146,20 @@ async function checkTriggers(sql) {
 
         pass(`${reactive.length} reactive trigger(s)`);
         for (const t of reactive) {
-            log.debug('Reactive trigger', { name: t.name, enabled: t.enabled, fire_count: t.fire_count });
+            log.debug('Reactive trigger', {
+                name: t.name,
+                enabled: t.enabled,
+                fire_count: t.fire_count,
+            });
         }
 
         pass(`${proactive.length} proactive trigger(s)`);
         for (const t of proactive) {
-            log.debug('Proactive trigger', { name: t.name, enabled: t.enabled, fire_count: t.fire_count });
+            log.debug('Proactive trigger', {
+                name: t.name,
+                enabled: t.enabled,
+                fire_count: t.fire_count,
+            });
         }
     } catch (err) {
         fail(`Failed to query trigger rules: ${err.message}`);
@@ -172,8 +180,8 @@ async function checkRelationships(sql) {
             return;
         }
 
-        // 5 agents = 10 pairs
-        const expectedPairs = 10;
+        // 6 agents = 15 pairs
+        const expectedPairs = 15;
         if (data.length >= expectedPairs) {
             pass(`${data.length} relationship pair(s) found`);
         } else {
@@ -189,6 +197,23 @@ async function checkRelationships(sql) {
         }
     } catch (err) {
         fail(`Failed to query relationships: ${err.message}`);
+    }
+}
+
+async function checkRssFeeds(sql) {
+    log.info('Checking RSS feeds');
+
+    try {
+        const [{ count }] = await sql`
+            SELECT COUNT(*)::int as count FROM ops_rss_feeds WHERE enabled = true
+        `;
+        if (count > 0) {
+            pass(`${count} RSS feed(s) configured`);
+        } else {
+            fail('No RSS feeds found — run make seed-rss');
+        }
+    } catch (err) {
+        fail(`Failed to query RSS feeds: ${err.message}`);
     }
 }
 
@@ -313,6 +338,7 @@ async function main() {
     await checkPolicies(sql);
     await checkTriggers(sql);
     await checkRelationships(sql);
+    await checkRssFeeds(sql);
     await checkRecentActivity(sql);
     await checkLLMConnectivity();
 

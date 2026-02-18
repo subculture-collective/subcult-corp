@@ -1,7 +1,58 @@
--- 024: Step prompt templates
--- Stores per-step-kind prompt templates with tool hints and versioning.
--- Templates override the hardcoded STEP_INSTRUCTIONS map when present.
+-- 006: Content pipeline, projects, templates, governance, agent proposals
+-- Consolidated from: 021, 024, 031, 032, 034, 040, 026 (view)
 
+-- ── Projects ──
+CREATE TABLE IF NOT EXISTS ops_projects (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    slug TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL,
+    description TEXT,
+    status TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('proposed', 'active', 'paused', 'completed', 'abandoned')),
+    lead_agent TEXT NOT NULL,
+    participants TEXT[] DEFAULT '{}',
+    prime_directive TEXT,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_projects_status ON ops_projects (status);
+CREATE INDEX IF NOT EXISTS idx_projects_lead ON ops_projects (lead_agent);
+CREATE INDEX IF NOT EXISTS idx_projects_slug ON ops_projects (slug);
+
+-- ── Content Drafts ──
+-- Includes expanded content types from 040
+CREATE TABLE IF NOT EXISTS ops_content_drafts (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    author_agent    TEXT NOT NULL,
+    content_type    TEXT NOT NULL,
+    title           TEXT NOT NULL,
+    body            TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'review', 'approved', 'rejected', 'published')),
+    review_session_id UUID REFERENCES ops_roundtable_sessions(id),
+    reviewer_notes  JSONB NOT NULL DEFAULT '[]',
+    source_session_id UUID REFERENCES ops_roundtable_sessions(id),
+    published_at    TIMESTAMPTZ,
+    metadata        JSONB NOT NULL DEFAULT '{}',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Ensure expanded content_type CHECK (040)
+ALTER TABLE ops_content_drafts DROP CONSTRAINT IF EXISTS ops_content_drafts_content_type_check;
+ALTER TABLE ops_content_drafts ADD CONSTRAINT ops_content_drafts_content_type_check
+    CHECK (content_type IN (
+        'essay', 'thread', 'statement', 'poem', 'manifesto',
+        'briefing', 'report', 'review', 'digest', 'plan'
+    ));
+
+CREATE INDEX IF NOT EXISTS idx_content_drafts_author ON ops_content_drafts (author_agent);
+CREATE INDEX IF NOT EXISTS idx_content_drafts_status ON ops_content_drafts (status);
+CREATE INDEX IF NOT EXISTS idx_content_drafts_created ON ops_content_drafts (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_content_drafts_source ON ops_content_drafts (source_session_id);
+
+-- ── Step Templates ──
 CREATE TABLE IF NOT EXISTS ops_step_templates (
     kind        TEXT PRIMARY KEY,
     template    TEXT NOT NULL,
@@ -12,11 +63,9 @@ CREATE TABLE IF NOT EXISTS ops_step_templates (
 );
 
 -- Seed all 23 step kinds with templates
--- 11 existing (ported from STEP_INSTRUCTIONS) + 12 new
-
 INSERT INTO ops_step_templates (kind, template, tools_hint, output_hint) VALUES
 
--- ── Existing step kinds (ported from hardcoded prompts) ──
+-- Existing step kinds (ported from STEP_INSTRUCTIONS)
 
 ('research_topic',
  E'Use web_search to research the topic described in the payload.\nSearch for 3-5 relevant queries to build a comprehensive picture.\nUse web_fetch to read the most relevant pages.\nWrite your research notes to {{outputDir}}/{{date}}__research__notes__{{missionSlug}}__{{agentId}}__v01.md using file_write.\nInclude: key findings, sources, quotes, and your analysis.',
@@ -73,7 +122,7 @@ INSERT INTO ops_step_templates (kind, template, tools_hint, output_hint) VALUES
  ARRAY['file_read', 'file_write'],
  'workflow proposal'),
 
--- ── New step kinds (previously had no prompt) ──
+-- New step kinds
 
 ('analyze_discourse',
  E'Analyze the discourse or conversation referenced in the payload.\nIdentify key themes, rhetorical patterns, power dynamics, and implicit assumptions.\nWrite your analysis to {{outputDir}}/{{date}}__analyze__discourse__{{missionSlug}}__{{agentId}}__v01.md using file_write.\nStructure: themes, patterns, tensions, recommendations.',
@@ -141,3 +190,63 @@ INSERT INTO ops_step_templates (kind, template, tools_hint, output_hint) VALUES
  'risk escalation report')
 
 ON CONFLICT (kind) DO NOTHING;
+
+-- ── Governance Proposals ──
+CREATE TABLE IF NOT EXISTS ops_governance_proposals (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    proposer        TEXT NOT NULL,
+    policy_key      TEXT NOT NULL,
+    current_value   JSONB,
+    proposed_value  JSONB NOT NULL,
+    rationale       TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'proposed'
+                    CHECK (status IN ('proposed', 'voting', 'accepted', 'rejected')),
+    votes           JSONB NOT NULL DEFAULT '{}',
+    required_votes  INT NOT NULL DEFAULT 4,
+    debate_session_id UUID REFERENCES ops_roundtable_sessions(id),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    resolved_at     TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_governance_proposals_status ON ops_governance_proposals (status);
+CREATE INDEX IF NOT EXISTS idx_governance_proposals_proposer ON ops_governance_proposals (proposer);
+CREATE INDEX IF NOT EXISTS idx_governance_proposals_policy_key ON ops_governance_proposals (policy_key);
+CREATE INDEX IF NOT EXISTS idx_governance_proposals_created_at ON ops_governance_proposals (created_at DESC);
+
+-- ── Agent Proposals ──
+CREATE TABLE IF NOT EXISTS ops_agent_proposals (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    proposed_by     TEXT NOT NULL,
+    agent_name      TEXT NOT NULL,
+    agent_role      TEXT NOT NULL,
+    personality     JSONB NOT NULL DEFAULT '{}',
+    skills          JSONB NOT NULL DEFAULT '[]',
+    rationale       TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'proposed'
+                    CHECK (status IN ('proposed', 'voting', 'approved', 'rejected', 'spawned')),
+    votes           JSONB NOT NULL DEFAULT '{}',
+    human_approved  BOOLEAN DEFAULT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    decided_at      TIMESTAMPTZ,
+    spawned_at      TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_proposals_status ON ops_agent_proposals(status);
+CREATE INDEX IF NOT EXISTS idx_agent_proposals_proposed_by ON ops_agent_proposals(proposed_by);
+CREATE INDEX IF NOT EXISTS idx_agent_proposals_created_at ON ops_agent_proposals(created_at DESC);
+
+-- ── Step Template Performance View (026) ──
+CREATE OR REPLACE VIEW step_template_performance AS
+SELECT
+    kind,
+    template_version,
+    COUNT(*) as total_runs,
+    COUNT(*) FILTER (WHERE status = 'succeeded') as succeeded,
+    ROUND(
+        COUNT(*) FILTER (WHERE status = 'succeeded')::numeric
+        / NULLIF(COUNT(*), 0) * 100
+    ) as success_rate,
+    AVG(EXTRACT(EPOCH FROM (completed_at - started_at)))::int as avg_duration_secs
+FROM ops_mission_steps
+WHERE status IN ('succeeded', 'failed')
+GROUP BY kind, template_version;

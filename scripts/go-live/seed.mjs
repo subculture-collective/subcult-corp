@@ -7,6 +7,8 @@
 //   2. ops_policy               — all policies (core + roundtable + thresholds)
 //   3. ops_trigger_rules        — all triggers (reactive + proactive + governance)
 //   4. ops_agent_relationships  — 15 pairwise agent relationships
+//   5. ops_rss_feeds            — 13 RSS feeds for SUBCULT Daily
+//   6. ops_discord_channels     — 9 Discord channels
 //
 // Safe to re-run: uses ON CONFLICT ... DO UPDATE everywhere.
 // Triggers use name-based dedup (no unique constraint on name — uses DELETE + INSERT per trigger).
@@ -17,12 +19,16 @@
 //   make seed-policy             # just policies
 //   make seed-triggers           # just triggers
 //   make seed-relationships      # just relationships
+//   make seed-rss                # just RSS feeds
+//   make seed-discord            # just Discord channels
 //
 //   node scripts/go-live/seed.mjs                    # seeds everything
 //   node scripts/go-live/seed.mjs --only agents      # just one section
 //   node scripts/go-live/seed.mjs --only policy
 //   node scripts/go-live/seed.mjs --only triggers
 //   node scripts/go-live/seed.mjs --only relationships
+//   node scripts/go-live/seed.mjs --only rss-feeds
+//   node scripts/go-live/seed.mjs --only discord-channels
 
 import postgres from 'postgres';
 import dotenv from 'dotenv';
@@ -42,7 +48,7 @@ const sql = postgres(process.env.DATABASE_URL);
 // ─────────────────────────────────────────────
 const onlyArg = process.argv.indexOf('--only');
 const only = onlyArg !== -1 ? process.argv[onlyArg + 1] : null;
-const sections = only ? [only] : ['agents', 'policy', 'triggers', 'relationships'];
+const sections = only ? [only] : ['agents', 'policy', 'triggers', 'relationships', 'rss-feeds', 'discord-channels'];
 
 // ═════════════════════════════════════════════
 // 1. AGENT REGISTRY
@@ -305,9 +311,9 @@ const policies = [
         value: {
             enabled: true,
             allowed_step_kinds: [
-                'analyze_discourse', 'scan_signals', 'research_topic',
-                'distill_insight', 'draft_thread', 'critique_content',
-                'review_policy', 'log_event', 'tag_memory', 'classify_pattern',
+                'research_topic', 'scan_signals', 'draft_essay', 'draft_thread',
+                'audit_system', 'patch_code', 'distill_insight', 'document_lesson',
+                'critique_content', 'consolidate_memory', 'memory_archaeology',
             ],
         },
         description: 'Which step kinds can be auto-approved without human review',
@@ -324,13 +330,8 @@ const policies = [
     },
     {
         key: 'initiative_policy',
-        value: {
-            enabled: false,
-            cooldown_minutes: 120,
-            min_memories: 5,
-            min_confidence: 0.55,
-        },
-        description: 'Agent initiative system (Thaum generates ideas; keep off until stable)',
+        value: { enabled: true },
+        description: 'Agent initiative system',
     },
     {
         key: 'memory_influence_policy',
@@ -358,11 +359,11 @@ const policies = [
     {
         key: 'roundtable_policy',
         value: {
-            enabled: false, // START DISABLED — enable when system is stable
-            max_daily_conversations: 5,
+            enabled: true,
+            max_daily_conversations: 15,
             min_conversation_gap_minutes: 60,
         },
-        description: 'Roundtable conversation system controls. Enable once heartbeat is healthy.',
+        description: 'Roundtable conversation system controls',
     },
     {
         key: 'roundtable_format_weights',
@@ -463,7 +464,7 @@ const triggers = [
     // ─── Reactive triggers ───
     { name: 'Mission failure diagnosis (Chora)', trigger_event: 'mission_failed', conditions: { lookback_minutes: 60 }, action_config: { target_agent: 'chora', action: 'diagnose' }, cooldown_minutes: 120, enabled: true },
     { name: 'Content published review (Chora)', trigger_event: 'content_published', conditions: { lookback_minutes: 60 }, action_config: { target_agent: 'chora', action: 'analyze_reception' }, cooldown_minutes: 120, enabled: true },
-    { name: 'Content draft auto-review (Subrosa)', trigger_event: 'content_draft_created', conditions: { lookback_minutes: 30 }, action_config: { target_agent: 'subrosa', action: 'content_review' }, cooldown_minutes: 10, enabled: true },
+    { name: 'Content draft auto-review (Subrosa)', trigger_event: 'content_draft_created', conditions: { lookback_minutes: 30 }, action_config: { target_agent: 'subrosa', action: 'content_review' }, cooldown_minutes: 15, enabled: true },
     { name: 'Public content risk check (Subrosa)', trigger_event: 'content_marked_public', conditions: { lookback_minutes: 5 }, action_config: { target_agent: 'subrosa', action: 'risk_assessment' }, cooldown_minutes: 60, enabled: true },
     {
         name: 'Proactive signal scan (Thaum)',
@@ -493,22 +494,14 @@ const triggers = [
     { name: 'Governance debate (All agents)', trigger_event: 'governance_proposal_created', conditions: { lookback_minutes: 60 }, action_config: { target_agent: 'primus', action: 'convene_governance_debate' }, cooldown_minutes: 30, enabled: true },
     { name: 'Memory archaeology dig (Chora)', trigger_event: 'memory_archaeology_due', conditions: { min_days_between_digs: 7 }, action_config: { target_agent: 'chora', action: 'memory_archaeology', max_memories: 100 }, cooldown_minutes: 10080, enabled: true },
 
-    // ─── Proactive triggers (most start disabled) ───
-    {
-        name: 'Proactive signal scan',
-        trigger_event: 'proactive_scan_signals',
-        conditions: { topics: ['AI trends', 'emerging tech', 'startup ecosystem', 'developer tools'], skip_probability: 0.1, jitter_min_minutes: 25, jitter_max_minutes: 45 },
-        action_config: { target_agent: 'chora' },
-        cooldown_minutes: 180,
-        enabled: false,
-    },
+    // ─── Proactive triggers ───
     {
         name: 'Proactive tweet drafting',
         trigger_event: 'proactive_draft_tweet',
         conditions: { topics: ['AI insights', 'tech commentary', 'productivity tips', 'industry observations'], skip_probability: 0.15, jitter_min_minutes: 25, jitter_max_minutes: 45 },
         action_config: { target_agent: 'chora' },
         cooldown_minutes: 240,
-        enabled: false,
+        enabled: true,
     },
     {
         name: 'Proactive deep research',
@@ -516,7 +509,7 @@ const triggers = [
         conditions: { topics: ['multi-agent systems', 'LLM optimization', 'autonomous workflows', 'knowledge management'], skip_probability: 0.1, jitter_min_minutes: 30, jitter_max_minutes: 45 },
         action_config: { target_agent: 'chora' },
         cooldown_minutes: 360,
-        enabled: false,
+        enabled: true,
     },
     {
         name: 'Proactive ops analysis',
@@ -524,7 +517,7 @@ const triggers = [
         conditions: { skip_probability: 0.1, jitter_min_minutes: 25, jitter_max_minutes: 45 },
         action_config: { target_agent: 'subrosa' },
         cooldown_minutes: 480,
-        enabled: false,
+        enabled: true,
     },
     {
         name: 'Proactive content planning',
@@ -532,7 +525,7 @@ const triggers = [
         conditions: { topics: ['content calendar', 'audience growth', 'engagement strategy'], skip_probability: 0.2, jitter_min_minutes: 30, jitter_max_minutes: 60 },
         action_config: { target_agent: 'praxis' },
         cooldown_minutes: 720,
-        enabled: false,
+        enabled: true,
     },
     {
         name: 'Proactive system health check',
@@ -540,7 +533,7 @@ const triggers = [
         conditions: { skip_probability: 0.05, jitter_min_minutes: 10, jitter_max_minutes: 30 },
         action_config: { target_agent: 'subrosa' },
         cooldown_minutes: 360,
-        enabled: false,
+        enabled: true,
     },
     {
         name: 'Proactive memory consolidation',
@@ -548,7 +541,7 @@ const triggers = [
         conditions: { skip_probability: 0.1, jitter_min_minutes: 20, jitter_max_minutes: 40 },
         action_config: { target_agent: 'chora' },
         cooldown_minutes: 720,
-        enabled: false,
+        enabled: true,
     },
     { name: 'Proposal backlog monitor (Mux)', trigger_event: 'proactive_proposal_triage', conditions: { pending_threshold: 10 }, action_config: { target_agent: 'mux', action: 'triage_proposals' }, cooldown_minutes: 360, enabled: true },
     { name: 'Operational status report (Mux)', trigger_event: 'proactive_ops_report', conditions: {}, action_config: { target_agent: 'mux', action: 'ops_report' }, cooldown_minutes: 720, enabled: true },
@@ -643,6 +636,75 @@ async function seedRelationships() {
 }
 
 // ═════════════════════════════════════════════
+// 5. RSS FEEDS
+// ═════════════════════════════════════════════
+
+const rssFeeds = [
+    { name: 'MIT Technology Review', url: 'https://www.technologyreview.com/feed/', category: 'tech' },
+    { name: 'Organizing Upgrade', url: 'https://organizingupgrade.com/feed/', category: 'organizing' },
+    { name: 'DropSite News', url: 'https://www.dropsitenews.com/feed', category: 'politics' },
+    { name: 'Ken Klippenstein', url: 'https://www.kenklippenstein.com/feed', category: 'politics' },
+    { name: '404 Media', url: 'https://www.404media.co/rss/', category: 'tech' },
+    { name: 'US-CERT / CISA', url: 'https://www.cisa.gov/cybersecurity-advisories/all.xml', category: 'security' },
+    { name: 'Google Open Source', url: 'https://opensource.googleblog.com/feeds/posts/default', category: 'open-source' },
+    { name: 'Hacker News Best', url: 'https://hnrss.org/best', category: 'tech' },
+    { name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index', category: 'tech' },
+    { name: 'Wired', url: 'https://www.wired.com/feed/rss', category: 'tech' },
+    { name: 'The Register', url: 'https://www.theregister.com/headlines.atom', category: 'tech' },
+    { name: "It's FOSS", url: 'https://itsfoss.com/rss/', category: 'open-source' },
+    { name: 'SCMP', url: 'https://www.scmp.com/rss/91/feed', category: 'world' },
+];
+
+async function seedRssFeeds() {
+    log.info('Seeding ops_rss_feeds');
+    let inserted = 0;
+    for (const feed of rssFeeds) {
+        const result = await sql`
+            INSERT INTO ops_rss_feeds (name, url, category)
+            VALUES (${feed.name}, ${feed.url}, ${feed.category})
+            ON CONFLICT (url) DO NOTHING
+            RETURNING id
+        `;
+        if (result.length > 0) inserted++;
+        log.info('  feed', { name: feed.name, status: result.length > 0 ? 'added' : 'exists' });
+    }
+    log.info('RSS feeds done', { inserted, total: rssFeeds.length });
+}
+
+// ═════════════════════════════════════════════
+// 6. DISCORD CHANNELS
+// ═════════════════════════════════════════════
+
+const discordGuildId = '1471207885936529593';
+
+const discordChannels = [
+    { name: 'roundtable',  discord_channel_id: '1471411876213686313', category: 'operations' },
+    { name: 'brainstorm',  discord_channel_id: '1471411983688536168', category: 'operations' },
+    { name: 'drafts',      discord_channel_id: '1471411975513702442', category: 'content' },
+    { name: 'missions',    discord_channel_id: '1471411964340080797', category: 'operations' },
+    { name: 'system-log',  discord_channel_id: '1471411966852726806', category: 'system' },
+    { name: 'research',    discord_channel_id: '1471411971927572544', category: 'intel' },
+    { name: 'insights',    discord_channel_id: '1471411979070476431', category: 'intel' },
+    { name: 'proposals',   discord_channel_id: '1471411988331499572', category: 'governance' },
+    { name: 'project',     discord_channel_id: '1471411992177676299', category: 'operations' },
+];
+
+async function seedDiscordChannels() {
+    log.info('Seeding ops_discord_channels');
+    for (const ch of discordChannels) {
+        await sql`
+            INSERT INTO ops_discord_channels (name, discord_channel_id, discord_guild_id, category, enabled)
+            VALUES (${ch.name}, ${ch.discord_channel_id}, ${discordGuildId}, ${ch.category}, true)
+            ON CONFLICT (discord_channel_id) DO UPDATE SET
+                name = EXCLUDED.name,
+                enabled = EXCLUDED.enabled
+        `;
+        log.info('  channel', { name: ch.name, category: ch.category });
+    }
+    log.info('Discord channels done', { count: discordChannels.length });
+}
+
+// ═════════════════════════════════════════════
 // RUN
 // ═════════════════════════════════════════════
 
@@ -650,10 +712,12 @@ async function main() {
     log.info('Starting seed', { sections });
 
     try {
-        if (sections.includes('agents'))        await seedAgents();
-        if (sections.includes('policy'))        await seedPolicies();
-        if (sections.includes('triggers'))      await seedTriggers();
-        if (sections.includes('relationships')) await seedRelationships();
+        if (sections.includes('agents'))           await seedAgents();
+        if (sections.includes('policy'))           await seedPolicies();
+        if (sections.includes('triggers'))         await seedTriggers();
+        if (sections.includes('relationships'))    await seedRelationships();
+        if (sections.includes('rss-feeds'))        await seedRssFeeds();
+        if (sections.includes('discord-channels')) await seedDiscordChannels();
 
         log.info('Seed complete');
     } catch (err) {

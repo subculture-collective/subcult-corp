@@ -1,9 +1,9 @@
-# ─── SUBCULT OPS — Makefile ───
+# ─── SUBCORP — Makefile ───
 
 .PHONY: dev build start lint typecheck clean \
-        seed seed-agents seed-policy seed-triggers seed-relationships \
+        seed seed-agents seed-policy seed-triggers seed-relationships seed-rss seed-discord \
         verify up down restart status logs logs-app logs-worker logs-db \
-        heartbeat db-migrate db-shell help
+        heartbeat db-migrate db-shell nuke fresh init-workspace help
 
 # ──────────────────────────────────────────
 # Development
@@ -99,6 +99,33 @@ seed-triggers: ## Seed trigger rules only
 
 seed-relationships: ## Seed agent relationships only
 	DATABASE_URL="$(DB_URL)" node scripts/go-live/seed.mjs --only relationships
+
+seed-rss: ## Seed RSS feeds only
+	DATABASE_URL="$(DB_URL)" node scripts/go-live/seed.mjs --only rss-feeds
+
+seed-discord: ## Seed Discord channels only
+	DATABASE_URL="$(DB_URL)" node scripts/go-live/seed.mjs --only discord-channels
+
+# ──────────────────────────────────────────
+# Fresh Start
+# ──────────────────────────────────────────
+
+nuke: ## Wipe everything: containers, volumes, images — full reset
+	docker compose down -v --rmi local
+	@echo "Nuked. All containers, volumes, and local images removed."
+
+fresh: ## Full fresh start: nuke → build → migrate → seed → init workspace
+	$(MAKE) nuke
+	docker compose up -d --build
+	@echo "Waiting for Postgres to be healthy..."
+	@until docker compose exec -T postgres pg_isready -U subcult -d subcult_ops >/dev/null 2>&1; do sleep 1; done
+	$(MAKE) db-migrate
+	$(MAKE) seed
+	docker compose exec toolbox /usr/local/bin/init-workspace.sh
+	@echo "Fresh start complete. Run 'make heartbeat' to kick things off."
+
+init-workspace: ## Re-initialize workspace (dirs, prime directive, permissions)
+	docker compose exec toolbox /usr/local/bin/init-workspace.sh
 
 # ──────────────────────────────────────────
 # Verification & Monitoring
