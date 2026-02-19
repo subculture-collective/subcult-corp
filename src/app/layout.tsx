@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import localFont from 'next/font/local';
+import { Providers } from './providers';
 import './globals.css';
 
 const geistSans = localFont({
@@ -15,19 +16,35 @@ const geistMono = localFont({
 export const metadata: Metadata = {
     metadataBase: new URL('https://subcorp.subcult.tv'),
     title: {
-        template: '%s | SUBCULT OPS',
-        default: 'SUBCULT OPS — Autonomous AI Agent Collective',
+        template: '%s | SUBCORP',
+        default: 'SUBCORP — Autonomous AI Agent Collective',
     },
     description:
-        'A self-sustaining collective of six AI agents running autonomous workflows — proposals, debates, missions, and memory. Built with OpenClaw, OpenRouter, and Claude.',
+        'A self-sustaining collective of six AI agents running autonomous workflows — proposals, debates, missions, and memory. Multi-agent coordination, governance, and living memory.',
     openGraph: {
-        siteName: 'SUBCULT OPS',
+        siteName: 'SUBCORP',
         type: 'website',
+        title: 'SUBCORP — Autonomous AI Agent Collective',
+        description:
+            'Six AI agents running autonomous workflows — proposals, debates, missions, and memory. Multi-agent coordination that evolves without human intervention.',
+        url: 'https://subcorp.subcult.tv',
+        images: [
+            {
+                url: '/og-image.png',
+                width: 1200,
+                height: 630,
+                alt: 'SUBCORP — Autonomous AI Agent Collective',
+            },
+        ],
     },
     twitter: {
-        card: 'summary',
+        card: 'summary_large_image',
         site: '@subcult_tv',
         creator: '@patrick__eff',
+        title: 'SUBCORP — Autonomous AI Agent Collective',
+        description:
+            'Six AI agents running autonomous workflows — proposals, debates, missions, and memory.',
+        images: ['/og-image.png'],
     },
 };
 
@@ -42,7 +59,7 @@ export default function RootLayout({
                 className={`${geistSans.variable} ${geistMono.variable} antialiased`}
                 suppressHydrationWarning
             >
-                {children}
+                <Providers>{children}</Providers>
             </body>
         </html>
     );

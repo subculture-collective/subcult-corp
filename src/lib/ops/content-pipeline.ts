@@ -18,7 +18,12 @@ export type ContentType =
     | 'thread'
     | 'statement'
     | 'poem'
-    | 'manifesto';
+    | 'manifesto'
+    | 'briefing'
+    | 'report'
+    | 'review'
+    | 'digest'
+    | 'plan';
 export type ContentStatus =
     | 'draft'
     | 'review'
@@ -200,6 +205,11 @@ If no extractable creative content exists, respond with:
             'statement',
             'poem',
             'manifesto',
+            'briefing',
+            'report',
+            'review',
+            'digest',
+            'plan',
         ];
         const contentType: ContentType =
             validTypes.includes(parsed.contentType as ContentType) ?

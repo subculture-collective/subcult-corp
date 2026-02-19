@@ -129,7 +129,8 @@ const STEP_INSTRUCTIONS: Partial<Record<StepKind, StepInstructionFn>> = {
         `Use web_search to scan for signals related to the payload topic.\n` +
         `Look for recent developments, trends, and notable changes.\n` +
         `Write a signal report to ${outputDir}/${today}__scan__signals__${slugify(ctx.missionTitle)}__${ctx.agentId}__v01.md using file_write.\n` +
-        `Format: bullet points grouped by signal type (opportunity, threat, trend, noise).\n`,
+        `Format: bullet points grouped by signal type (opportunity, threat, trend, noise).\n` +
+        `Focus on scanning and documenting signals only. Do not call propose_mission during this step.\n`,
 
     draft_essay: (ctx, today) =>
         `Read any research notes from agents/${ctx.agentId}/notes/ using file_read.\n` +

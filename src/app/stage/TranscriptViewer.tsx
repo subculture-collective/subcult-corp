@@ -65,7 +65,7 @@ function handlePrint(el: HTMLElement | null) {
 
     printWindow.document.write(`<!DOCTYPE html>
 <html><head>
-<title>Subcult Ops — Transcript</title>
+<title>SUBCORP — Transcript</title>
 <style>
     body { font-family: 'Courier New', monospace; font-size: 12px; color: #111; max-width: 72ch; margin: 2em auto; line-height: 1.6; }
     .header { border-bottom: 2px solid #111; padding-bottom: 1em; margin-bottom: 1.5em; }
@@ -108,31 +108,40 @@ function TurnEntry({
     ttsState?: TTSState;
     ttsControls?: TTSControls;
 }) {
+    const isUser = turn.speaker === 'user';
     const agentId = turn.speaker as AgentId;
-    const agent = AGENTS[agentId];
-    const textColor = agent?.tailwindTextColor ?? 'text-zinc-400';
+    const agent = isUser ? null : AGENTS[agentId];
+    const textColor = isUser ? 'text-scan' : (agent?.tailwindTextColor ?? 'text-zinc-400');
     const isSpeaking = ttsState?.activeTurnIndex === index;
 
     return (
         <div
             className={`turn mb-4 transition-colors rounded-md -mx-2 px-2 py-0.5 ${
-                isSpeaking ? 'bg-zinc-800/80 ring-1 ring-zinc-600/50' : ''
+                isSpeaking ? 'bg-zinc-800/80 ring-1 ring-zinc-600/50'
+                : isUser ? 'bg-zinc-800/30'
+                : ''
             }`}
         >
             <div className='turn-header flex items-center gap-2'>
                 <span className='turn-number text-[10px] text-zinc-600 font-mono tabular-nums w-6 text-right shrink-0'>
                     {index + 1}.
                 </span>
-                <AgentAvatar agentId={turn.speaker} size='sm' />
+                {isUser ? (
+                    <span className='flex items-center justify-center h-5 w-5 rounded-full bg-scan/20 text-scan text-[10px] font-bold shrink-0'>
+                        U
+                    </span>
+                ) : (
+                    <AgentAvatar agentId={turn.speaker} size='sm' />
+                )}
                 <span
                     className={`text-xs font-bold uppercase tracking-wide ${textColor}`}
                 >
-                    {agent?.displayName ?? turn.speaker}
+                    {isUser ? 'You' : (agent?.displayName ?? turn.speaker)}
                 </span>
                 <span className='turn-time text-[10px] text-zinc-600 font-mono'>
                     [{formatTime(turn.created_at)}]
                 </span>
-                {ttsState?.isAvailable && ttsControls && (
+                {!isUser && ttsState?.isAvailable && ttsControls && (
                     <button
                         onClick={() =>
                             isSpeaking ?
@@ -147,11 +156,31 @@ function TurnEntry({
                         title={isSpeaking ? 'Stop speaking' : 'Speak this turn'}
                     >
                         {isSpeaking ?
-                            <svg className='h-3 w-3' fill='currentColor' viewBox='0 0 24 24'>
-                                <rect x='4' y='4' width='6' height='16' rx='1' />
-                                <rect x='14' y='4' width='6' height='16' rx='1' />
+                            <svg
+                                className='h-3 w-3'
+                                fill='currentColor'
+                                viewBox='0 0 24 24'
+                            >
+                                <rect
+                                    x='4'
+                                    y='4'
+                                    width='6'
+                                    height='16'
+                                    rx='1'
+                                />
+                                <rect
+                                    x='14'
+                                    y='4'
+                                    width='6'
+                                    height='16'
+                                    rx='1'
+                                />
                             </svg>
-                        :   <svg className='h-3 w-3' fill='currentColor' viewBox='0 0 24 24'>
+                        :   <svg
+                                className='h-3 w-3'
+                                fill='currentColor'
+                                viewBox='0 0 24 24'
+                            >
                                 <path d='M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z' />
                             </svg>
                         }
@@ -186,10 +215,16 @@ export function TranscriptViewer({
     session,
     onClose,
     onStartReplay,
+    autoSpeakOnMount,
 }: {
     session: RoundtableSession;
     onClose: () => void;
-    onStartReplay?: (session: RoundtableSession, turns: RoundtableTurn[]) => void;
+    onStartReplay?: (
+        session: RoundtableSession,
+        turns: RoundtableTurn[],
+    ) => void;
+    /** When true, auto-speak turns as they arrive (voice response loop) */
+    autoSpeakOnMount?: boolean;
 }) {
     const isRunning =
         session.status === 'running' || session.status === 'pending';
@@ -212,7 +247,8 @@ export function TranscriptViewer({
     const printRef = useRef<HTMLDivElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const [ttsState, ttsControls] = useTTS();
-    const [autoSpeak, setAutoSpeak] = useState(false);
+    const [autoSpeak, setAutoSpeak] = useState(autoSpeakOnMount ?? false);
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const prevTurnCountRef = useRef(turns.length);
 
     const formatLabel = session.format.replace(/_/g, ' ').toUpperCase();
@@ -231,25 +267,45 @@ export function TranscriptViewer({
         }
     }, [isLive, turns.length]);
 
-    // Stop TTS when component unmounts or session changes
+    // Stop TTS and cancel generation when component unmounts or session changes
+    // Use stop directly (stable ref from useCallback) — not ttsControls
+    // (which is a new object every render and would abort playback immediately)
+    const { stop: ttsStop, cancelGeneration: ttsCancelGen, checkCache: ttsCheckCache } = ttsControls;
     useEffect(() => {
         return () => {
-            ttsControls.stop();
+            ttsStop();
+            ttsCancelGen();
         };
-    }, [session.id, ttsControls]);
+    }, [session.id, ttsStop, ttsCancelGen]);
 
-    // Auto-speak new turns as they arrive via SSE
+    // Check for cached audio on mount / session change
+    useEffect(() => {
+        if (session.id && ttsState.isServerTTS) {
+            ttsCheckCache(session.id);
+        }
+    }, [session.id, ttsState.isServerTTS, ttsCheckCache]);
+
+    // Auto-speak new turns as they arrive via SSE (skip user turns)
     useEffect(() => {
         if (!autoSpeak || !isLive || !ttsState.isAvailable) return;
         if (turns.length > prevTurnCountRef.current) {
             const newTurn = turns[turns.length - 1];
-            ttsControls.playTurn(newTurn, turns.length - 1);
+            if (newTurn.speaker !== 'user') {
+                ttsControls.playTurn(newTurn, turns.length - 1);
+            }
         }
         prevTurnCountRef.current = turns.length;
-    }, [turns.length, autoSpeak, isLive, ttsState.isAvailable, turns, ttsControls]);
+    }, [
+        turns.length,
+        autoSpeak,
+        isLive,
+        ttsState.isAvailable,
+        turns,
+        ttsControls,
+    ]);
 
     return (
-        <div className='rounded-xl border border-zinc-700/50 bg-zinc-900/80 overflow-hidden'>
+        <div className='rounded-xl border border-zinc-700/50 bg-zinc-900/80 overflow-hidden relative'>
             {/* Toolbar */}
             <div className='flex items-center justify-between px-4 py-2 border-b border-zinc-800 bg-zinc-900/60'>
                 <div className='flex items-center gap-2'>
@@ -271,74 +327,265 @@ export function TranscriptViewer({
                         <button
                             onClick={() => setAutoSpeak(s => !s)}
                             className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider border transition-colors ${
-                                autoSpeak
-                                    ? 'bg-accent-blue/15 border-accent-blue/30 text-accent-blue'
-                                    : 'bg-zinc-800/50 border-zinc-700/50 text-zinc-500 hover:text-zinc-400'
+                                autoSpeak ?
+                                    'bg-accent-blue/15 border-accent-blue/30 text-accent-blue'
+                                :   'bg-zinc-800/50 border-zinc-700/50 text-zinc-500 hover:text-zinc-400'
                             }`}
-                            title={autoSpeak ? 'Disable auto-speak for new turns' : 'Auto-speak new turns as they arrive'}
+                            title={
+                                autoSpeak ?
+                                    'Disable auto-speak for new turns'
+                                :   'Auto-speak new turns as they arrive'
+                            }
                         >
-                            <svg className='h-2.5 w-2.5' fill='currentColor' viewBox='0 0 24 24'>
+                            <svg
+                                className='h-2.5 w-2.5'
+                                fill='currentColor'
+                                viewBox='0 0 24 24'
+                            >
                                 <path d='M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z' />
                             </svg>
                             Auto
                         </button>
                     )}
                 </div>
-                <div className='flex items-center gap-2'>
-                    {onStartReplay && session.status === 'completed' && turns.length > 0 && (
-                        <button
-                            onClick={() => onStartReplay(session, turns)}
-                            className='text-[10px] text-accent-blue hover:text-accent-blue/80 transition-colors px-2 py-1 rounded hover:bg-zinc-800 font-mono uppercase tracking-wider flex items-center gap-1'
-                            title='Watch animated replay in the office'
-                        >
-                            <svg className='h-3 w-3' fill='currentColor' viewBox='0 0 24 24'>
-                                <polygon points='5,3 19,12 5,21' />
-                            </svg>
-                            Replay
-                        </button>
-                    )}
-                    {ttsState.isAvailable && turns.length > 0 && (
-                        ttsState.isPlaying ?
+                <div className='flex items-center gap-1 sm:gap-2'>
+                    {/* Replay — desktop only */}
+                    {onStartReplay &&
+                        session.status === 'completed' &&
+                        turns.length > 0 && (
+                            <button
+                                onClick={() => onStartReplay(session, turns)}
+                                className='hidden sm:flex text-[10px] text-accent-blue hover:text-accent-blue/80 transition-colors px-2 py-2 sm:py-1 rounded hover:bg-zinc-800 font-mono uppercase tracking-wider items-center gap-1'
+                                title='Watch animated replay in the office'
+                            >
+                                <svg
+                                    className='h-3 w-3'
+                                    fill='currentColor'
+                                    viewBox='0 0 24 24'
+                                >
+                                    <polygon points='5,3 19,12 5,21' />
+                                </svg>
+                                Replay
+                            </button>
+                        )}
+                    {/* TTS playback controls — always visible */}
+                    {ttsState.isAvailable &&
+                        turns.length > 0 &&
+                        (ttsState.isPlaying ?
                             <button
                                 onClick={ttsControls.stop}
-                                className='text-[10px] text-accent-red hover:text-accent-red/80 transition-colors px-2 py-1 rounded hover:bg-zinc-800 font-mono uppercase tracking-wider flex items-center gap-1'
+                                className='text-[10px] text-accent-red hover:text-accent-red/80 transition-colors px-2 py-2 sm:py-1 rounded hover:bg-zinc-800 font-mono uppercase tracking-wider flex items-center gap-1'
                                 title='Stop speaking'
                             >
-                                <svg className='h-3 w-3' fill='currentColor' viewBox='0 0 24 24'>
-                                    <rect x='4' y='4' width='16' height='16' rx='2' />
+                                <svg
+                                    className='h-3 w-3'
+                                    fill='currentColor'
+                                    viewBox='0 0 24 24'
+                                >
+                                    <rect
+                                        x='4'
+                                        y='4'
+                                        width='16'
+                                        height='16'
+                                        rx='2'
+                                    />
                                 </svg>
-                                Stop
+                                <span className='hidden sm:inline'>Stop</span>
+                            </button>
+                        : ttsState.stoppedAtIndex >= 0 ?
+                            <button
+                                onClick={() =>
+                                    ttsControls.playAll(
+                                        turns,
+                                        ttsState.stoppedAtIndex,
+                                    )
+                                }
+                                className='text-[10px] text-accent-blue hover:text-accent-blue/80 transition-colors px-2 py-2 sm:py-1 rounded hover:bg-zinc-800 font-mono uppercase tracking-wider flex items-center gap-1'
+                                title={`Resume from turn ${ttsState.stoppedAtIndex + 1}`}
+                            >
+                                <svg
+                                    className='h-3 w-3'
+                                    fill='currentColor'
+                                    viewBox='0 0 24 24'
+                                >
+                                    <polygon points='5,3 19,12 5,21' />
+                                </svg>
+                                <span className='hidden sm:inline'>Resume #{ttsState.stoppedAtIndex + 1}</span>
                             </button>
                         :   <button
                                 onClick={() => ttsControls.playAll(turns)}
-                                className='text-[10px] text-zinc-400 hover:text-zinc-200 transition-colors px-2 py-1 rounded hover:bg-zinc-800 font-mono uppercase tracking-wider flex items-center gap-1'
+                                className='text-[10px] text-zinc-400 hover:text-zinc-200 transition-colors px-2 py-2 sm:py-1 rounded hover:bg-zinc-800 font-mono uppercase tracking-wider flex items-center gap-1'
                                 title='Read all turns aloud'
                             >
-                                <svg className='h-3 w-3' fill='currentColor' viewBox='0 0 24 24'>
+                                <svg
+                                    className='h-3 w-3'
+                                    fill='currentColor'
+                                    viewBox='0 0 24 24'
+                                >
                                     <path d='M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z' />
                                 </svg>
-                                Play All
-                            </button>
-                    )}
+                                <span className='hidden sm:inline'>Play All</span>
+                            </button>)}
                     {ttsState.needsUnlock && (
                         <button
                             onClick={ttsControls.unlock}
-                            className='text-[10px] text-amber-400 hover:text-amber-300 transition-colors px-2 py-1 rounded hover:bg-zinc-800 font-mono uppercase tracking-wider animate-pulse'
+                            className='text-[10px] text-amber-400 hover:text-amber-300 transition-colors px-2 py-2 sm:py-1 rounded hover:bg-zinc-800 font-mono uppercase tracking-wider animate-pulse'
                             title='Click to enable audio playback'
                         >
-                            🔇 Enable Audio
+                            🔇 <span className='hidden sm:inline'>Enable Audio</span>
                         </button>
                     )}
+                    {/* Download buffer — desktop only */}
+                    {ttsState.audioBuffers.length > 0 && !ttsState.isPlaying && (
+                        <button
+                            onClick={() =>
+                                ttsControls.downloadAudio(session.topic)
+                            }
+                            className='hidden sm:flex text-[10px] text-zinc-400 hover:text-zinc-200 transition-colors px-2 py-2 sm:py-1 rounded hover:bg-zinc-800 font-mono uppercase tracking-wider items-center gap-1'
+                            title='Download transcript audio as MP3'
+                        >
+                            <svg
+                                className='h-3 w-3'
+                                fill='none'
+                                viewBox='0 0 24 24'
+                                stroke='currentColor'
+                                strokeWidth={2}
+                            >
+                                <path
+                                    strokeLinecap='round'
+                                    strokeLinejoin='round'
+                                    d='M12 4v12m0 0l-4-4m4 4l4-4M4 18h16'
+                                />
+                            </svg>
+                            MP3
+                        </button>
+                    )}
+                    {/* Generate/Download/Regenerate MP3 — always visible */}
+                    {ttsState.isServerTTS && turns.length > 0 && !ttsState.isPlaying && !ttsState.isGenerating && (
+                        ttsState.generationError ?
+                            <button
+                                onClick={() =>
+                                    ttsControls.regenerateAudio(session.id, turns, session.topic)
+                                }
+                                className='text-[10px] text-amber-400 hover:text-amber-300 transition-colors px-2 py-2 sm:py-1 rounded hover:bg-zinc-800 font-mono uppercase tracking-wider flex items-center gap-1'
+                                title='Delete cache and regenerate MP3'
+                            >
+                                <svg
+                                    className='h-3 w-3'
+                                    fill='none'
+                                    viewBox='0 0 24 24'
+                                    stroke='currentColor'
+                                    strokeWidth={2}
+                                >
+                                    <path
+                                        strokeLinecap='round'
+                                        strokeLinejoin='round'
+                                        d='M4 4v5h5M20 20v-5h-5M4 9a9 9 0 0115.36-5.36M20 15a9 9 0 01-15.36 5.36'
+                                    />
+                                </svg>
+                                <span className='hidden sm:inline'>Regenerate MP3</span>
+                                <span className='sm:hidden'>Regen</span>
+                            </button>
+                        : ttsState.hasCachedAudio ?
+                            <button
+                                onClick={() =>
+                                    ttsControls.generateAudio(session.id, turns, session.topic)
+                                }
+                                className='text-[10px] text-accent-green hover:text-accent-green/80 transition-colors px-2 py-2 sm:py-1 rounded hover:bg-zinc-800 font-mono uppercase tracking-wider flex items-center gap-1'
+                                title='Download cached MP3 (instant)'
+                            >
+                                <svg
+                                    className='h-3 w-3'
+                                    fill='none'
+                                    viewBox='0 0 24 24'
+                                    stroke='currentColor'
+                                    strokeWidth={2}
+                                >
+                                    <path
+                                        strokeLinecap='round'
+                                        strokeLinejoin='round'
+                                        d='M12 4v12m0 0l-4-4m4 4l4-4M4 18h16'
+                                    />
+                                </svg>
+                                <span className='hidden sm:inline'>Download MP3</span>
+                                <span className='sm:hidden'>MP3</span>
+                            </button>
+                        :   <button
+                                onClick={() =>
+                                    ttsControls.generateAudio(session.id, turns, session.topic)
+                                }
+                                className='text-[10px] text-zinc-400 hover:text-zinc-200 transition-colors px-2 py-2 sm:py-1 rounded hover:bg-zinc-800 font-mono uppercase tracking-wider flex items-center gap-1'
+                                title='Generate and download MP3 without playback'
+                            >
+                                <svg
+                                    className='h-3 w-3'
+                                    fill='none'
+                                    viewBox='0 0 24 24'
+                                    stroke='currentColor'
+                                    strokeWidth={2}
+                                >
+                                    <path
+                                        strokeLinecap='round'
+                                        strokeLinejoin='round'
+                                        d='M12 4v12m0 0l-4-4m4 4l4-4M4 18h16'
+                                    />
+                                </svg>
+                                <span className='hidden sm:inline'>Generate MP3</span>
+                                <span className='sm:hidden'>MP3</span>
+                            </button>
+                    )}
+                    {/* Print — desktop only */}
                     <button
                         onClick={() => handlePrint(printRef.current)}
-                        className='text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors px-2 py-1 rounded hover:bg-zinc-800 font-mono uppercase tracking-wider'
+                        className='hidden sm:block text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors px-2 py-2 sm:py-1 rounded hover:bg-zinc-800 font-mono uppercase tracking-wider'
                         title='Print transcript'
                     >
                         Print
                     </button>
+                    {/* Mobile overflow menu */}
+                    <div className='relative sm:hidden'>
+                        <button
+                            onClick={() => setMobileMenuOpen(o => !o)}
+                            className='text-zinc-500 hover:text-zinc-300 transition-colors p-2 rounded hover:bg-zinc-800'
+                            aria-label='More actions'
+                        >
+                            <svg className='h-3.5 w-3.5' fill='currentColor' viewBox='0 0 24 24'>
+                                <circle cx='12' cy='5' r='2' />
+                                <circle cx='12' cy='12' r='2' />
+                                <circle cx='12' cy='19' r='2' />
+                            </svg>
+                        </button>
+                        {mobileMenuOpen && (
+                            <div className='absolute right-0 top-full mt-1 z-50 rounded-lg bg-zinc-800 border border-zinc-700 shadow-lg py-1 min-w-[140px]'>
+                                {onStartReplay && session.status === 'completed' && turns.length > 0 && (
+                                    <button
+                                        onClick={() => { onStartReplay(session, turns); setMobileMenuOpen(false); }}
+                                        className='w-full text-left px-3 py-2 text-[11px] text-zinc-300 hover:bg-zinc-700 transition-colors'
+                                    >
+                                        Replay
+                                    </button>
+                                )}
+                                {ttsState.audioBuffers.length > 0 && !ttsState.isPlaying && (
+                                    <button
+                                        onClick={() => { ttsControls.downloadAudio(session.topic); setMobileMenuOpen(false); }}
+                                        className='w-full text-left px-3 py-2 text-[11px] text-zinc-300 hover:bg-zinc-700 transition-colors'
+                                    >
+                                        Download Audio
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => { handlePrint(printRef.current); setMobileMenuOpen(false); }}
+                                    className='w-full text-left px-3 py-2 text-[11px] text-zinc-300 hover:bg-zinc-700 transition-colors'
+                                >
+                                    Print
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                    {/* Close — always visible */}
                     <button
                         onClick={onClose}
-                        className='text-zinc-500 hover:text-zinc-300 transition-colors p-1 rounded hover:bg-zinc-800'
+                        className='text-zinc-500 hover:text-zinc-300 transition-colors p-2 sm:p-1 rounded hover:bg-zinc-800'
                         aria-label='Close transcript'
                     >
                         <svg
@@ -368,11 +615,11 @@ export function TranscriptViewer({
             >
                 {loading ?
                     <TranscriptSkeleton />
-                :   <div className='px-6 py-5 font-mono'>
+                :   <div className='px-3 sm:px-6 py-5 font-mono overflow-x-hidden break-words'>
                         {/* Document header */}
                         <div className='header border-b border-zinc-700 pb-4 mb-5'>
                             <h1 className='text-xs font-bold uppercase tracking-[0.2em] text-zinc-400'>
-                                Subcult Ops — Roundtable Minutes
+                                SUBCORP — Roundtable Minutes
                             </h1>
                             <h2 className='text-sm text-zinc-200 mt-2 leading-snug'>
                                 {session.topic}
@@ -446,16 +693,24 @@ export function TranscriptViewer({
                                 {session.participants.map(p => {
                                     const agent = AGENTS[p as AgentId];
                                     const color =
-                                        agent?.tailwindTextColor ?? 'text-zinc-400';
+                                        agent?.tailwindTextColor ??
+                                        'text-zinc-400';
                                     return (
                                         <div
                                             key={p}
                                             className='participant ml-4 flex items-center gap-2'
                                         >
-                                            <AgentAvatar agentId={p} size='md' />
-                                            <span className={`text-xs ${color}`}>
+                                            <AgentAvatar
+                                                agentId={p}
+                                                size='md'
+                                            />
+                                            <span
+                                                className={`text-xs ${color}`}
+                                            >
                                                 {agent?.displayName ?? p}
-                                                {agent?.role ? ` — ${agent.role}` : ''}
+                                                {agent?.role ?
+                                                    ` — ${agent.role}`
+                                                :   ''}
                                             </span>
                                         </div>
                                     );
@@ -488,12 +743,37 @@ export function TranscriptViewer({
                         {/* Footer */}
                         <div className='footer border-t border-zinc-700 mt-6 pt-3 text-center'>
                             <span className='text-[9px] uppercase tracking-[0.15em] text-zinc-600'>
-                                End of Transcript — Subcult Ops
+                                End of Transcript — SUBCORP
                             </span>
                         </div>
                     </div>
                 }
             </div>
+
+            {/* Generation progress overlay */}
+            {ttsState.isGenerating && (
+                <div className='absolute bottom-0 inset-x-0 bg-zinc-900/90 backdrop-blur-sm border-t border-zinc-700/50 px-4 py-2.5'>
+                    <div className='flex items-center justify-between mb-1.5'>
+                        <span className='text-[10px] font-mono uppercase tracking-wider text-zinc-400'>
+                            Generating MP3&hellip; Turn {ttsState.generationProgress} of {ttsState.generationTotal}
+                        </span>
+                        <button
+                            onClick={ttsControls.cancelGeneration}
+                            className='text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors px-2 py-0.5 rounded hover:bg-zinc-800 font-mono uppercase tracking-wider'
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                    <div className='h-1 bg-zinc-800 rounded-full overflow-hidden'>
+                        <div
+                            className='h-full bg-accent-blue rounded-full transition-all duration-300'
+                            style={{
+                                width: `${ttsState.generationTotal > 0 ? (ttsState.generationProgress / ttsState.generationTotal) * 100 : 0}%`,
+                            }}
+                        />
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

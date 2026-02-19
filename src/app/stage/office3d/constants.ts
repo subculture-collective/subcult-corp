@@ -130,6 +130,17 @@ export const AGENT_MEMORY_BAR_MULTIPLIER = 10;
 export const AGENT_MEMORY_BAR_MAX_WIDTH = 100;
 export const SERVER_RACK_ACTIVE_LEDS = 3;
 
+// ─── Droid Constants ───
+export const DROID_PATROL_WAYPOINTS: [number, number, number][] = [
+    [17, 0.01, -10],    // server rack
+    [0, 0.01, -7],      // meeting table
+    [-15, 0.01, 8],     // coffee machine
+    [5, 0.01, 8],       // near plant2 (open area)
+];
+
+export const DROID_MOVE_SPEED = 1.6; // slower than agents (2.4)
+export const DROID_COLOR = '#74c7ec'; // sapphire
+
 // ─── Sky Colors by Time of Day ───
 export const SKY_COLORS = {
     day:   { top: '#1e3a5f', bottom: '#0f172a' },

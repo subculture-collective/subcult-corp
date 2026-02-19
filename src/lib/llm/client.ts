@@ -491,15 +491,14 @@ export async function llmGenerate(
     const systemMessage = messages.find(m => m.role === 'system');
     const conversationMessages = messages.filter(m => m.role !== 'system');
 
-    // ── Try Ollama first (free cloud + local inference) ──
-    if (OLLAMA_API_KEY || OLLAMA_LOCAL_URL) {
+    // ── Try Ollama first — but ONLY when no tools are needed ──
+    // Ollama cloud models can't use function calling; skip to avoid wasting ~22s/round
+    const hasToolsDefined = tools && tools.length > 0;
+    if (!hasToolsDefined && (OLLAMA_API_KEY || OLLAMA_LOCAL_URL)) {
         const ollamaResult = await ollamaChat(messages, temperature, {
             maxTokens,
-            tools,
-            maxToolRounds: options.maxToolRounds,
         });
         if (ollamaResult?.text) {
-            // Track usage (fire-and-forget) — map Ollama usage fields to SDK format
             const ollamaUsage = ollamaResult.usage ? {
                 inputTokens: ollamaResult.usage.prompt_tokens ?? 0,
                 outputTokens: ollamaResult.usage.completion_tokens ?? 0,
@@ -515,7 +514,7 @@ export async function llmGenerate(
         }
     }
 
-    // ── Fall back to OpenRouter (cloud) ──
+    // ── OpenRouter (cloud) ──
     // Resolve model list: explicit override → single model, otherwise → dynamic routing (DB + env + defaults)
     const resolved =
         model ?
@@ -569,35 +568,63 @@ export async function llmGenerate(
     }
 
     // 1) Try with models array — OpenRouter handles provider routing natively
+    let openRouterError: { statusCode?: number; message?: string } | null = null;
     try {
         const text = await tryCall(modelList);
         if (text) return text;
     } catch (error: unknown) {
-        const err = error as { statusCode?: number; message?: string };
-        if (err.statusCode === 401) {
+        openRouterError = error as { statusCode?: number; message?: string };
+        if (openRouterError.statusCode === 401) {
             throw new Error(
                 'Invalid OpenRouter API key — check your OPENROUTER_API_KEY',
             );
         }
-        if (err.statusCode === 402) {
-            throw new Error(
-                'Insufficient OpenRouter credits — add credits at openrouter.ai',
-            );
-        }
-        if (err.statusCode === 429) {
-            throw new Error('OpenRouter rate limited — try again shortly');
-        }
-        // Other errors — fall through to individual model attempts
+        // 402/429/other — fall through to individual models, then Ollama retry
     }
 
     // 2) If models array returned empty or errored, try remaining models individually
-    for (const fallback of resolved.slice(MAX_MODELS_ARRAY)) {
-        try {
-            const text = await tryCall(fallback);
-            if (text) return text;
-        } catch {
-            // Continue to next
+    if (!openRouterError || (openRouterError.statusCode !== 402 && openRouterError.statusCode !== 429)) {
+        for (const fallback of resolved.slice(MAX_MODELS_ARRAY)) {
+            try {
+                const text = await tryCall(fallback);
+                if (text) return text;
+            } catch {
+                // Continue to next
+            }
         }
+    }
+
+    // 3) If OpenRouter failed entirely, retry Ollama as last resort (text-only, no tools)
+    if (openRouterError && !hasToolsDefined && (OLLAMA_API_KEY || OLLAMA_LOCAL_URL)) {
+        log.debug('OpenRouter failed, retrying Ollama as last resort', {
+            error: openRouterError.message,
+            statusCode: openRouterError.statusCode,
+        });
+        const retryResult = await ollamaChat(messages, temperature, {
+            maxTokens,
+        });
+        if (retryResult?.text) {
+            const ollamaUsage = retryResult.usage ? {
+                inputTokens: retryResult.usage.prompt_tokens ?? 0,
+                outputTokens: retryResult.usage.completion_tokens ?? 0,
+                totalTokens: retryResult.usage.total_tokens ?? 0,
+            } as unknown as OpenResponsesUsage : null;
+            void trackUsage(
+                `ollama/${retryResult.model}`,
+                ollamaUsage,
+                Date.now() - startTime,
+                trackingContext,
+            );
+            return retryResult.text;
+        }
+    }
+
+    // If we had a specific OpenRouter error and nothing else worked, throw it
+    if (openRouterError?.statusCode === 402) {
+        throw new Error('Insufficient OpenRouter credits — add credits at openrouter.ai');
+    }
+    if (openRouterError?.statusCode === 429) {
+        throw new Error('OpenRouter rate limited — try again shortly');
     }
 
     return '';
@@ -624,45 +651,34 @@ export async function llmGenerateWithTools(
     const startTime = Date.now();
     const hasTools = tools.length > 0;
 
-    // ── Try Ollama first (free cloud + local inference) ──
-    if (OLLAMA_API_KEY || OLLAMA_LOCAL_URL) {
+    // ── Try Ollama first — but ONLY when no tools are needed ──
+    // Ollama cloud models can't use function calling; attempting them wastes ~22s
+    // per round before falling through to OpenRouter, causing session timeouts.
+    if (!hasTools && (OLLAMA_API_KEY || OLLAMA_LOCAL_URL)) {
         const ollamaResult = await ollamaChat(messages, temperature, {
             maxTokens,
-            tools,
-            maxToolRounds,
         });
 
         if (ollamaResult?.text) {
-            // If Ollama actually used tools, or no tools were requested → return immediately
-            if (!hasTools || ollamaResult.toolCalls.length > 0) {
-                const ollamaUsage = ollamaResult.usage ? {
-                    inputTokens: ollamaResult.usage.prompt_tokens ?? 0,
-                    outputTokens: ollamaResult.usage.completion_tokens ?? 0,
-                    totalTokens: ollamaResult.usage.total_tokens ?? 0,
-                } as unknown as OpenResponsesUsage : null;
-                void trackUsage(
-                    `ollama/${ollamaResult.model}`,
-                    ollamaUsage,
-                    Date.now() - startTime,
-                    trackingContext,
-                );
-                return {
-                    text: ollamaResult.text,
-                    toolCalls: ollamaResult.toolCalls,
-                };
-            }
-
-            // Ollama returned text but didn't use any tools — this is likely a search
-            // query or command as text (Ollama cloud models don't support function calling).
-            // Fall through to OpenRouter for proper tool execution.
-            log.debug('Ollama text-only response (tools not used), trying OpenRouter', {
-                model: ollamaResult.model,
-                textLen: ollamaResult.text.length,
-            });
+            const ollamaUsage = ollamaResult.usage ? {
+                inputTokens: ollamaResult.usage.prompt_tokens ?? 0,
+                outputTokens: ollamaResult.usage.completion_tokens ?? 0,
+                totalTokens: ollamaResult.usage.total_tokens ?? 0,
+            } as unknown as OpenResponsesUsage : null;
+            void trackUsage(
+                `ollama/${ollamaResult.model}`,
+                ollamaUsage,
+                Date.now() - startTime,
+                trackingContext,
+            );
+            return {
+                text: ollamaResult.text,
+                toolCalls: [],
+            };
         }
     }
 
-    // ── Fall back to OpenRouter (cloud) ──
+    // ── OpenRouter (cloud) ──
     const client = getClient();
     const resolved =
         model ?

@@ -113,6 +113,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get('status');
     const format = searchParams.get('format');
+    const source = searchParams.get('source');
     const withTurns = searchParams.get('with_turns') === 'true';
     const limit = parseInt(searchParams.get('limit') ?? '20', 10);
 
@@ -139,6 +140,7 @@ export async function GET(req: NextRequest) {
                 WHERE 1=1
                 ${status ? sql`AND s.status = ${status}` : sql``}
                 ${format ? sql`AND s.format = ${format}` : sql``}
+                ${source ? sql`AND s.source = ${source}` : sql``}
                 GROUP BY s.id
                 ORDER BY s.created_at DESC
                 LIMIT ${limit}
@@ -149,6 +151,7 @@ export async function GET(req: NextRequest) {
                 WHERE 1=1
                 ${status ? sql`AND status = ${status}` : sql``}
                 ${format ? sql`AND format = ${format}` : sql``}
+                ${source ? sql`AND source = ${source}` : sql``}
                 ORDER BY created_at DESC
                 LIMIT ${limit}
             `;

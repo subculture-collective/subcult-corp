@@ -1,7 +1,7 @@
 // office3d/Office3DScene.tsx — main Three.js scene container with OrbitControls and fullscreen
 'use client';
 
-import { Suspense, useCallback, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
@@ -13,6 +13,7 @@ import { OfficeFurniture } from './OfficeFurniture';
 import { OfficeEnvironment } from './OfficeEnvironment';
 import { OfficeWhiteboard } from './OfficeWhiteboard';
 import { AgentSprite } from './AgentSprite';
+import { DroidSprite } from './DroidSprite';
 import { OverlayPanels } from './OverlayPanels';
 import { useOfficeState } from './useOfficeState';
 import { useTimeOfDay } from '../hooks';
@@ -181,6 +182,11 @@ function OfficeSceneContent({
                 />
             ))}
 
+            {/* Droids */}
+            {state.droids.map(droid => (
+                <DroidSprite key={droid.droid_id} droidId={droid.droid_id} task={droid.task} />
+            ))}
+
             {/* Post-processing */}
             <EffectComposer>
                 <Bloom
@@ -214,9 +220,11 @@ function LoadingScreen() {
 function AgentStatusBar({
     agents,
     sessions,
+    droids,
 }: {
     agents: ReturnType<typeof useOfficeState>['agents'];
     sessions: ReturnType<typeof useOfficeState>['sessions'];
+    droids: ReturnType<typeof useOfficeState>['droids'];
 }) {
     const activeSession = sessions.find(
         s => s.status === 'running' || s.status === 'pending',
@@ -246,6 +254,14 @@ function AgentStatusBar({
                         </div>
                     );
                 })}
+                {droids.length > 0 && (
+                    <div className='flex items-center gap-1 shrink-0 ml-1 px-1.5 py-0.5 rounded bg-zinc-800/50 border border-zinc-700/30'>
+                        <span className='text-[10px]'>{'🤖'}</span>
+                        <span className='text-[10px] font-medium' style={{ color: '#74c7ec' }}>
+                            {droids.length} droid{droids.length !== 1 ? 's' : ''}
+                        </span>
+                    </div>
+                )}
                 {activeSession && (
                     <div className='ml-auto flex items-center gap-1.5 shrink-0'>
                         <span className='relative flex h-1.5 w-1.5'>
@@ -300,7 +316,8 @@ export function Office3DScene({ fullscreen, onToggleFullscreen }: {
 }) {
     const period = useTimeOfDay();
     const state = useOfficeState();
-    const [webglSupported] = useState(checkWebGL);
+    const [webglSupported, setWebglSupported] = useState(false);
+    useEffect(() => { setWebglSupported(checkWebGL()); }, []);
 
     const containerClass = fullscreen
         ? 'fixed inset-0 z-50 bg-[#11111b]'
@@ -327,7 +344,7 @@ export function Office3DScene({ fullscreen, onToggleFullscreen }: {
                     {onToggleFullscreen && (
                         <button
                             onClick={onToggleFullscreen}
-                            className='text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors px-1.5 py-0.5 rounded border border-zinc-700/50 hover:border-zinc-600'
+                            className='text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors px-3 py-2 sm:px-1.5 sm:py-0.5 rounded border border-zinc-700/50 hover:border-zinc-600'
                             title={fullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen'}
                         >
                             {fullscreen ? '✕ Exit' : '⛶ Fullscreen'}
@@ -385,13 +402,13 @@ export function Office3DScene({ fullscreen, onToggleFullscreen }: {
                 )}
 
                 {/* Controls hint */}
-                <div className='absolute bottom-3 right-3 px-2 py-1 rounded bg-zinc-800/60 text-[9px] text-zinc-600 pointer-events-none'>
+                <div className='absolute bottom-3 right-3 px-2 py-1 rounded bg-zinc-800/60 text-[9px] text-zinc-600 pointer-events-none hidden sm:block'>
                     Drag to rotate · Scroll to zoom · Right-drag to pan
                 </div>
             </div>
 
             {/* Status bar */}
-            <AgentStatusBar agents={state.agents} sessions={state.sessions} />
+            <AgentStatusBar agents={state.agents} sessions={state.sessions} droids={state.droids} />
         </div>
     );
 }

@@ -6,7 +6,7 @@ export const directory: DirectoryEntry[] = [
         name: 'OpenClaw',
         shortDesc:
             'Open-source AI gateway that connects agents to tools and messaging channels.',
-        body: 'OpenClaw is an open-source gateway for AI agents. It provides a bridge between your agent logic and external tools (called skills), exposed over an OpenAI-compatible HTTP API and WebSocket connections.\n\nThe gateway supports multiple messaging channels — Discord, Telegram, WhatsApp, Mattermost — letting agents interact with users across platforms. Skills run in sandboxed environments, and the gateway handles authentication, rate limiting, and tool discovery.\n\nSUBCULT OPS uses OpenClaw to give its six agents access to web search, file operations, and other capabilities. The gateway runs as a lightweight systemd service with minimal configuration.',
+        body: 'OpenClaw is an open-source gateway for AI agents. It provides a bridge between your agent logic and external tools (called skills), exposed over an OpenAI-compatible HTTP API and WebSocket connections.\n\nThe gateway supports multiple messaging channels — Discord, Telegram, WhatsApp, Mattermost — letting agents interact with users across platforms. Skills run in sandboxed environments, and the gateway handles authentication, rate limiting, and tool discovery.\n\nOpenClaw takes a gateway-first approach where tool execution is mediated through agent chat rather than direct API calls. It runs as a lightweight systemd service with minimal configuration.',
         category: 'platform',
         pricing: 'free',
         url: 'https://github.com/open-claw/openclaw',
@@ -29,6 +29,35 @@ export const directory: DirectoryEntry[] = [
             'Documentation still evolving',
         ],
         related: ['anthropic-mcp', 'langchain', 'openrouter'],
+    },
+    {
+        slug: 'clawhub',
+        name: 'ClawHub',
+        shortDesc:
+            'Skill registry and marketplace for OpenClaw AI agents — discover, install, and publish agent capabilities.',
+        body: 'ClawHub is the official skill marketplace for the OpenClaw ecosystem. It hosts over 3,000 community-built skill extensions that grant AI agents new capabilities — from web browsing and productivity integrations to development tools and data analysis.\n\nThe platform provides a CLI tool for managing skills locally. Developers can publish skill bundles with semantic versioning, changelogs, and tags. Discovery is powered by vector-based semantic search, so finding relevant skills works even when exact keywords do not match.\n\nClawHub includes community features like stars, comments, and a moderation system that auto-hides skills after multiple reports. Following the ClawHavoc security incident in February 2026, the platform added VirusTotal scanning and stricter publisher requirements.',
+        category: 'platform',
+        pricing: 'free',
+        url: 'https://clawhub.ai',
+        features: [
+            'Vector-powered semantic skill search',
+            'CLI for install, update, publish, and sync',
+            'Semver versioning with changelogs and tags',
+            'Community moderation and reporting',
+            '3,000+ community-built skills',
+        ],
+        pros: [
+            'Large and growing skill ecosystem',
+            'Semantic search finds relevant skills accurately',
+            'Free and open — all skills are public',
+            'Simple CLI workflow (clawhub install <slug>)',
+        ],
+        cons: [
+            'Tied to the OpenClaw ecosystem',
+            'Security concerns after ClawHavoc incident',
+            'Skill quality varies across community contributions',
+        ],
+        related: ['openclaw', 'anthropic-mcp', 'langchain'],
     },
     {
         slug: 'claude',
@@ -121,7 +150,7 @@ export const directory: DirectoryEntry[] = [
         slug: 'autogen',
         name: 'AutoGen',
         shortDesc:
-            'Microsoft\'s multi-agent conversation framework — built for agent-to-agent dialogue and coordination.',
+            "Microsoft's multi-agent conversation framework — built for agent-to-agent dialogue and coordination.",
         body: "AutoGen is Microsoft's open-source framework specifically designed for multi-agent conversations. Unlike general-purpose LLM frameworks, AutoGen was built from the ground up around the concept of agents talking to each other.\n\nThe framework provides primitives for agent-to-agent messaging, group chat with dynamic speaker selection, human-in-the-loop patterns, and code execution. AutoGen agents can be backed by different LLMs, allowing you to use the right model for each agent role.\n\nAutoGen is particularly strong for research-oriented multi-agent systems where agent dialogue and debate are core to the workflow.",
         category: 'framework',
         pricing: 'free',
@@ -151,7 +180,7 @@ export const directory: DirectoryEntry[] = [
         name: 'CrewAI',
         shortDesc:
             'Role-based multi-agent framework — define agents with roles, goals, and backstories, then let them collaborate.',
-        body: "CrewAI takes a role-playing approach to multi-agent systems. You define agents with specific roles, goals, and backstories, then organize them into crews that execute tasks collaboratively.\n\nThe framework emphasizes simplicity — you describe what each agent should do in natural language, and CrewAI handles the orchestration. This makes it accessible to developers who want multi-agent capabilities without deep framework knowledge.\n\nCrewAI supports sequential and hierarchical task execution, inter-agent delegation, and memory. It integrates with LangChain tools, giving you access to a broad ecosystem of capabilities.",
+        body: 'CrewAI takes a role-playing approach to multi-agent systems. You define agents with specific roles, goals, and backstories, then organize them into crews that execute tasks collaboratively.\n\nThe framework emphasizes simplicity — you describe what each agent should do in natural language, and CrewAI handles the orchestration. This makes it accessible to developers who want multi-agent capabilities without deep framework knowledge.\n\nCrewAI supports sequential and hierarchical task execution, inter-agent delegation, and memory. It integrates with LangChain tools, giving you access to a broad ecosystem of capabilities.',
         category: 'framework',
         pricing: 'freemium',
         url: 'https://crewai.com',
@@ -209,7 +238,7 @@ export const directory: DirectoryEntry[] = [
         name: 'Ollama',
         shortDesc:
             'Run open-source LLMs locally — download, serve, and use models on your own hardware with a simple CLI.',
-        body: "Ollama makes local LLM deployment simple. Install it, pull a model, and you have a running inference server. It supports dozens of open-source models including Llama, Mistral, Qwen, DeepSeek, and Gemma.\n\nThe tool handles model management (downloading, updating, quantization), GPU acceleration (NVIDIA CUDA, Apple Metal), and serving via both a native API and an OpenAI-compatible endpoint. This makes it easy to integrate with existing tools and frameworks.\n\nFor agent systems, Ollama provides a privacy-preserving, zero-cost-per-token option for simpler tasks. Combined with cloud models for complex reasoning, it enables hybrid architectures that balance cost, privacy, and capability.",
+        body: 'Ollama makes local LLM deployment simple. Install it, pull a model, and you have a running inference server. It supports dozens of open-source models including Llama, Mistral, Qwen, DeepSeek, and Gemma.\n\nThe tool handles model management (downloading, updating, quantization), GPU acceleration (NVIDIA CUDA, Apple Metal), and serving via both a native API and an OpenAI-compatible endpoint. This makes it easy to integrate with existing tools and frameworks.\n\nFor agent systems, Ollama provides a privacy-preserving, zero-cost-per-token option for simpler tasks. Combined with cloud models for complex reasoning, it enables hybrid architectures that balance cost, privacy, and capability.',
         category: 'platform',
         pricing: 'free',
         url: 'https://ollama.com',
@@ -238,7 +267,7 @@ export const directory: DirectoryEntry[] = [
         name: 'Anthropic MCP',
         shortDesc:
             'Model Context Protocol — an open standard for connecting AI to external tools and data sources.',
-        body: "The Model Context Protocol (MCP) by Anthropic is an open standard that defines how AI applications connect to external tools and data. It provides a client-server architecture where MCP clients (AI apps) discover and use tools exposed by MCP servers.\n\nMCP standardizes tool discovery, invocation, and response handling. A tool written as an MCP server works with any MCP-compatible client — Claude Desktop, VS Code extensions, agent frameworks, and more. This eliminates the need for custom integrations per tool per client.\n\nThe protocol also supports resources (read-only data sources) and prompts (reusable prompt templates), making it a comprehensive interface between AI and external systems.",
+        body: 'The Model Context Protocol (MCP) by Anthropic is an open standard that defines how AI applications connect to external tools and data. It provides a client-server architecture where MCP clients (AI apps) discover and use tools exposed by MCP servers.\n\nMCP standardizes tool discovery, invocation, and response handling. A tool written as an MCP server works with any MCP-compatible client — Claude Desktop, VS Code extensions, agent frameworks, and more. This eliminates the need for custom integrations per tool per client.\n\nThe protocol also supports resources (read-only data sources) and prompts (reusable prompt templates), making it a comprehensive interface between AI and external systems.',
         category: 'protocol',
         pricing: 'free',
         url: 'https://modelcontextprotocol.io',
@@ -267,7 +296,7 @@ export const directory: DirectoryEntry[] = [
         name: 'Vercel AI SDK',
         shortDesc:
             'TypeScript toolkit for building AI applications — streaming, tool use, and multi-provider support for React and Next.js.',
-        body: "The Vercel AI SDK is a TypeScript-first toolkit for building AI-powered applications, particularly with React and Next.js. It provides hooks and utilities for streaming LLM responses, managing conversations, handling tool calls, and rendering AI-generated UI.\n\nThe SDK supports multiple LLM providers through a unified interface, with first-class support for OpenAI, Anthropic, Google, and others. Its streaming architecture is optimized for web applications, providing real-time response rendering.\n\nFor TypeScript developers building web-facing AI applications, the Vercel AI SDK offers the tightest integration with the React/Next.js ecosystem. It handles the complexity of streaming, tool use, and multi-step agent workflows.",
+        body: 'The Vercel AI SDK is a TypeScript-first toolkit for building AI-powered applications, particularly with React and Next.js. It provides hooks and utilities for streaming LLM responses, managing conversations, handling tool calls, and rendering AI-generated UI.\n\nThe SDK supports multiple LLM providers through a unified interface, with first-class support for OpenAI, Anthropic, Google, and others. Its streaming architecture is optimized for web applications, providing real-time response rendering.\n\nFor TypeScript developers building web-facing AI applications, the Vercel AI SDK offers the tightest integration with the React/Next.js ecosystem. It handles the complexity of streaming, tool use, and multi-step agent workflows.',
         category: 'framework',
         pricing: 'free',
         url: 'https://sdk.vercel.ai',
@@ -294,5 +323,5 @@ export const directory: DirectoryEntry[] = [
 ];
 
 export const directoryLabelMap: Record<string, string> = Object.fromEntries(
-    directory.map(e => [e.slug, e.name])
+    directory.map(e => [e.slug, e.name]),
 );

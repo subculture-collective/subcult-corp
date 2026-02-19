@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS ops_newspaper_editions (
     articles        JSONB NOT NULL DEFAULT '[]',
     markdown_path   TEXT,
     pdf_path        TEXT,
+    pdf_data        BYTEA,
     generated_by    TEXT NOT NULL DEFAULT 'system',
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );

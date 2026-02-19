@@ -1,8 +1,10 @@
 // Stage — main dashboard page composing all components
 'use client';
 
-import { useState, useEffect, Suspense, useCallback } from 'react';
+import { useState, useEffect, Suspense, useCallback, useMemo } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { StageHeader, type ViewMode } from './StageHeader';
+import { StageSidebar } from './StageSidebar';
 import type { ConnectionStatus } from './hooks';
 import type { RoundtableSession, RoundtableTurn } from '@/lib/types';
 import { MissionsList } from './MissionsList';
@@ -20,18 +22,87 @@ import { GovernancePanel } from './GovernancePanel';
 import { DreamLog } from './DreamLog';
 import { AgentDesigner } from './AgentDesigner';
 import { MemoryArchaeology } from './MemoryArchaeology';
+import { FileBrowser } from './FileBrowser';
 import { StageErrorBoundary, SectionErrorBoundary } from './StageErrorBoundary';
-import { AskTheRoom } from './AskTheRoom';
+import { AskTheRoom, type VoiceSessionInfo } from './AskTheRoom';
+import { TranscriptViewer } from './TranscriptViewer';
+import { VoiceChatInput } from './VoiceChatInput';
 import { DailyDigest } from './DailyDigest';
+import { NewsDigest } from './NewsDigest';
 import { StageIntro } from './StageIntro';
+import { QuestionsView } from './QuestionsView';
+import { NewspaperView } from './NewspaperView';
+import { NewsletterView } from './NewsletterView';
 import {
     MissionsListSkeleton,
     EventLogFeedSkeleton,
     SystemLogsSkeleton,
+    FileBrowserSkeleton,
 } from './StageSkeletons';
 
+const VALID_VIEWS: ViewMode[] = [
+    'feed',
+    'questions',
+    'missions',
+    'office',
+    'logs',
+    'costs',
+    'memories',
+    'relationships',
+    'content',
+    'files',
+    'governance',
+    'dreams',
+    'agent-designer',
+    'archaeology',
+    'newspaper',
+    'newsletter',
+];
+
+const LAST_VIEW_KEY = 'subcult-last-view';
+
+function isValidView(v: string | null): v is ViewMode {
+    return v !== null && VALID_VIEWS.includes(v as ViewMode);
+}
+
 export default function StagePage() {
-    const [view, setView] = useState<ViewMode>('feed');
+    return (
+        <Suspense
+            fallback={
+                <div className='min-h-screen bg-[#11111b] flex items-center justify-center'>
+                    <div className='text-zinc-500 text-sm'>Loading...</div>
+                </div>
+            }
+        >
+            <StageContent />
+        </Suspense>
+    );
+}
+
+function StageContent() {
+    const searchParams = useSearchParams();
+    const router = useRouter();
+
+    // Resolve view: URL param > localStorage > 'feed'
+    const view = useMemo<ViewMode>(() => {
+        const param = searchParams.get('view');
+        if (isValidView(param)) return param;
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem(LAST_VIEW_KEY);
+            if (isValidView(saved)) return saved;
+        }
+        return 'feed';
+    }, [searchParams]);
+
+    const setView = useCallback(
+        (v: ViewMode) => {
+            localStorage.setItem(LAST_VIEW_KEY, v);
+            const path = v === 'feed' ? '/stage' : `/stage?view=${v}`;
+            router.replace(path);
+        },
+        [router],
+    );
+
     const [playbackMissionId, setPlaybackMissionId] = useState<string | null>(
         null,
     );
@@ -57,7 +128,7 @@ export default function StagePage() {
             setView('office');
             setOfficeMode('svg');
         },
-        [],
+        [setView],
     );
 
     const handleStopReplay = useCallback(() => {
@@ -65,6 +136,31 @@ export default function StagePage() {
         setReplayTurns([]);
         setCurrentTurnIndex(0);
     }, []);
+
+    // ── Voice session state (Phase 2 STT) ──
+    const [voiceSession, setVoiceSession] = useState<VoiceSessionInfo | null>(null);
+    const handleVoiceSessionCreated = useCallback((info: VoiceSessionInfo) => {
+        setVoiceSession(info);
+    }, []);
+    const handleVoiceSessionClose = useCallback(() => {
+        setVoiceSession(null);
+    }, []);
+
+    // Build a minimal RoundtableSession object for the TranscriptViewer
+    const voiceRoundtableSession = useMemo(() => {
+        if (!voiceSession) return null;
+        return {
+            id: voiceSession.sessionId,
+            format: voiceSession.format,
+            topic: voiceSession.topic,
+            participants: [] as string[],
+            status: 'pending' as const,
+            source: 'user_question',
+            turn_count: 0,
+            metadata: { voiceMode: true },
+            created_at: new Date().toISOString(),
+        };
+    }, [voiceSession]);
 
     // ── Fullscreen 3D state ──
     const [office3DFullscreen, setOffice3DFullscreen] = useState(false);
@@ -84,12 +180,12 @@ export default function StagePage() {
 
     return (
         <StageErrorBoundary>
-            <div className='min-h-screen bg-[#11111b] text-zinc-100'>
-                <div className='mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8 space-y-6'>
-                    {/* Header with stats + view toggle */}
+            <div className='min-h-screen bg-[#11111b] text-zinc-100 flex flex-col md:flex-row'>
+                <StageSidebar view={view} onViewChange={setView} />
+                <div className='flex-1 flex flex-col md:ml-36'>
+                    <div className='mx-auto max-w-6xl w-full px-4 py-6 sm:px-6 lg:px-8 space-y-6'>
+                    {/* Header with stats */}
                     <StageHeader
-                        view={view}
-                        onViewChange={setView}
                         connectionStatus={connectionStatus}
                     />
 
@@ -107,9 +203,26 @@ export default function StagePage() {
                     {view === 'feed' && (
                         <>
                             <StageIntro />
-                            <AskTheRoom />
+                            <AskTheRoom onVoiceSessionCreated={handleVoiceSessionCreated} />
+                            {/* Voice session — live transcript with auto-speak */}
+                            {voiceRoundtableSession && (
+                                <SectionErrorBoundary label='Voice Session'>
+                                    <TranscriptViewer
+                                        session={voiceRoundtableSession}
+                                        onClose={handleVoiceSessionClose}
+                                        autoSpeakOnMount
+                                    />
+                                    {/* Voice chat reply input — only for voice_chat format */}
+                                    {voiceSession?.format === 'voice_chat' && (
+                                        <VoiceChatInput sessionId={voiceSession.sessionId} />
+                                    )}
+                                </SectionErrorBoundary>
+                            )}
                             <SectionErrorBoundary label='Daily Digest'>
                                 <DailyDigest />
+                            </SectionErrorBoundary>
+                            <SectionErrorBoundary label='News Digest'>
+                                <NewsDigest />
                             </SectionErrorBoundary>
                             <SectionErrorBoundary label='Event Log'>
                                 <Suspense fallback={<EventLogFeedSkeleton />}>
@@ -122,6 +235,13 @@ export default function StagePage() {
                                 </Suspense>
                             </SectionErrorBoundary>
                         </>
+                    )}
+
+                    {/* ── Questions View ── */}
+                    {view === 'questions' && (
+                        <SectionErrorBoundary label='Questions'>
+                            <QuestionsView />
+                        </SectionErrorBoundary>
                     )}
 
                     {/* ── Missions View ── */}
@@ -183,8 +303,11 @@ export default function StagePage() {
                                     />
                                 :   <Office3DScene
                                         fullscreen={office3DFullscreen}
-                                        onToggleFullscreen={toggleOffice3DFullscreen}
-                                    />}
+                                        onToggleFullscreen={
+                                            toggleOffice3DFullscreen
+                                        }
+                                    />
+                                }
                             </SectionErrorBoundary>
 
                             {/* Replay controller overlay */}
@@ -247,6 +370,15 @@ export default function StagePage() {
                         </SectionErrorBoundary>
                     )}
 
+                    {/* ── Files View ── */}
+                    {view === 'files' && (
+                        <SectionErrorBoundary label='File Browser'>
+                            <Suspense fallback={<FileBrowserSkeleton />}>
+                                <FileBrowser />
+                            </Suspense>
+                        </SectionErrorBoundary>
+                    )}
+
                     {/* ── Governance View ── */}
                     {view === 'governance' && (
                         <SectionErrorBoundary label='Governance'>
@@ -275,10 +407,25 @@ export default function StagePage() {
                         </SectionErrorBoundary>
                     )}
 
+                    {/* ── Newspaper View ── */}
+                    {view === 'newspaper' && (
+                        <SectionErrorBoundary label='Newspaper'>
+                            <NewspaperView />
+                        </SectionErrorBoundary>
+                    )}
+
+                    {/* ── Newsletter View ── */}
+                    {view === 'newsletter' && (
+                        <SectionErrorBoundary label='Newsletter'>
+                            <NewsletterView />
+                        </SectionErrorBoundary>
+                    )}
+
                     {/* Footer */}
                     <footer className='text-center text-[10px] text-zinc-700 py-4'>
-                        SUBCULT OPS &middot; multi-agent command center
+                        SUBCORP &middot; multi-agent command center
                     </footer>
+                    </div>
                 </div>
             </div>
         </StageErrorBoundary>

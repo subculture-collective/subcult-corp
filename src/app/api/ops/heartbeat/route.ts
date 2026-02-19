@@ -21,6 +21,8 @@ import {
     attemptRebellionResolution,
     enqueueRebellionCrossExam,
 } from '@/lib/ops/rebellion';
+import { fetchAllFeeds, generateNewsDigest } from '@/lib/ops/rss';
+import { generateDailyNewspaper } from '@/lib/ops/newspaper';
 import { AGENT_IDS } from '@/lib/agents';
 import { logger } from '@/lib/logger';
 import { withRequestContext } from '@/middleware';
@@ -307,6 +309,72 @@ export async function GET(req: NextRequest) {
         } catch (err) {
             results.watercooler = { error: (err as Error).message };
             log.error('Watercooler drop failed', { error: err });
+        }
+
+        // ── Phase 15: Fetch RSS feeds (every heartbeat) ──
+        try {
+            const newItems = await fetchAllFeeds();
+            results.rss_fetch = { new_items: newItems };
+        } catch (err) {
+            results.rss_fetch = { error: (err as Error).message };
+            log.error('RSS fetch failed', { error: err });
+        }
+
+        // ── Phase 16: Generate news digest (2x daily — morning 8-9AM, evening 7-8PM CST) ──
+        try {
+            const nowUtc = new Date();
+            const cstHour = (nowUtc.getUTCHours() - 6 + 24) % 24;
+            if (cstHour >= 8 && cstHour < 9) {
+                const digestId = await generateNewsDigest('morning');
+                results.news_digest = digestId
+                    ? { generated: true, slot: 'morning', id: digestId }
+                    : { generated: false, reason: 'already_exists_or_insufficient' };
+            } else if (cstHour >= 19 && cstHour < 20) {
+                const digestId = await generateNewsDigest('evening');
+                results.news_digest = digestId
+                    ? { generated: true, slot: 'evening', id: digestId }
+                    : { generated: false, reason: 'already_exists_or_insufficient' };
+            } else {
+                results.news_digest = { generated: false, reason: 'outside_window' };
+            }
+        } catch (err) {
+            results.news_digest = { error: (err as Error).message };
+            log.error('News digest generation failed', { error: err });
+        }
+
+        // ── Phase 17: Daily newspaper (morning ~7-9 AM CST) ──
+        try {
+            const nowUtc = new Date();
+            const cstHour = (nowUtc.getUTCHours() - 6 + 24) % 24;
+            if (cstHour >= 7 && cstHour < 9) {
+                const editionId = await generateDailyNewspaper();
+                results.newspaper = editionId
+                    ? { generated: true, id: editionId }
+                    : { generated: false, reason: 'already_exists_or_insufficient' };
+            } else {
+                results.newspaper = { generated: false, reason: 'outside_window' };
+            }
+        } catch (err) {
+            results.newspaper = { error: (err as Error).message };
+            log.error('Daily newspaper generation failed', { error: err });
+        }
+
+        // ── Phase 18: Weekly newsletter (Monday 8-10AM CST) ──
+        try {
+            const cstHour = (new Date().getUTCHours() - 6 + 24) % 24;
+            const dayOfWeek = new Date().getUTCDay(); // 0=Sun, 1=Mon
+            if (dayOfWeek === 1 && cstHour >= 8 && cstHour < 10) {
+                const { generateWeeklyNewsletter } = await import('@/lib/ops/newsletter');
+                const editionId = await generateWeeklyNewsletter();
+                results.newsletter = editionId
+                    ? { generated: true, id: editionId }
+                    : { generated: false, reason: 'already_exists_or_no_data' };
+            } else {
+                results.newsletter = { generated: false, reason: 'not_monday_morning' };
+            }
+        } catch (err) {
+            results.newsletter = { error: (err as Error).message };
+            log.error('Weekly newsletter generation failed', { error: err });
         }
 
         const durationMs = Date.now() - startTime;

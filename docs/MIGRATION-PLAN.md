@@ -1,10 +1,10 @@
-# Replace OpenClaw with Native Agent Execution in subcult-corp
+# Replace OpenClaw with Native Agent Execution in subcorp
 
 ## Context
 
-OpenClaw runs as a separate systemd service providing agent tool execution (bash, web search, file I/O) for cron-triggered LLM sessions. subcult-corp already has its own LLM client, 6 agents, roundtable orchestration, missions, events, and cost tracking — but relies on OpenClaw for tool execution via a socat bridge + event-bridge daemon (~1,700 lines of glue code).
+OpenClaw runs as a separate systemd service providing agent tool execution (bash, web search, file I/O) for cron-triggered LLM sessions. subcorp already has its own LLM client, 6 agents, roundtable orchestration, missions, events, and cost tracking — but relies on OpenClaw for tool execution via a socat bridge + event-bridge daemon (~1,700 lines of glue code).
 
-This plan eliminates OpenClaw entirely by building native tool execution into subcult-corp, unifying the 3 worker containers into 1, and adding a "toolbox" Docker container that agents can exec into.
+This plan eliminates OpenClaw entirely by building native tool execution into subcorp, unifying the 3 worker containers into 1, and adding a "toolbox" Docker container that agents can exec into.
 
 ## Architecture Overview
 
@@ -87,6 +87,7 @@ src/lib/tools/
 ```
 
 **`executor.ts`** — core docker exec wrapper:
+
 - `execInToolbox(command, timeoutMs)` → `{ stdout, stderr, exitCode, timedOut }`
 - Uses `child_process.execFile('docker', ['exec', 'subcult-toolbox', 'bash', '-c', command])`
 - Output capped at 50KB (stdout) and 10KB (stderr) to avoid flooding LLM context
@@ -94,14 +95,14 @@ src/lib/tools/
 
 **Tool access per agent:**
 
-| Tool | chora | subrosa | thaum | praxis | mux | primus |
-|------|-------|---------|-------|--------|-----|--------|
-| bash | - | - | - | yes | yes | - |
-| web_search | yes | yes | yes | yes | - | - |
-| web_fetch | yes | - | yes | yes | yes | - |
-| file_read | yes | yes | yes | yes | yes | yes |
-| file_write | - | - | - | yes | yes | yes |
-| memory_search | yes | yes | yes | yes | yes | yes |
+| Tool          | chora | subrosa | thaum | praxis | mux | primus |
+| ------------- | ----- | ------- | ----- | ------ | --- | ------ |
+| bash          | -     | -       | -     | yes    | yes | -      |
+| web_search    | yes   | yes     | yes   | yes    | -   | -      |
+| web_fetch     | yes   | -       | yes   | yes    | yes | -      |
+| file_read     | yes   | yes     | yes   | yes    | yes | yes    |
+| file_write    | -     | -       | -     | yes    | yes | yes    |
+| memory_search | yes   | yes     | yes   | yes    | yes | yes    |
 
 Primus gets file_write for strategic directives. Subrosa gets web_search for security research.
 
@@ -189,6 +190,7 @@ const cronResult = await evaluateCronSchedules();
 ```
 
 `evaluateCronSchedules()`:
+
 1. Query `ops_cron_schedules WHERE enabled AND next_fire_at <= NOW()`
 2. For each: INSERT into `ops_agent_sessions` with status `pending`
 3. Update `last_fired_at`, compute `next_fire_at` via `cron-parser` npm package
@@ -229,42 +231,42 @@ All queues use `FOR UPDATE SKIP LOCKED` for atomic claiming (existing pattern in
 
 ```yaml
 services:
-  postgres:
-    image: pgvector/pgvector:pg16    # was postgres:16-alpine
-    # ... rest unchanged
+    postgres:
+        image: pgvector/pgvector:pg16 # was postgres:16-alpine
+        # ... rest unchanged
 
-  app:
-    # ... unchanged
+    app:
+        # ... unchanged
 
-  worker:                             # replaces 3 separate workers
-    build: .
-    container_name: subcult-worker
-    restart: unless-stopped
-    command: ['node', 'scripts/unified-worker/dist/index.js']
-    depends_on:
-      postgres: { condition: service_healthy }
-    env_file: [.env.local]
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - workspace:/workspace
-    networks: [internal]
+    worker: # replaces 3 separate workers
+        build: .
+        container_name: subcult-worker
+        restart: unless-stopped
+        command: ['node', 'scripts/unified-worker/dist/index.js']
+        depends_on:
+            postgres: { condition: service_healthy }
+        env_file: [.env.local]
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+            - workspace:/workspace
+        networks: [internal]
 
-  toolbox:                            # NEW: agent execution environment
-    build:
-      context: docker/toolbox
-    container_name: subcult-toolbox
-    restart: unless-stopped
-    volumes:
-      - workspace:/workspace
-    networks: [internal]
+    toolbox: # NEW: agent execution environment
+        build:
+            context: docker/toolbox
+        container_name: subcult-toolbox
+        restart: unless-stopped
+        volumes:
+            - workspace:/workspace
+        networks: [internal]
 
 volumes:
-  pgdata:
-  workspace:                          # NEW: shared between worker + toolbox
+    pgdata:
+    workspace: # NEW: shared between worker + toolbox
 
 networks:
-  web: { external: true }
-  internal: { driver: bridge }
+    web: { external: true }
+    internal: { driver: bridge }
 ```
 
 **Remove**: `roundtable-worker`, `mission-worker`, `initiative-worker`, `openclaw-bridge`
@@ -312,26 +314,27 @@ Switch Postgres image from `postgres:16-alpine` to `pgvector/pgvector:pg16` (dro
 ### 5a. Seed cron schedules
 
 **Create** `scripts/migrate-cron-jobs.ts`:
+
 - Read current enabled jobs from OpenClaw (`openclaw cron list --json`)
 - INSERT into `ops_cron_schedules` with adapted prompts
 - Rewrite vague prompts to explicit tool instructions per MEMORY.md best practice
 
 ### 5b. Jobs to migrate (13 enabled)
 
-| Job | Agent | Schedule | Notes |
-|-----|-------|----------|-------|
-| Morning Research Scan | chora | 0 12 * * * (7am CT) | web_search heavy |
-| Social & Market Scanner | chora | 0 13,23 * * * | web_search + synthesis |
-| Daily Briefing | chora | 0 2 * * * (9pm CT) | needs prior session outputs as context |
-| AI & Tech Radar | chora | 0 17 * * * | web_search + tech focus |
-| Subcult Watch | chora | 0 19 * * * | brand monitoring |
-| Weekly Deep Digest | chora | 0 23 * * 0 | heavy model, weekly |
-| Agent Dream | thaum | 0 8 * * * (3am CT) | creative cross-pollination |
-| Nightly Synthesis | chora | 0 11 * * * (6am CT) | memory consolidation |
-| Federation Roundtable | primus | 0 21 * * 5 | triggers roundtable |
-| CVE Security Check | subrosa | 30 12 * * * | security relevance filtering |
-| Calendar Briefing | mux | 0 12 * * * | gog integration |
-| Email Triage | mux | 0 14 * * * | gog integration |
+| Job                     | Agent   | Schedule               | Notes                                  |
+| ----------------------- | ------- | ---------------------- | -------------------------------------- |
+| Morning Research Scan   | chora   | 0 12 \* \* \* (7am CT) | web_search heavy                       |
+| Social & Market Scanner | chora   | 0 13,23 \* \* \*       | web_search + synthesis                 |
+| Daily Briefing          | chora   | 0 2 \* \* \* (9pm CT)  | needs prior session outputs as context |
+| AI & Tech Radar         | chora   | 0 17 \* \* \*          | web_search + tech focus                |
+| Subcult Watch           | chora   | 0 19 \* \* \*          | brand monitoring                       |
+| Weekly Deep Digest      | chora   | 0 23 \* \* 0           | heavy model, weekly                    |
+| Agent Dream             | thaum   | 0 8 \* \* \* (3am CT)  | creative cross-pollination             |
+| Nightly Synthesis       | chora   | 0 11 \* \* \* (6am CT) | memory consolidation                   |
+| Federation Roundtable   | primus  | 0 21 \* \* 5           | triggers roundtable                    |
+| CVE Security Check      | subrosa | 30 12 \* \* \*         | security relevance filtering           |
+| Calendar Briefing       | mux     | 0 12 \* \* \*          | gog integration                        |
+| Email Triage            | mux     | 0 14 \* \* \*          | gog integration                        |
 
 **Skip**: All trading/market jobs (Polymarket, Trade Journal, trading bots, snipers), Proactive Initiative (zombie), disabled Twitter jobs.
 
@@ -341,32 +344,35 @@ Replace `job-chain.sh` (fetches prior job outputs) with a DB query: the agent se
 
 ## Phase 6: Cleanup
 
-### Delete from subcult-corp:
+### Delete from subcorp:
 
-| File | Lines | Reason |
-|------|-------|--------|
-| `src/lib/skills/openclaw-bridge.ts` | 215 | Gateway HTTP client |
-| `src/lib/skills/registry.ts` | 584 | 19 OpenClaw skill mappings |
+| File                                   | Lines  | Reason                     |
+| -------------------------------------- | ------ | -------------------------- |
+| `src/lib/skills/openclaw-bridge.ts`    | 215    | Gateway HTTP client        |
+| `src/lib/skills/registry.ts`           | 584    | 19 OpenClaw skill mappings |
 | `scripts/roundtable-worker/worker.mjs` | ~2,000 | Replaced by unified worker |
-| `scripts/mission-worker/worker.mjs` | ~1,200 | Replaced by unified worker |
-| `scripts/initiative-worker/worker.mjs` | ~700 | Replaced by unified worker |
+| `scripts/mission-worker/worker.mjs`    | ~1,200 | Replaced by unified worker |
+| `scripts/initiative-worker/worker.mjs` | ~700   | Replaced by unified worker |
 
 ### Delete from host:
 
-| Path | What |
-|------|------|
-| `~/.openclaw/bridge/` | Event bridge daemon + state |
-| `~/.openclaw/scripts/event-bridge.py` | JSONL→Postgres bridge |
-| `~/.openclaw/scripts/federation-bridge.sh` | Cross-instance bridge |
-| `~/projects/openclaw-proxy/` | socat bridge to Docker |
+| Path                                       | What                        |
+| ------------------------------------------ | --------------------------- |
+| `~/.openclaw/bridge/`                      | Event bridge daemon + state |
+| `~/.openclaw/scripts/event-bridge.py`      | JSONL→Postgres bridge       |
+| `~/.openclaw/scripts/federation-bridge.sh` | Cross-instance bridge       |
+| `~/projects/openclaw-proxy/`               | socat bridge to Docker      |
 
 ### Remove env vars from `.env.local`:
+
 - `OPENCLAW_GATEWAY_URL`, `OPENCLAW_AUTH_TOKEN`, `OPENCLAW_TIMEOUT_MS`
 
 ### Add env vars to `.env.local`:
+
 - `BRAVE_API_KEY` (already have key: `BSA4Jq0Qu8rjSp3ySJyK_-Yo8XyCUBI`)
 
 ### Stop OpenClaw:
+
 ```bash
 systemctl --user stop openclaw-gateway
 systemctl --user disable openclaw-gateway

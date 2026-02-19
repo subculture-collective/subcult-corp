@@ -129,7 +129,7 @@ function DetailPanel({
 
             {/* Body */}
             <div className='rounded-lg bg-zinc-900/50 border border-zinc-700/30 p-4 max-h-80 overflow-y-auto'>
-                <pre className='text-sm text-zinc-300 whitespace-pre-wrap font-sans leading-relaxed'>
+                <pre className='text-sm text-zinc-300 whitespace-pre-wrap break-words font-sans leading-relaxed'>
                     {draft.body || '(empty)'}
                 </pre>
             </div>
@@ -190,7 +190,7 @@ function DetailPanel({
 
 function ContentPipelineSkeleton() {
     return (
-        <div className='grid grid-cols-4 gap-3 animate-pulse'>
+        <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 animate-pulse'>
             {[...Array(4)].map((_, col) => (
                 <div key={col} className='space-y-3'>
                     <div className='h-5 w-20 rounded bg-zinc-700' />

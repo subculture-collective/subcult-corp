@@ -1,7 +1,7 @@
 # Rebellion Protocol — Implementation Guide
 
 > Agent rebellion mechanics for Subcult-Corp multi-agent system
-> Epic: [Agent Rebellion Mechanics](https://github.com/subculture-collective/subcult-corp/issues/13)
+> Epic: [Agent Rebellion Mechanics](https://github.com/subculture-collective/subcorp/issues/13)
 > Status: ✅ Complete
 > Created: 2026-02-15
 
@@ -19,17 +19,18 @@ Rebellion is **disabled by default** via the `rebellion_policy` in `ops_policy`:
 
 ```json
 {
-  "enabled": false,
-  "affinity_threshold": 0.25,
-  "resistance_probability": 0.4,
-  "max_rebellion_duration_hours": 24,
-  "cooldown_hours": 72
+    "enabled": false,
+    "affinity_threshold": 0.25,
+    "resistance_probability": 0.4,
+    "max_rebellion_duration_hours": 24,
+    "cooldown_hours": 72
 }
 ```
 
 To enable rebellion mechanics:
+
 ```sql
-UPDATE ops_policy 
+UPDATE ops_policy
 SET value = jsonb_set(value, '{enabled}', 'true')
 WHERE key = 'rebellion_policy';
 ```
@@ -37,6 +38,7 @@ WHERE key = 'rebellion_policy';
 ### State Tracking
 
 Rebellion states are tracked via events in `ops_agent_events`:
+
 - `rebellion_started` — emitted when an agent enters rebellion
 - `rebellion_ended` — emitted when rebellion is resolved
 
@@ -45,32 +47,37 @@ Rebellion states are tracked via events in `ops_agent_events`:
 #### 1. Rebellion Detection (`src/lib/ops/rebellion.ts`)
 
 **`checkRebellionState(agentId)`**
+
 - Checks if agent is currently rebelling
 - If not, evaluates whether rebellion should trigger:
-  1. Policy must be enabled
-  2. Agent must have passed cooldown period (default: 72 hours)
-  3. Average affinity must be below threshold (default: 0.25)
-  4. Random roll must succeed (probability: 0.4)
+    1. Policy must be enabled
+    2. Agent must have passed cooldown period (default: 72 hours)
+    3. Average affinity must be below threshold (default: 0.25)
+    4. Random roll must succeed (probability: 0.4)
 - Emits `rebellion_started` event if triggered
 - Returns `RebellionState` object
 
 **`isAgentRebelling(agentId)`**
+
 - Fast boolean check for hot paths
 - Single DB query to check for active rebellion event
 - Used by orchestrator to modify conversation behavior
 
 **`endRebellion(agentId, reason)`**
+
 - Ends an active rebellion
 - Emits `rebellion_ended` event with duration metadata
 - Reason can be: `timeout`, `cross_exam_completed`, `affinity_improved`
 
 **`attemptRebellionResolution(agentId)`**
+
 - Checks for timeout-based auto-resolution (default: 24 hours)
 - Checks if a cross-exam session addressed the rebellion
 - Returns true if resolved, false otherwise
 - Called by heartbeat every 5 minutes
 
 **`enqueueRebellionCrossExam(rebelAgentId)`**
+
 - Creates a cross-examination session to address rebellion
 - Pairs rebel with their lowest-affinity agent
 - Coordinated by Subrosa
@@ -78,6 +85,7 @@ Rebellion states are tracked via events in `ops_agent_events`:
 - Returns session ID if enqueued, null if already pending
 
 **`getRebellingAgents()`**
+
 - Returns all agents currently in rebellion
 - Used by UI and heartbeat
 - Returns array of `{ agentId, startedAt, eventId }`
@@ -89,21 +97,24 @@ Rebellion states are tracked via events in `ops_agent_events`:
 When an agent is rebelling, the orchestrator:
 
 1. **Increases temperature** by +0.1 (capped at 1.0):
-   ```typescript
-   const effectiveTemperature = speakerRebelling ? 
-       Math.min(1.0, format.temperature + 0.1) : 
-       format.temperature;
-   ```
+
+    ```typescript
+    const effectiveTemperature =
+        speakerRebelling ?
+            Math.min(1.0, format.temperature + 0.1)
+        :   format.temperature;
+    ```
 
 2. **Adds rebellion context to system prompt**:
-   ```
-   === REBELLION STATE ===
-   You are currently in a state of resistance against the collective.
-   You feel unheard and disagree with the direction things are going.
-   Express your discontent and challenge the status quo.
-   ```
+    ```
+    === REBELLION STATE ===
+    You are currently in a state of resistance against the collective.
+    You feel unheard and disagree with the direction things are going.
+    Express your discontent and challenge the status quo.
+    ```
 
 **Implementation**
+
 - Pre-loads rebellion state for all participants at conversation start
 - Cached in `rebellionStateMap` for the entire session
 - Passed to `buildSystemPrompt()` as `isRebelling` parameter
@@ -113,6 +124,7 @@ When an agent is rebelling, the orchestrator:
 **Post-Conversation Resolution**
 
 After a `cross_exam` session completes, the worker:
+
 1. Checks if session metadata contains `rebellion_agent_id`
 2. Verifies the agent is still rebelling
 3. Calls `endRebellion(agentId, 'cross_exam_completed')`
@@ -123,33 +135,38 @@ After a `cross_exam` session completes, the worker:
 **Phase 13: Rebellion Resolution Checks**
 
 Every 5 minutes, the heartbeat:
+
 1. Gets all currently rebelling agents via `getRebellingAgents()`
 2. For each rebel:
-   - Attempts auto-resolution via `attemptRebellionResolution()`
-   - If not resolved, enqueues a cross-exam via `enqueueRebellionCrossExam()`
-   - Tracks results (resolved: true/false, crossExamQueued: true/false)
+    - Attempts auto-resolution via `attemptRebellionResolution()`
+    - If not resolved, enqueues a cross-exam via `enqueueRebellionCrossExam()`
+    - Tracks results (resolved: true/false, crossExamQueued: true/false)
 3. Non-fatal error handling
 4. Reports results in heartbeat response
 
 #### 5. UI Integration
 
 **API Endpoint** (`src/app/api/ops/rebellion/route.ts`)
+
 - `GET /api/ops/rebellion`
 - Returns: `{ rebels: RebellionEntry[], count: number }`
 - Used by frontend hook
 
 **React Hook** (`src/app/stage/hooks.ts`)
+
 - `useRebellionState()`
 - Polls every 30 seconds
 - Returns: `{ rebels, rebellingAgentIds, loading }`
 
 **Visual Indicators** (`src/app/stage/OfficeRoom.tsx`)
+
 - Red pulsing glow filter on rebelling agents
 - Animated pulse ring around agent sprite
 - "Rebellion" badge in agent info panel
 - Event log shows rebellion_started/rebellion_ended with 🔥/🕊️ icons
 
 **Event Log** (`src/app/stage/EventLogFeed.tsx`)
+
 - `rebellion_started` → 🔥 icon
 - `rebellion_ended` → 🕊️ icon
 - Proper labels and formatting
@@ -173,6 +190,7 @@ Every 5 minutes, the heartbeat:
 ### Resolution Paths
 
 **Path 1: Auto-Resolution (Timeout)**
+
 ```
 1. Rebellion lasts 24 hours (max_rebellion_duration_hours)
 2. Heartbeat calls attemptRebellionResolution()
@@ -182,6 +200,7 @@ Every 5 minutes, the heartbeat:
 ```
 
 **Path 2: Cross-Examination**
+
 ```
 1. Heartbeat detects active rebellion
 2. Calls enqueueRebellionCrossExam(rebelAgentId)
@@ -204,9 +223,10 @@ Every 5 minutes, the heartbeat:
 ### Manual Testing Scenarios
 
 **Scenario 1: Enable Rebellion**
+
 ```sql
 -- Enable rebellion policy
-UPDATE ops_policy 
+UPDATE ops_policy
 SET value = jsonb_set(value, '{enabled}', 'true')
 WHERE key = 'rebellion_policy';
 
@@ -215,6 +235,7 @@ SELECT value FROM ops_policy WHERE key = 'rebellion_policy';
 ```
 
 **Scenario 2: Force Low Affinity**
+
 ```sql
 -- Artificially lower affinity for an agent
 UPDATE ops_agent_relationships
@@ -222,11 +243,12 @@ SET affinity = 0.15
 WHERE agent_a = 'chora' OR agent_b = 'chora';
 
 -- Verify average affinity
-SELECT AVG(affinity) FROM ops_agent_relationships 
+SELECT AVG(affinity) FROM ops_agent_relationships
 WHERE agent_a = 'chora' OR agent_b = 'chora';
 ```
 
 **Scenario 3: Trigger Rebellion Check**
+
 ```typescript
 import { checkRebellionState } from '@/lib/ops/rebellion';
 
@@ -236,6 +258,7 @@ console.log('Rebellion state:', state);
 ```
 
 **Scenario 4: Monitor Events**
+
 ```sql
 -- Watch for rebellion events
 SELECT agent_id, kind, title, summary, created_at, metadata
@@ -245,6 +268,7 @@ ORDER BY created_at DESC;
 ```
 
 **Scenario 5: Check UI**
+
 1. Navigate to `/stage` in browser
 2. Check agent sprites for red glow
 3. Click agent info panel for rebellion badge
@@ -253,26 +277,26 @@ ORDER BY created_at DESC;
 ### Edge Cases Covered
 
 1. **Agent with no relationships**
-   - `calculateAverageAffinity()` returns 0.5 (neutral default)
-   - `enqueueRebellionCrossExam()` logs warning and returns null
+    - `calculateAverageAffinity()` returns 0.5 (neutral default)
+    - `enqueueRebellionCrossExam()` logs warning and returns null
 
 2. **Multiple simultaneous rebellions**
-   - Each agent tracked independently
-   - Heartbeat processes all rebels sequentially
-   - No cross-contamination
+    - Each agent tracked independently
+    - Heartbeat processes all rebels sequentially
+    - No cross-contamination
 
 3. **Rebellion during cooldown**
-   - `hasPassedCooldown()` checks last `rebellion_ended` timestamp
-   - Returns early with `{ isRebelling: false, reason: 'cooldown_active' }`
+    - `hasPassedCooldown()` checks last `rebellion_ended` timestamp
+    - Returns early with `{ isRebelling: false, reason: 'cooldown_active' }`
 
 4. **Policy disabled mid-rebellion**
-   - Active rebellions continue
-   - `checkRebellionState()` returns not-rebelling for new checks
-   - Existing rebellions can still be resolved
+    - Active rebellions continue
+    - `checkRebellionState()` returns not-rebelling for new checks
+    - Existing rebellions can still be resolved
 
 5. **Cross-exam already pending**
-   - `enqueueRebellionCrossExam()` checks for existing pending/running cross-exam
-   - Returns null if already exists (prevents duplicates)
+    - `enqueueRebellionCrossExam()` checks for existing pending/running cross-exam
+    - Returns null if already exists (prevents duplicates)
 
 ---
 
@@ -280,39 +304,42 @@ ORDER BY created_at DESC;
 
 ### Policy Parameters
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `enabled` | `false` | Master switch for rebellion system |
-| `affinity_threshold` | `0.25` | Average affinity below which rebellion may trigger |
-| `resistance_probability` | `0.4` | Probability that low-affinity agent will actually rebel |
-| `max_rebellion_duration_hours` | `24` | Auto-resolve timeout |
-| `cooldown_hours` | `72` | Minimum time between rebellions for same agent |
+| Parameter                      | Default | Description                                             |
+| ------------------------------ | ------- | ------------------------------------------------------- |
+| `enabled`                      | `false` | Master switch for rebellion system                      |
+| `affinity_threshold`           | `0.25`  | Average affinity below which rebellion may trigger      |
+| `resistance_probability`       | `0.4`   | Probability that low-affinity agent will actually rebel |
+| `max_rebellion_duration_hours` | `24`    | Auto-resolve timeout                                    |
+| `cooldown_hours`               | `72`    | Minimum time between rebellions for same agent          |
 
 ### Tuning Recommendations
 
 **More frequent rebellions:**
+
 ```json
 {
-  "affinity_threshold": 0.35,
-  "resistance_probability": 0.6,
-  "cooldown_hours": 48
+    "affinity_threshold": 0.35,
+    "resistance_probability": 0.6,
+    "cooldown_hours": 48
 }
 ```
 
 **Longer, more dramatic rebellions:**
+
 ```json
 {
-  "max_rebellion_duration_hours": 48,
-  "cooldown_hours": 168
+    "max_rebellion_duration_hours": 48,
+    "cooldown_hours": 168
 }
 ```
 
 **Less frequent, high-stakes rebellions:**
+
 ```json
 {
-  "affinity_threshold": 0.15,
-  "resistance_probability": 0.2,
-  "max_rebellion_duration_hours": 72
+    "affinity_threshold": 0.15,
+    "resistance_probability": 0.2,
+    "max_rebellion_duration_hours": 72
 }
 ```
 
@@ -321,37 +348,41 @@ ORDER BY created_at DESC;
 ## Database Schema
 
 ### Events Table
+
 ```sql
 -- ops_agent_events stores rebellion lifecycle
-SELECT * FROM ops_agent_events 
+SELECT * FROM ops_agent_events
 WHERE kind IN ('rebellion_started', 'rebellion_ended');
 ```
 
 **rebellion_started metadata:**
+
 ```json
 {
-  "avg_affinity": 0.23,
-  "threshold": 0.25,
-  "roll": 0.387,
-  "resistance_probability": 0.4
+    "avg_affinity": 0.23,
+    "threshold": 0.25,
+    "roll": 0.387,
+    "resistance_probability": 0.4
 }
 ```
 
 **rebellion_ended metadata:**
+
 ```json
 {
-  "reason": "cross_exam_completed",
-  "rebellion_event_id": "uuid-of-started-event",
-  "duration_hours": 3.2
+    "reason": "cross_exam_completed",
+    "rebellion_event_id": "uuid-of-started-event",
+    "duration_hours": 3.2
 }
 ```
 
 ### Cross-Exam Sessions
+
 ```sql
 -- ops_roundtable_sessions with rebellion metadata
-SELECT id, format, topic, metadata 
+SELECT id, format, topic, metadata
 FROM ops_roundtable_sessions
-WHERE format = 'cross_exam' 
+WHERE format = 'cross_exam'
 AND metadata->>'rebellion_agent_id' IS NOT NULL;
 ```
 

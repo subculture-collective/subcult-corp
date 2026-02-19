@@ -4,8 +4,10 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { ConversationFormat } from '@/lib/types';
 import { SubcorpAvatar } from './AgentAvatar';
+import { useSpeechRecognition } from './useSpeechRecognition';
 
 const FORMAT_OPTIONS: { value: ConversationFormat; label: string }[] = [
+    { value: 'voice_chat', label: 'Voice Chat' },
     { value: 'debate', label: 'Debate' },
     { value: 'brainstorm', label: 'Brainstorm' },
     { value: 'deep_dive', label: 'Deep Dive' },
@@ -29,7 +31,17 @@ const MIN_CHARS = 10;
 
 type SubmitState = 'idle' | 'loading' | 'success' | 'error';
 
-export function AskTheRoom() {
+export interface VoiceSessionInfo {
+    sessionId: string;
+    topic: string;
+    format: ConversationFormat;
+}
+
+export function AskTheRoom({
+    onVoiceSessionCreated,
+}: {
+    onVoiceSessionCreated?: (info: VoiceSessionInfo) => void;
+} = {}) {
     const [isOpen, setIsOpen] = useState(false);
     const [question, setQuestion] = useState('');
     const [format, setFormat] = useState<ConversationFormat>('debate');
@@ -37,12 +49,35 @@ export function AskTheRoom() {
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [errorMessage, setErrorMessage] = useState('');
     const [retryAfter, setRetryAfter] = useState(0);
+    const [voiceMode, setVoiceMode] = useState(false);
+
+    const [stt, sttControls] = useSpeechRecognition();
+
+    // Populate textarea when speech recognition produces a final result
+    const prevTranscript = useRef('');
+    useEffect(() => {
+        if (stt.transcript && stt.transcript !== prevTranscript.current) {
+            prevTranscript.current = stt.transcript;
+            setQuestion(prev => {
+                const joined = prev ? `${prev} ${stt.transcript}` : stt.transcript;
+                return joined.slice(0, MAX_CHARS);
+            });
+        }
+    }, [stt.transcript]);
 
     const charsRemaining = MAX_CHARS - question.length;
     const canSubmit =
         question.trim().length >= MIN_CHARS && submitState !== 'loading';
 
-    const handleSubmit = useCallback(async () => {
+    // Auto-enable voice mode when voice_chat format is selected
+    useEffect(() => {
+        if (format === 'voice_chat') setVoiceMode(true);
+    }, [format]);
+
+    const handleSubmit = useCallback(async (isVoice = false) => {
+        // voice_chat format always uses voice mode
+        if (format === 'voice_chat') isVoice = true;
+
         if (question.trim().length < MIN_CHARS || submitState === 'loading')
             return;
 
@@ -50,11 +85,18 @@ export function AskTheRoom() {
         setErrorMessage('');
         setRetryAfter(0);
 
+        const submittedQuestion = question.trim();
+        const submittedFormat = format;
+
         try {
             const res = await fetch('/api/ops/roundtable/ask', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ question: question.trim(), format }),
+                body: JSON.stringify({
+                    question: submittedQuestion,
+                    format: submittedFormat,
+                    ...(isVoice && { voiceMode: true }),
+                }),
             });
 
             const data = await res.json();
@@ -75,11 +117,45 @@ export function AskTheRoom() {
             setSubmitState('success');
             setSessionId(data.sessionId);
             setQuestion('');
+
+            // In voice mode, notify parent to open live transcript with auto-speak
+            if (isVoice && onVoiceSessionCreated) {
+                onVoiceSessionCreated({
+                    sessionId: data.sessionId,
+                    topic: submittedQuestion,
+                    format: submittedFormat,
+                });
+            }
         } catch {
             setSubmitState('error');
             setErrorMessage('Network error. Please try again.');
         }
-    }, [question, format, submitState]);
+    }, [question, format, submitState, onVoiceSessionCreated]);
+
+    // Voice mode: auto-submit when STT produces a final transcript
+    const autoSubmitRef = useRef(false);
+    useEffect(() => {
+        if (
+            voiceMode &&
+            stt.transcript &&
+            stt.transcript === prevTranscript.current &&
+            !stt.isListening &&
+            !autoSubmitRef.current &&
+            submitState !== 'loading' &&
+            submitState !== 'success'
+        ) {
+            // Check the question length (which was updated by the transcript effect)
+            const pendingQuestion = question.trim();
+            if (pendingQuestion.length >= MIN_CHARS) {
+                autoSubmitRef.current = true;
+                handleSubmit(true);
+            }
+        }
+        // Reset auto-submit flag when STT starts listening again
+        if (stt.isListening) {
+            autoSubmitRef.current = false;
+        }
+    }, [voiceMode, stt.transcript, stt.isListening, question, submitState, handleSubmit]);
 
     const handleReset = useCallback(() => {
         setSubmitState('idle');
@@ -120,6 +196,37 @@ export function AskTheRoom() {
                     <span className='text-xs font-medium text-zinc-300'>
                         Ask the Collective
                     </span>
+                    {stt.isSupported && (
+                        <button
+                            type='button'
+                            onClick={e => {
+                                e.stopPropagation();
+                                setVoiceMode(v => !v);
+                                if (!isOpen) setIsOpen(true);
+                            }}
+                            aria-label={voiceMode ? 'Disable voice mode' : 'Enable voice mode'}
+                            className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider border transition-colors ${
+                                voiceMode
+                                    ? 'bg-scan/15 border-scan/30 text-scan'
+                                    : 'bg-zinc-800/50 border-zinc-700/50 text-zinc-500 hover:text-zinc-400'
+                            }`}
+                        >
+                            <svg
+                                className='h-2.5 w-2.5'
+                                viewBox='0 0 24 24'
+                                fill='none'
+                                stroke='currentColor'
+                                strokeWidth={2}
+                                strokeLinecap='round'
+                                strokeLinejoin='round'
+                            >
+                                <path d='M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z' />
+                                <path d='M19 10v2a7 7 0 0 1-14 0v-2' />
+                                <line x1='12' x2='12' y1='19' y2='22' />
+                            </svg>
+                            Voice
+                        </button>
+                    )}
                 </div>
                 <svg
                     className={`w-4 h-4 text-zinc-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
@@ -139,12 +246,12 @@ export function AskTheRoom() {
             {/* Collapsible body */}
             {isOpen && (
                 <div className='px-4 pb-4 space-y-3 border-t border-zinc-800'>
-                    {/* Success state */}
-                    {submitState === 'success' && sessionId && (
+                    {/* Success state (only shown for non-voice submissions — voice mode shows transcript instead) */}
+                    {submitState === 'success' && sessionId && !voiceMode && (
                         <div className='pt-3 space-y-2'>
                             <div className='rounded-lg border border-green-800/50 bg-green-900/20 p-3'>
                                 <p className='text-xs text-green-400 font-medium'>
-                                    ✓ Question submitted! Session starting...
+                                    Question submitted! Session starting...
                                 </p>
                                 <p className='text-[10px] text-zinc-500 mt-1'>
                                     Session ID: {sessionId}
@@ -159,8 +266,8 @@ export function AskTheRoom() {
                         </div>
                     )}
 
-                    {/* Input form */}
-                    {submitState !== 'success' && (
+                    {/* Input form — hidden on non-voice success (voice mode shows transcript via parent) */}
+                    {(submitState !== 'success' || voiceMode) && (
                         <>
                             {/* Textarea */}
                             <div className='pt-3'>
@@ -191,7 +298,14 @@ export function AskTheRoom() {
                                 </div>
                             </div>
 
-                            {/* Format selector + submit */}
+                            {/* Interim transcript hint */}
+                            {stt.interimTranscript && (
+                                <p className='text-[11px] text-zinc-500 italic -mt-1 px-1 truncate'>
+                                    {stt.interimTranscript}
+                                </p>
+                            )}
+
+                            {/* Format selector + mic + submit */}
                             <div className='flex items-center gap-2'>
                                 <label htmlFor='format-select' className='sr-only'>
                                     Conversation format
@@ -221,10 +335,50 @@ export function AskTheRoom() {
 
                                 <div className='flex-1' />
 
+                                {/* Mic button — speech-to-text */}
+                                {stt.isSupported && (
+                                    <button
+                                        type='button'
+                                        onClick={() => {
+                                            if (stt.isListening) {
+                                                sttControls.stop();
+                                            } else {
+                                                sttControls.reset();
+                                                sttControls.start();
+                                            }
+                                        }}
+                                        disabled={submitState === 'loading'}
+                                        aria-label={stt.isListening ? 'Stop listening' : 'Speak your question'}
+                                        className={`relative rounded-lg border px-2.5 py-2.5 sm:py-1.5 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                                            stt.isListening
+                                                ? 'border-red-600/60 bg-red-900/30 text-red-400 hover:bg-red-900/50'
+                                                : 'border-zinc-700/50 bg-zinc-800/50 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+                                        }`}
+                                    >
+                                        {/* Pulsing ring when listening */}
+                                        {stt.isListening && (
+                                            <span className='absolute inset-0 rounded-lg border-2 border-red-500/40 animate-ping pointer-events-none' />
+                                        )}
+                                        <svg
+                                            className='h-3.5 w-3.5'
+                                            viewBox='0 0 24 24'
+                                            fill='none'
+                                            stroke='currentColor'
+                                            strokeWidth={2}
+                                            strokeLinecap='round'
+                                            strokeLinejoin='round'
+                                        >
+                                            <path d='M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z' />
+                                            <path d='M19 10v2a7 7 0 0 1-14 0v-2' />
+                                            <line x1='12' x2='12' y1='19' y2='22' />
+                                        </svg>
+                                    </button>
+                                )}
+
                                 <button
-                                    onClick={handleSubmit}
+                                    onClick={() => handleSubmit(false)}
                                     disabled={!canSubmit}
-                                    className='rounded-lg border border-green-700/50 bg-green-900/30 px-4 py-1.5 text-[11px] font-medium text-green-400 hover:bg-green-900/50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5'
+                                    className='rounded-lg border border-green-700/50 bg-green-900/30 px-4 py-2.5 sm:py-1.5 text-[11px] font-medium text-green-400 hover:bg-green-900/50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5'
                                 >
                                     {submitState === 'loading' ?
                                         <>
@@ -252,6 +406,13 @@ export function AskTheRoom() {
                                     :   'Submit'}
                                 </button>
                             </div>
+
+                            {/* STT error */}
+                            {stt.error && (
+                                <p className='text-[10px] text-amber-400 px-1'>
+                                    {stt.error}
+                                </p>
+                            )}
 
                             {/* Error state */}
                             {submitState === 'error' && (

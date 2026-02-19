@@ -10,6 +10,8 @@ export type AgentId =
     | 'mux'
     | 'primus';
 
+export const ALL_AGENTS: AgentId[] = ['chora', 'subrosa', 'thaum', 'praxis', 'mux', 'primus'];
+
 export interface AgentConfig {
     id: AgentId;
     displayName: string;
@@ -253,7 +255,8 @@ export type ConversationFormat =
     | 'writing_room'
     | 'content_review'
     | 'watercooler'
-    | 'agent_design';
+    | 'agent_design'
+    | 'voice_chat';
 export type SessionStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 export interface RoundtableVoice {

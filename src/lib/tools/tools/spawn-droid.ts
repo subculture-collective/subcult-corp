@@ -4,6 +4,7 @@ import { sql } from '@/lib/db';
 import { execInToolbox } from '../executor';
 import { randomUUID } from 'node:crypto';
 import type { NativeTool } from '../types';
+import { ALL_AGENTS } from '@/lib/types';
 
 const MAX_DROID_TIMEOUT = 300;
 const DEFAULT_DROID_TIMEOUT = 120;
@@ -11,7 +12,7 @@ const DEFAULT_DROID_TIMEOUT = 120;
 export const spawnDroidTool: NativeTool = {
     name: 'spawn_droid',
     description: 'Spawn a droid (sub-agent) to handle a focused task. The droid runs as an agent session with its own workspace under /workspace/droids/. Returns a droid_id to check status later with check_droid.',
-    agents: ['praxis', 'mux', 'primus'],
+    agents: [...ALL_AGENTS],
     parameters: {
         type: 'object',
         properties: {

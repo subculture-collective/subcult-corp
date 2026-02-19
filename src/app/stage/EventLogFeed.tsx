@@ -219,7 +219,7 @@ function MetadataViewer({ data }: { data: Record<string, unknown> }) {
             <div className='text-[10px] uppercase tracking-wider text-zinc-500 mb-1'>
                 Metadata
             </div>
-            <pre className='text-[11px] text-zinc-400 font-mono whitespace-pre-wrap wrap-break-word leading-relaxed'>
+            <pre className='text-[11px] text-zinc-400 font-mono whitespace-pre-wrap break-words leading-relaxed'>
                 {JSON.stringify(data, null, 2)}
             </pre>
         </div>
@@ -233,11 +233,13 @@ function DetailedEventRow({
     isExpanded,
     onToggle,
     sessionAction,
+    isUserQuestion,
 }: {
     event: AgentEvent;
     isExpanded: boolean;
     onToggle: () => void;
     sessionAction?: { label: string; onClick: () => void };
+    isUserQuestion?: boolean;
 }) {
     const agentId = event.agent_id as AgentId;
     const agent = AGENTS[agentId];
@@ -290,6 +292,11 @@ function DetailedEventRow({
                         <span className='text-[10px] rounded bg-zinc-800 px-1.5 py-0.5 text-zinc-500 font-mono'>
                             {kindLabel}
                         </span>
+                        {isUserQuestion && (
+                            <span className='text-[10px] rounded bg-purple-900/40 border border-purple-700/40 px-1.5 py-0.5 text-purple-400 font-medium'>
+                                User Question
+                            </span>
+                        )}
                         <span className='text-[10px] text-zinc-600'>
                             {formatRelativeTime(event.created_at)}
                         </span>
@@ -413,6 +420,14 @@ function SessionCard({
                         <span className='text-[10px] text-zinc-500'>
                             {session.turn_count} turns
                         </span>
+                        {session.source === 'user_question' && (
+                            <>
+                                <span className='text-[10px] text-zinc-600'>&middot;</span>
+                                <span className='text-[10px] rounded bg-purple-900/40 border border-purple-700/40 px-1 py-0.5 text-purple-400 font-medium'>
+                                    Q&A
+                                </span>
+                            </>
+                        )}
                         <span className='text-[10px] text-zinc-600'>
                             &middot;
                         </span>
@@ -502,12 +517,12 @@ function FeedTabs({
     ];
 
     return (
-        <div className='flex gap-1 rounded-lg bg-zinc-800/50 p-1 border border-zinc-700/50'>
+        <div className='flex gap-1 rounded-lg bg-zinc-800/50 p-1 border border-zinc-700/50 overflow-x-auto scrollbar-none'>
             {tabs.map(t => (
                 <button
                     key={t.key}
                     onClick={() => onChange(t.key)}
-                    className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer ${
+                    className={`flex items-center gap-1 rounded-md px-2.5 py-2 sm:py-1 text-[11px] font-medium transition-colors cursor-pointer shrink-0 ${
                         active === t.key ?
                             'bg-zinc-700 text-zinc-100'
                         :   'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'
@@ -641,7 +656,7 @@ export function EventLogFeed({
                         onClick={() => setShowSessions(s => !s)}
                         aria-expanded={showSessions}
                         aria-label='Toggle sessions panel'
-                        className={`flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors border cursor-pointer shrink-0 ${
+                        className={`flex items-center gap-1 rounded-md px-2 py-2 sm:py-1 text-[11px] font-medium transition-colors border cursor-pointer shrink-0 ${
                             showSessions ?
                                 'border-zinc-600 bg-zinc-700 text-zinc-200'
                             :   'border-zinc-700/50 text-zinc-500 hover:text-zinc-300'
@@ -726,6 +741,8 @@ export function EventLogFeed({
                             const showingTranscript =
                                 transcriptEventId === event.id &&
                                 matchedSession;
+                            const isUserQuestion =
+                                matchedSession?.source === 'user_question';
 
                             return (
                                 <div key={event.id}>
@@ -735,6 +752,7 @@ export function EventLogFeed({
                                         onToggle={() =>
                                             toggleExpanded(event.id)
                                         }
+                                        isUserQuestion={isUserQuestion}
                                         sessionAction={
                                             matchedSession ?
                                                 {

@@ -72,6 +72,15 @@ async function checkTables(sql) {
         'ops_agent_relationships',
         'ops_initiative_queue',
         'ops_agent_registry',
+        'ops_agent_skills',
+        'ops_agent_sessions',
+        'ops_content_drafts',
+        'ops_governance_proposals',
+        'ops_agent_proposals',
+        'ops_rss_feeds',
+        'ops_discord_channels',
+        'ops_model_routing',
+        'ops_llm_usage',
     ];
 
     for (const table of requiredTables) {
@@ -107,7 +116,7 @@ async function checkPolicies(sql) {
             `;
 
             if (!data) {
-                fail(`Policy "${key}" not found — run seed-ops-policy.mjs`);
+                fail(`Policy "${key}" not found — run make seed-policy`);
             } else {
                 const enabled = data.value?.enabled;
                 const status =
@@ -133,7 +142,7 @@ async function checkTriggers(sql) {
         `;
 
         if (!data || data.length === 0) {
-            fail('No trigger rules found — run seed-trigger-rules.mjs');
+            fail('No trigger rules found — run make seed-triggers');
             return;
         }
 
@@ -176,7 +185,7 @@ async function checkRelationships(sql) {
         `;
 
         if (!data || data.length === 0) {
-            fail('No relationships found — run seed-relationships.mjs');
+            fail('No relationships found — run make seed-relationships');
             return;
         }
 
@@ -320,6 +329,32 @@ async function checkLLMConnectivity() {
     }
 }
 
+async function checkToolbox() {
+    log.info('Checking toolbox container');
+
+    try {
+        const { execFile } = await import('node:child_process');
+        const { promisify } = await import('node:util');
+        const exec = promisify(execFile);
+
+        const { stdout } = await exec('docker', [
+            'exec', 'subcult-toolbox', 'bash', '-c',
+            'whoami && which curl git node python3 rg',
+        ], { timeout: 10_000 });
+
+        const lines = stdout.trim().split('\n');
+        const user = lines[0];
+        if (user === 'root') {
+            pass('Toolbox running as root');
+        } else {
+            warn(`Toolbox running as "${user}" (expected root)`);
+        }
+        pass(`Toolbox has ${lines.length - 1} core binaries`);
+    } catch (err) {
+        fail(`Toolbox unreachable: ${err.message}`);
+    }
+}
+
 // ─── Main ───
 
 async function main() {
@@ -341,6 +376,7 @@ async function main() {
     await checkRssFeeds(sql);
     await checkRecentActivity(sql);
     await checkLLMConnectivity();
+    await checkToolbox();
 
     await sql.end();
 

@@ -25,16 +25,17 @@ export async function GET(req: NextRequest) {
     let cursorCreatedAt: string | null = null;
     let cursorId: string | null = null;
 
-    // If a last_event_id was provided, look up its created_at and id as the cursor
+    // If a last_event_id was provided, look up its created_at and id as the cursor.
+    // Cast to ::text to preserve microsecond precision (JS Date truncates to ms).
     if (lastEventId) {
         try {
             const rows = await sql`
-                SELECT created_at, id FROM ops_agent_events
+                SELECT created_at::text as cursor_ts, id FROM ops_agent_events
                 WHERE id = ${lastEventId}
                 LIMIT 1
             `;
             if (rows.length > 0) {
-                cursorCreatedAt = rows[0].created_at;
+                cursorCreatedAt = rows[0].cursor_ts;
                 cursorId = rows[0].id;
             }
         } catch {
@@ -60,8 +61,9 @@ export async function GET(req: NextRequest) {
 
         try {
             // Query using composite cursor (created_at, id) to avoid skipping events
+            // Cast created_at::text to preserve microsecond precision for cursor
             const rows = await sql`
-                SELECT * FROM ops_agent_events
+                SELECT *, created_at::text as cursor_ts FROM ops_agent_events
                 WHERE (
                     created_at > ${cursorCreatedAt}
                     ${cursorId ? sql`OR (created_at = ${cursorCreatedAt} AND id > ${cursorId})` : sql``}
@@ -77,11 +79,11 @@ export async function GET(req: NextRequest) {
                 if (!isActive) break;
                 await sendEvent(writer, 'event', row);
             }
-            
+
             // Only update cursor if we successfully sent events
             if (rows.length > 0 && isActive) {
                 const lastRow = rows[rows.length - 1];
-                cursorCreatedAt = lastRow.created_at;
+                cursorCreatedAt = lastRow.cursor_ts;
                 cursorId = lastRow.id;
             }
         } catch (err) {

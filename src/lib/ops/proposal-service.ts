@@ -17,6 +17,20 @@ export async function createProposalAndMaybeAutoApprove(
     missionId?: string;
     reason?: string;
 }> {
+    // Per-session proposal limit (max 2 per session)
+    if (input.source_trace_id) {
+        const [{ count: sessionCount }] = await sql<[{ count: number }]>`
+            SELECT COUNT(*)::int as count FROM ops_mission_proposals
+            WHERE source_trace_id = ${input.source_trace_id}
+        `;
+        if (sessionCount >= 2) {
+            return {
+                success: false,
+                reason: 'Per-session proposal limit (2) reached. Consolidate ideas into fewer proposals with multiple steps.',
+            };
+        }
+    }
+
     // Daily proposal limit check
     const todayCount = await countTodayProposals(input.agent_id);
     if (todayCount >= DAILY_PROPOSAL_LIMIT) {
@@ -48,6 +62,31 @@ export async function createProposalAndMaybeAutoApprove(
     `;
 
     const proposalId = proposal.id;
+
+    // Check veto policy: block auto-approval for protected step kinds
+    const vetoPolicy = await getPolicy('veto_authority');
+    if (vetoPolicy.enabled) {
+        const protectedKinds = (vetoPolicy.protected_step_kinds as string[]) ?? [];
+        const hasProtectedStep = input.proposed_steps.some(s =>
+            protectedKinds.includes(s.kind),
+        );
+        if (hasProtectedStep) {
+            await emitEvent({
+                agent_id: input.agent_id,
+                kind: 'proposal_held_for_review',
+                title: `Held for review: ${input.title}`,
+                summary: `Contains protected step kind(s). Requires manual approval.`,
+                tags: ['proposal', 'held', 'veto_gate'],
+                metadata: {
+                    proposalId,
+                    protectedKinds: input.proposed_steps
+                        .filter(s => protectedKinds.includes(s.kind))
+                        .map(s => s.kind),
+                },
+            });
+            return { success: true, proposalId };
+        }
+    }
 
     // Check auto-approve
     const autoApprovePolicy = await getPolicy('auto_approve');

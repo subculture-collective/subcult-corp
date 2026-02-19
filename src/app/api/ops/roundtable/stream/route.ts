@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
 
     const { stream, writer } = createSSEStream();
 
-    let lastTurnNumber = 0;
+    let lastTurnNumber = -1;
 
     // Start keepalive
     const stopKeepAlive = keepAlive(writer, KEEPALIVE_INTERVAL_MS);

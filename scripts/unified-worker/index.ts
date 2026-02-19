@@ -8,11 +8,15 @@
 
 import 'dotenv/config';
 import postgres from 'postgres';
+import fs from 'fs/promises';
+import path from 'path';
 import { orchestrateConversation } from '../../src/lib/roundtable/orchestrator';
 import { executeAgentSession } from '../../src/lib/tools/agent-session';
 import { createLogger } from '../../src/lib/logger';
+import { FORMATS } from '../../src/lib/roundtable/formats';
 import type { RoundtableSession } from '../../src/lib/types';
 import type { AgentSession } from '../../src/lib/tools/types';
+import type { ConversationFormat } from '../../src/lib/types';
 
 const log = createLogger({ service: 'unified-worker' });
 
@@ -130,6 +134,147 @@ async function pollAgentSessions(): Promise<boolean> {
                     });
                 }
             }
+
+            // Write artifact to workspace file
+            if (artifactText && artifactText.length > 50 && session.source_id) {
+                try {
+                    const [rtSession] = await sql<
+                        [{ format: string; topic: string } | undefined]
+                    >`
+                        SELECT format, topic FROM ops_roundtable_sessions
+                        WHERE id = ${session.source_id}
+                    `;
+                    if (rtSession) {
+                        const formatConfig = FORMATS[rtSession.format as ConversationFormat];
+                        const artifact = formatConfig?.artifact;
+                        if (artifact && artifact.type !== 'none') {
+                            const outputDir = artifact.outputDir;
+                            const dateStr = new Date().toISOString().slice(0, 10);
+                            const topicSlug = rtSession.topic
+                                .toLowerCase()
+                                .replace(/[^a-z0-9]+/g, '-')
+                                .replace(/^-|-$/g, '')
+                                .slice(0, 40);
+                            const filename = `${dateStr}__${rtSession.format}__${artifact.type}__${topicSlug}__${session.agent_id}__v01.md`;
+                            const filePath = path.join('/workspace', outputDir, filename);
+
+                            await fs.mkdir(path.dirname(filePath), { recursive: true });
+                            // Skip if synthesis agent already wrote the file via file_write
+                            const fileExists = await fs.access(filePath).then(() => true, () => false);
+                            if (fileExists) {
+                                log.info('Artifact file already exists (written by synthesis agent)', {
+                                    sessionId: session.id,
+                                    path: filePath,
+                                });
+                            } else {
+                                await fs.writeFile(filePath, artifactText, 'utf-8');
+                                log.info('Artifact file written to workspace', {
+                                    sessionId: session.id,
+                                    path: filePath,
+                                    format: rtSession.format,
+                                    artifactType: artifact.type,
+                                });
+                            }
+                        }
+                    }
+                } catch (fileErr) {
+                    // Non-fatal — file write should never stall the worker
+                    log.error('Artifact file write failed (non-fatal)', {
+                        error: fileErr,
+                        sessionId: session.id,
+                    });
+                }
+            }
+
+            // Create content draft from synthesis output
+            if (artifactText && artifactText.length > 50 && session.source_id) {
+                try {
+                    // Dedup check — skip if draft already exists for this roundtable session
+                    const [existingDraft] = await sql<[{ id: string } | undefined]>`
+                        SELECT id FROM ops_content_drafts
+                        WHERE source_session_id = ${session.source_id}
+                        LIMIT 1
+                    `;
+                    if (!existingDraft) {
+                        const [rtSession] = await sql<
+                            [{ format: string; topic: string } | undefined]
+                        >`
+                            SELECT format, topic FROM ops_roundtable_sessions
+                            WHERE id = ${session.source_id}
+                        `;
+                        // Skip content_review — reviews update existing drafts, not create new ones.
+                        // Creating drafts from reviews triggers an infinite review→draft→review loop.
+                        if (rtSession && rtSession.format !== 'content_review') {
+                            const formatConfig = FORMATS[rtSession.format as ConversationFormat];
+                            const artifact = formatConfig?.artifact;
+                            const contentType = artifact?.type && artifact.type !== 'none'
+                                ? artifact.type
+                                : 'report';
+
+                            // Extract title from first markdown heading or generate from topic
+                            const headingMatch = artifactText.match(/^#\s+(.+)$/m);
+                            const title = headingMatch?.[1]?.trim()
+                                || `${contentType.charAt(0).toUpperCase() + contentType.slice(1)}: ${rtSession.topic.slice(0, 100)}`;
+
+                            const [draft] = await sql<[{ id: string }]>`
+                                INSERT INTO ops_content_drafts (
+                                    author_agent, content_type, title, body, status,
+                                    source_session_id, metadata
+                                ) VALUES (
+                                    ${session.agent_id},
+                                    ${contentType},
+                                    ${title.slice(0, 500)},
+                                    ${artifactText.slice(0, 50000)},
+                                    'draft',
+                                    ${session.source_id},
+                                    ${sql.json({
+                                        format: rtSession.format,
+                                        topic: rtSession.topic,
+                                        artifactType: contentType,
+                                        synthesisSessionId: session.id,
+                                    })}
+                                )
+                                RETURNING id
+                            `;
+
+                            log.info('Content draft created from synthesis', {
+                                draftId: draft.id,
+                                sessionId: session.id,
+                                roundtableId: session.source_id,
+                                contentType,
+                                author: session.agent_id,
+                            });
+
+                            // Emit content_draft_created event for trigger system
+                            try {
+                                const { emitEvent } = await import(
+                                    '../../src/lib/ops/events'
+                                );
+                                await emitEvent({
+                                    agent_id: session.agent_id,
+                                    kind: 'content_draft_created',
+                                    title: `Content draft created: ${title.slice(0, 100)}`,
+                                    summary: `${contentType} by ${session.agent_id} from ${rtSession.format} synthesis`,
+                                    tags: ['content', 'draft', contentType],
+                                    metadata: {
+                                        draftId: draft.id,
+                                        sessionId: session.source_id,
+                                        contentType,
+                                    },
+                                });
+                            } catch {
+                                // Non-fatal — event emission should never stall the worker
+                            }
+                        }
+                    }
+                } catch (draftErr) {
+                    // Non-fatal — content draft creation should never stall the worker
+                    log.error('Content draft creation failed (non-fatal)', {
+                        error: draftErr,
+                        sessionId: session.id,
+                    });
+                }
+            }
         }
     } catch (err) {
         log.error('Agent session execution failed', {
@@ -157,7 +302,9 @@ async function pollRoundtables(): Promise<boolean> {
             SELECT id FROM ops_roundtable_sessions
             WHERE status = 'pending'
             AND scheduled_for <= NOW()
-            ORDER BY created_at ASC
+            ORDER BY
+                CASE WHEN source = 'user_question' THEN 0 ELSE 1 END,
+                created_at ASC
             LIMIT 1
             FOR UPDATE SKIP LOCKED
         )
@@ -183,42 +330,8 @@ async function pollRoundtables(): Promise<boolean> {
     try {
         await orchestrateConversation(session, true);
 
-        // Content Pipeline: extract content from writing_room sessions
-        if (session.format === 'writing_room') {
-            try {
-                const { extractContentFromSession } =
-                    await import('../../src/lib/ops/content-pipeline');
-                const draftId = await extractContentFromSession(session.id);
-                if (draftId) {
-                    log.info('Content draft extracted from writing_room', {
-                        sessionId: session.id,
-                        draftId,
-                    });
-                }
-            } catch (extractErr) {
-                // Non-fatal — content extraction should never stall the worker
-                log.error('Content extraction failed (non-fatal)', {
-                    error: extractErr,
-                    sessionId: session.id,
-                });
-            }
-        }
-
-        // Content Pipeline: process review results from content_review sessions
-        if (session.format === 'content_review') {
-            try {
-                const { processReviewSession } =
-                    await import('../../src/lib/ops/content-pipeline');
-                await processReviewSession(session.id);
-                log.info('Content review processed', { sessionId: session.id });
-            } catch (reviewErr) {
-                // Non-fatal — review processing should never stall the worker
-                log.error('Content review processing failed (non-fatal)', {
-                    error: reviewErr,
-                    sessionId: session.id,
-                });
-            }
-        }
+        // Content Pipeline: writing_room and content_review extraction now happens
+        // post-synthesis in pollAgentSessions() — not here on the raw transcript.
 
         // Governance: extract votes from debate sessions tied to a governance proposal
         const proposalId = (session.metadata as Record<string, unknown>)
@@ -379,6 +492,56 @@ async function pollMissionSteps(): Promise<boolean> {
         missionId: step.mission_id,
     });
 
+    // ── Veto gate: check for active vetoes before dispatching ──
+    try {
+        const { hasActiveVeto } = await import('../../src/lib/ops/veto');
+
+        const missionVeto = await hasActiveVeto('mission', step.mission_id);
+        if (missionVeto.vetoed) {
+            log.info('Mission step blocked by veto on mission', {
+                stepId: step.id,
+                missionId: step.mission_id,
+                vetoId: missionVeto.vetoId,
+                severity: missionVeto.severity,
+            });
+            await sql`
+                UPDATE ops_mission_steps
+                SET status = 'failed',
+                    failure_reason = ${`Blocked by ${missionVeto.severity} veto on mission: ${missionVeto.reason}`},
+                    completed_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = ${step.id}
+            `;
+            await finalizeMissionIfComplete(step.mission_id);
+            return true;
+        }
+
+        const stepVeto = await hasActiveVeto('step', step.id);
+        if (stepVeto.vetoed) {
+            log.info('Mission step blocked by veto on step', {
+                stepId: step.id,
+                vetoId: stepVeto.vetoId,
+                severity: stepVeto.severity,
+            });
+            await sql`
+                UPDATE ops_mission_steps
+                SET status = 'failed',
+                    failure_reason = ${`Blocked by ${stepVeto.severity} veto on step: ${stepVeto.reason}`},
+                    completed_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = ${step.id}
+            `;
+            await finalizeMissionIfComplete(step.mission_id);
+            return true;
+        }
+    } catch (vetoErr) {
+        // Non-fatal — if veto check fails, allow step to proceed
+        log.error('Veto check failed (non-fatal, allowing step)', {
+            error: vetoErr,
+            stepId: step.id,
+        });
+    }
+
     try {
         // Load mission context
         const [mission] = await sql`
@@ -483,7 +646,7 @@ async function pollMissionSteps(): Promise<boolean> {
                 ${prompt},
                 'mission',
                 ${step.mission_id},
-                120,
+                300,
                 10,
                 'pending'
             )
@@ -823,19 +986,39 @@ async function finalizeMissionIfComplete(missionId: string): Promise<void> {
     `;
 }
 
+// ─── DB readiness check ───
+
+async function waitForDb(maxRetries = 30, intervalMs = 2000): Promise<void> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            await sql`SELECT 1 FROM ops_roundtable_sessions LIMIT 0`;
+            log.info('Database ready', { attempt });
+            return;
+        } catch {
+            if (attempt === maxRetries) {
+                throw new Error(`Database not ready after ${maxRetries} attempts`);
+            }
+            log.info('Waiting for database...', { attempt, maxRetries });
+            await new Promise(resolve => setTimeout(resolve, intervalMs));
+        }
+    }
+}
+
 // ─── Main poll loop ───
 
 let running = true;
 
 async function pollLoop(): Promise<void> {
+    await waitForDb();
+
     while (running) {
         try {
-            // Agent sessions — highest priority, check every loop
+            // Roundtables first — user questions should not be starved by agent sessions
+            await pollRoundtables();
+
+            // Agent sessions — high priority, check every loop
             const hadSession = await pollAgentSessions();
             if (hadSession) continue; // Process back-to-back sessions
-
-            // Roundtables — check every loop (they have natural delays between turns)
-            await pollRoundtables();
 
             // Mission steps — check every other loop
             await pollMissionSteps();

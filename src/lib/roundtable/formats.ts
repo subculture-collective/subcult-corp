@@ -226,11 +226,6 @@ export const FORMATS: Record<ConversationFormat, FormatConfig> = {
         temperature: 0.6,
         requires: ['subrosa'],
         optional: ['chora', 'praxis'],
-        artifact: {
-            type: 'review',
-            outputDir: 'output/reviews',
-            synthesizer: 'subrosa',
-        },
     },
 
     // ─── Social ───
@@ -258,6 +253,19 @@ export const FORMATS: Record<ConversationFormat, FormatConfig> = {
         temperature: 0.75,
         requires: ['thaum'],
         optional: ['chora', 'subrosa', 'praxis', 'mux'],
+    },
+
+    // ─── Voice ───
+
+    voice_chat: {
+        coordinatorRole: 'primus',
+        purpose:
+            'Live voice conversation with a human. Agents respond to user turns in real time.',
+        minAgents: 2,
+        maxAgents: 4,
+        minTurns: 4,
+        maxTurns: 30,
+        temperature: 0.7,
     },
 };
 

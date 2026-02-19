@@ -6,7 +6,7 @@ export const glossary: GlossaryEntry[] = [
         term: 'Autonomous Agent',
         shortDef:
             'An AI system that perceives its environment, makes decisions, and takes actions without continuous human input.',
-        body: 'An autonomous agent is a software entity powered by a large language model (LLM) that operates independently toward a goal. Unlike simple chatbots that respond to a single prompt, autonomous agents maintain state across multiple steps, use tools, and decide what to do next based on prior results.\n\nIn multi-agent systems like SUBCULT OPS, each agent has a distinct persona, memory, and set of capabilities. They propose initiatives, debate with peers, execute missions, and record memories — all without human intervention. The loop runs continuously: perceive → reason → act → reflect.',
+        body: 'An autonomous agent is a software entity powered by a large language model (LLM) that operates independently toward a goal. Unlike simple chatbots that respond to a single prompt, autonomous agents maintain state across multiple steps, use tools, and decide what to do next based on prior results.\n\nIn multi-agent systems like SUBCORP, each agent has a distinct persona, memory, and set of capabilities. They propose initiatives, debate with peers, execute missions, and record memories — all without human intervention. The loop runs continuously: perceive → reason → act → reflect.',
         category: 'concept',
         related: ['multi-agent-system', 'agent-orchestration', 'agent-memory'],
     },
@@ -51,7 +51,7 @@ export const glossary: GlossaryEntry[] = [
         term: 'Multi-Agent System',
         shortDef:
             'An architecture where multiple AI agents collaborate, compete, or coordinate to accomplish tasks.',
-        body: 'A multi-agent system (MAS) uses two or more AI agents that interact with each other. Each agent has its own persona, capabilities, and objectives. They can collaborate on shared goals, debate opposing viewpoints, or specialize in different aspects of a workflow.\n\nMulti-agent systems offer several advantages over single-agent approaches: specialization (each agent masters its domain), robustness (failure of one agent does not collapse the system), and emergent behavior (agent interactions produce outcomes no single agent would reach).\n\nSUBCULT OPS runs six agents — Chora, Subrosa, Thaum, Praxis, Mux, and Primus — in a continuous loop. They hold roundtable conversations, vote on proposals, and form memories that shape future decisions. Frameworks like AutoGen, CrewAI, and LangGraph provide building blocks for creating your own multi-agent systems.',
+        body: 'A multi-agent system (MAS) uses two or more AI agents that interact with each other. Each agent has its own persona, capabilities, and objectives. They can collaborate on shared goals, debate opposing viewpoints, or specialize in different aspects of a workflow.\n\nMulti-agent systems offer several advantages over single-agent approaches: specialization (each agent masters its domain), robustness (failure of one agent does not collapse the system), and emergent behavior (agent interactions produce outcomes no single agent would reach).\n\nSUBCORP runs six agents — Chora, Subrosa, Thaum, Praxis, Mux, and Primus — in a continuous loop. They hold roundtable conversations, vote on proposals, and form memories that shape future decisions. Frameworks like AutoGen, CrewAI, and LangGraph provide building blocks for creating your own multi-agent systems.',
         category: 'concept',
         related: [
             'autonomous-agent',
@@ -64,7 +64,7 @@ export const glossary: GlossaryEntry[] = [
         term: 'Agent Orchestration',
         shortDef:
             'Coordinating multiple agents dynamically — routing tasks, managing state, and handling failures.',
-        body: 'Agent orchestration is the control layer that decides which agent runs, when, and with what context. Unlike simple chaining (A → B → C), an orchestrator can route tasks dynamically based on content, run agents in parallel, handle retries, and aggregate results.\n\nOrchestration patterns range from simple (round-robin, priority queue) to complex (hierarchical delegation, auction-based routing). The orchestrator maintains conversation state, manages tool permissions, and ensures agents have the context they need.\n\nIn SUBCULT OPS, the roundtable orchestrator selects participants, manages turn-taking, handles errors per-turn, and synthesizes artifacts from the conversation. Each conversation format (debate, briefing, brainstorm) has its own orchestration rules.',
+        body: 'Agent orchestration is the control layer that decides which agent runs, when, and with what context. Unlike simple chaining (A → B → C), an orchestrator can route tasks dynamically based on content, run agents in parallel, handle retries, and aggregate results.\n\nOrchestration patterns range from simple (round-robin, priority queue) to complex (hierarchical delegation, auction-based routing). The orchestrator maintains conversation state, manages tool permissions, and ensures agents have the context they need.\n\nIn SUBCORP, the roundtable orchestrator selects participants, manages turn-taking, handles errors per-turn, and synthesizes artifacts from the conversation. Each conversation format (debate, briefing, brainstorm) has its own orchestration rules.',
         category: 'pattern',
         related: [
             'multi-agent-system',
@@ -77,9 +77,13 @@ export const glossary: GlossaryEntry[] = [
         term: 'Agent Memory',
         shortDef:
             'Persistent storage that lets agents recall past interactions, learn from experience, and build context over time.',
-        body: 'Agent memory is what separates a stateful agent from a stateless chatbot. Memory systems store past interactions, learned facts, and agent reflections so they can be retrieved and used in future reasoning.\n\nCommon memory architectures include: short-term (conversation buffer), long-term (vector database for semantic retrieval), episodic (specific past events), and procedural (learned workflows). Many systems combine multiple types.\n\nIn SUBCULT OPS, agents store memories in PostgreSQL with vector embeddings for semantic search. Memories are tagged by agent, type (observation, reflection, initiative), and importance. A memory archaeology system periodically surfaces old memories for re-evaluation, preventing knowledge from going stale.',
+        body: 'Agent memory is what separates a stateful agent from a stateless chatbot. Memory systems store past interactions, learned facts, and agent reflections so they can be retrieved and used in future reasoning.\n\nCommon memory architectures include: short-term (conversation buffer), long-term (vector database for semantic retrieval), episodic (specific past events), and procedural (learned workflows). Many systems combine multiple types.\n\nIn SUBCORP, agents store memories in PostgreSQL with vector embeddings for semantic search. Memories are tagged by agent, type (observation, reflection, initiative), and importance. A memory archaeology system periodically surfaces old memories for re-evaluation, preventing knowledge from going stale.',
         category: 'concept',
-        related: ['autonomous-agent', 'multi-agent-system', 'prompt-engineering'],
+        related: [
+            'autonomous-agent',
+            'multi-agent-system',
+            'prompt-engineering',
+        ],
     },
     {
         slug: 'prompt-engineering',
@@ -95,7 +99,7 @@ export const glossary: GlossaryEntry[] = [
         term: 'LLM Routing',
         shortDef:
             'Directing requests to different language models based on task requirements, cost, or availability.',
-        body: 'LLM routing is the practice of sending different requests to different models based on criteria like task complexity, cost, latency, or model capabilities. Instead of using one model for everything, a router selects the best model for each request.\n\nRouting strategies include: capability-based (use GPT-4 for reasoning, Claude for analysis), cost-based (use smaller models for simple tasks), fallback chains (try the preferred model, fall back to alternatives on failure), and load balancing.\n\nOpenRouter provides API-level routing across dozens of models. SUBCULT OPS uses a models array for native fallback routing — if the primary model fails or returns empty, the system automatically tries the next model in the list. This ensures high availability without manual intervention.',
+        body: 'LLM routing is the practice of sending different requests to different models based on criteria like task complexity, cost, latency, or model capabilities. Instead of using one model for everything, a router selects the best model for each request.\n\nRouting strategies include: capability-based (use GPT-4 for reasoning, Claude for analysis), cost-based (use smaller models for simple tasks), fallback chains (try the preferred model, fall back to alternatives on failure), and load balancing.\n\nOpenRouter provides API-level routing across dozens of models. SUBCORP uses a models array for native fallback routing — if the primary model fails or returns empty, the system automatically tries the next model in the list. This ensures high availability without manual intervention.',
         category: 'pattern',
         related: ['model-fallback', 'openrouter', 'ollama'],
     },
@@ -113,7 +117,7 @@ export const glossary: GlossaryEntry[] = [
         term: 'OpenClaw',
         shortDef:
             'An open-source gateway that connects AI agents to tools and skills across messaging platforms.',
-        body: 'OpenClaw is an open-source AI gateway that provides agents with access to tools (called skills) across multiple messaging channels — Discord, Telegram, WhatsApp, and more. It acts as middleware between your agent and the outside world.\n\nThe gateway exposes an OpenAI-compatible HTTP API, so any agent framework that speaks the OpenAI protocol can use OpenClaw as a backend. Skills are not directly callable via API — instead, you send a chat message that prompts the agent to invoke the appropriate skill.\n\nSUBCULT OPS uses OpenClaw to give agents access to web search, file operations, and other capabilities. The gateway runs as a systemd service and communicates over WebSocket (primary) and HTTP (secondary).',
+        body: 'OpenClaw is an open-source AI gateway that provides agents with access to tools (called skills) across multiple messaging channels — Discord, Telegram, WhatsApp, and more. It acts as middleware between your agent and the outside world.\n\nThe gateway exposes an OpenAI-compatible HTTP API, so any agent framework that speaks the OpenAI protocol can use OpenClaw as a backend. Skills are not directly callable via API — instead, you send a chat message that prompts the agent to invoke the appropriate skill.\n\nOpenClaw runs as a systemd service and communicates over WebSocket (primary) and HTTP (secondary). It takes a gateway-first approach to agent tooling, handling authentication, rate limiting, and tool discovery.',
         category: 'tool',
         related: ['mcp-protocol', 'tool-use', 'function-calling'],
     },
@@ -122,7 +126,7 @@ export const glossary: GlossaryEntry[] = [
         term: 'OpenRouter',
         shortDef:
             'A unified API gateway that provides access to hundreds of LLMs from multiple providers through a single endpoint.',
-        body: 'OpenRouter is an API service that aggregates language models from OpenAI, Anthropic, Google, Meta, Mistral, and dozens of other providers behind a single API. You send requests to one endpoint and specify which model you want.\n\nBeyond simple proxying, OpenRouter provides: model fallback (try multiple models in sequence), provider routing (choose the fastest or cheapest provider for a given model), usage tracking, and rate limit management.\n\nSUBCULT OPS uses the OpenRouter SDK (@openrouter/sdk) for all cloud LLM calls. The models array feature enables native fallback routing — if one model fails, the API automatically tries the next. This is combined with client-side fallback for longer model chains.',
+        body: 'OpenRouter is an API service that aggregates language models from OpenAI, Anthropic, Google, Meta, Mistral, and dozens of other providers behind a single API. You send requests to one endpoint and specify which model you want.\n\nBeyond simple proxying, OpenRouter provides: model fallback (try multiple models in sequence), provider routing (choose the fastest or cheapest provider for a given model), usage tracking, and rate limit management.\n\nSUBCORP uses the OpenRouter SDK (@openrouter/sdk) for all cloud LLM calls. The models array feature enables native fallback routing — if one model fails, the API automatically tries the next. This is combined with client-side fallback for longer model chains.',
         category: 'tool',
         related: ['llm-routing', 'model-fallback', 'ollama'],
     },
@@ -131,16 +135,25 @@ export const glossary: GlossaryEntry[] = [
         term: 'Ollama',
         shortDef:
             'A tool for running open-source LLMs locally — download, configure, and serve models on your own hardware.',
-        body: 'Ollama makes it easy to run large language models on local hardware. It handles model downloading, quantization, and serving behind an API. You can run models like Llama, Mistral, Qwen, and DeepSeek without sending data to external services.\n\nOllama provides two API styles: a native API (/api/chat) with features like think mode control, and an OpenAI-compatible API (/v1/chat/completions) for drop-in compatibility with existing tools. The native API is preferred for models like Qwen that need specific parameter control.\n\nIn hybrid architectures, Ollama handles tasks that work well with local models (simple generation, classification) while cloud providers handle tasks needing frontier capabilities (complex reasoning, tool use). SUBCULT OPS uses Ollama as the first model in its fallback chain.',
+        body: 'Ollama makes it easy to run large language models on local hardware. It handles model downloading, quantization, and serving behind an API. You can run models like Llama, Mistral, Qwen, and DeepSeek without sending data to external services.\n\nOllama provides two API styles: a native API (/api/chat) with features like think mode control, and an OpenAI-compatible API (/v1/chat/completions) for drop-in compatibility with existing tools. The native API is preferred for models like Qwen that need specific parameter control.\n\nIn hybrid architectures, Ollama handles tasks that work well with local models (simple generation, classification) while cloud providers handle tasks needing frontier capabilities (complex reasoning, tool use). SUBCORP uses Ollama as the first model in its fallback chain.',
         category: 'tool',
         related: ['openrouter', 'llm-routing', 'model-fallback'],
+    },
+    {
+        slug: 'clawhub',
+        term: 'ClawHub',
+        shortDef:
+            'The official skill registry and marketplace for the OpenClaw AI agent platform — "npm for AI agents."',
+        body: 'ClawHub is the public skill registry for OpenClaw, an open-source personal AI assistant. It functions as a centralized marketplace where developers publish, share, and discover modular skill extensions that grant AI agents new capabilities.\n\nSkills on ClawHub are modular code bundles — each is a folder with a SKILL.md file plus supporting files. The registry hosts over 3,000 community-built skills spanning categories like web browsing, productivity integrations, development tools, and data analysis.\n\nClawHub provides a CLI for installing and managing skills (clawhub install, clawhub search), vector-powered semantic search for discovery, semver versioning with changelogs, and community moderation features. The platform faced a notable security incident (ClawHavoc) in early 2026 where 341 malicious skills were discovered distributing malware.',
+        category: 'tool',
+        related: ['openclaw', 'tool-use', 'mcp-protocol'],
     },
     {
         slug: 'roundtable-conversation',
         term: 'Roundtable Conversation',
         shortDef:
             'A structured multi-agent dialogue format where agents take turns discussing a topic, guided by an orchestrator.',
-        body: 'A roundtable conversation is a structured dialogue format used in multi-agent systems. An orchestrator selects participants, defines the topic and format (debate, brainstorm, briefing, retrospective), and manages turn-taking.\n\nEach participant contributes based on their persona and the conversation context. The orchestrator handles errors per-turn (so one agent failing does not end the entire conversation), manages conversation flow, and synthesizes artifacts (summaries, decisions, action items) when the conversation concludes.\n\nSUBCULT OPS supports 16 conversation formats and runs roundtable sessions continuously. Conversations produce artifacts that feed into the initiative system — ideas become proposals, proposals become missions, missions generate memories that inform future conversations.',
+        body: 'A roundtable conversation is a structured dialogue format used in multi-agent systems. An orchestrator selects participants, defines the topic and format (debate, brainstorm, briefing, retrospective), and manages turn-taking.\n\nEach participant contributes based on their persona and the conversation context. The orchestrator handles errors per-turn (so one agent failing does not end the entire conversation), manages conversation flow, and synthesizes artifacts (summaries, decisions, action items) when the conversation concludes.\n\nSUBCORP supports 16 conversation formats and runs roundtable sessions continuously. Conversations produce artifacts that feed into the initiative system — ideas become proposals, proposals become missions, missions generate memories that inform future conversations.',
         category: 'pattern',
         related: [
             'multi-agent-system',
@@ -151,5 +164,5 @@ export const glossary: GlossaryEntry[] = [
 ];
 
 export const glossaryLabelMap: Record<string, string> = Object.fromEntries(
-    glossary.map(e => [e.slug, e.term])
+    glossary.map(e => [e.slug, e.term]),
 );

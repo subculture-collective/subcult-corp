@@ -4,8 +4,22 @@
 FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl wget jq git python3 python3-pip python3-venv \
-    ripgrep fd-find ca-certificates gnupg \
+    # Networking & fetching
+    curl wget jq ca-certificates gnupg dnsutils net-tools iputils-ping \
+    # Core utilities
+    coreutils findutils diffutils patch gawk sed grep less file unzip zip tar gzip bzip2 xz-utils \
+    # Text processing & editing
+    vim-tiny nano \
+    # Development
+    git make gcc g++ \
+    # Python
+    python3 python3-pip python3-venv \
+    # Search tools
+    ripgrep fd-find \
+    # Process & system
+    procps htop tree \
+    # SSH (for git over ssh)
+    openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Node.js 22
@@ -27,7 +41,8 @@ RUN pip install --no-cache-dir requests feedparser beautifulsoup4 html2text
 COPY init-workspace.sh /usr/local/bin/init-workspace.sh
 RUN chmod +x /usr/local/bin/init-workspace.sh
 
-RUN useradd -m -s /bin/bash agent
-USER agent
+RUN echo 'umask 0000' > /etc/workspace-env.sh
+# BASH_ENV is sourced by non-interactive bash (i.e. docker exec bash -c ...)
+ENV BASH_ENV=/etc/workspace-env.sh
 WORKDIR /workspace
-CMD ["/bin/bash", "-c", "/usr/local/bin/init-workspace.sh && sleep infinity"]
+CMD ["/bin/bash", "-c", "/usr/local/bin/init-workspace.sh && exec sleep infinity"]

@@ -3,7 +3,8 @@
 .PHONY: dev build start lint typecheck clean \
         seed seed-agents seed-policy seed-triggers seed-relationships seed-rss seed-discord \
         verify up down restart status logs logs-app logs-worker logs-db \
-        heartbeat db-migrate db-shell nuke fresh init-workspace help
+        heartbeat db-migrate db-shell nuke fresh init-workspace \
+        engage disengage help
 
 # ──────────────────────────────────────────
 # Development
@@ -32,16 +33,16 @@ clean: ## Remove .next build cache
 # ──────────────────────────────────────────
 
 up: ## Build and start all containers
-	docker compose up -d --build
+	docker compose up -d --build --remove-orphans
 
 down: ## Stop all containers
-	docker compose down
+	docker compose down --remove-orphans
 
 restart: ## Restart all containers
 	docker compose restart
 
 rebuild: ## Rebuild images and recreate containers
-	docker compose up -d --build --force-recreate
+	docker compose up -d --build --force-recreate --remove-orphans
 
 status: ## Show status of all containers
 	docker compose ps
@@ -111,12 +112,12 @@ seed-discord: ## Seed Discord channels only
 # ──────────────────────────────────────────
 
 nuke: ## Wipe everything: containers, volumes, images — full reset
-	docker compose down -v --rmi local
+	docker compose down -v --rmi local --remove-orphans
 	@echo "Nuked. All containers, volumes, and local images removed."
 
 fresh: ## Full fresh start: nuke → build → migrate → seed → init workspace
 	$(MAKE) nuke
-	docker compose up -d --build
+	docker compose up -d --build --remove-orphans
 	@echo "Waiting for Postgres to be healthy..."
 	@until docker compose exec -T postgres pg_isready -U subcult -d subcult_ops >/dev/null 2>&1; do sleep 1; done
 	$(MAKE) db-migrate
@@ -140,6 +141,16 @@ heartbeat: ## Trigger heartbeat (via Docker internal network)
 		--header="Authorization: Bearer $$CRON_SECRET" \
 		http://127.0.0.1:3000/api/ops/heartbeat | \
 		python3 -m json.tool
+
+engage: ## Enable the system (heartbeat will process work)
+	@docker compose exec -T postgres psql -U subcult -d subcult_ops -c \
+		"UPDATE ops_policy SET value = '{\"enabled\": true}' WHERE key = 'system_enabled';" \
+		&& echo "System ENGAGED"
+
+disengage: ## Disable the system (heartbeat returns early, no work processed)
+	@docker compose exec -T postgres psql -U subcult -d subcult_ops -c \
+		"UPDATE ops_policy SET value = '{\"enabled\": false}' WHERE key = 'system_enabled';" \
+		&& echo "System DISENGAGED"
 
 heartbeat-ext: ## Trigger heartbeat (via external URL)
 	@CRON_SECRET=$$(grep CRON_SECRET .env.local 2>/dev/null | cut -d= -f2); \

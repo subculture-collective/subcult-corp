@@ -134,6 +134,50 @@ export const comparisons: ComparisonEntry[] = [
         related: ['langchain-vs-autogen', 'openrouter-vs-direct-api', 'claude-vs-openai'],
     },
     {
+        slug: 'clawhub-vs-mcp',
+        title: 'ClawHub vs Anthropic MCP',
+        shortDesc:
+            'A centralized skill marketplace versus a decentralized tool protocol — two approaches to agent extensibility.',
+        body: "ClawHub and MCP represent two fundamentally different approaches to giving AI agents access to tools. ClawHub is a centralized marketplace where pre-built skills are published, discovered, and installed via CLI. MCP is a decentralized protocol that standardizes how any tool connects to any AI client.\n\nThink of ClawHub as the App Store model — browse, install, done. MCP is more like the USB standard — any device that implements the protocol works with any compatible host. Both have their place depending on your architecture.",
+        sideA: {
+            name: 'ClawHub',
+            points: [
+                'Centralized marketplace with 3,000+ pre-built skills',
+                'CLI-based install and management (clawhub install)',
+                'Vector-powered semantic search for discovery',
+                'Community moderation with stars, comments, and reports',
+                'Tied to the OpenClaw ecosystem',
+            ],
+        },
+        sideB: {
+            name: 'Anthropic MCP',
+            points: [
+                'Open protocol — works with any compatible client',
+                'Decentralized — tools run as independent servers',
+                'Standardized discovery, invocation, and response format',
+                'Supports tools, resources, and prompt templates',
+                'Growing ecosystem across multiple AI platforms',
+            ],
+        },
+        verdict:
+            'ClawHub is faster for getting started — install a skill and go. MCP is more flexible and portable across AI platforms. For OpenClaw users, ClawHub is the natural choice. For multi-platform agent systems, MCP provides vendor-neutral tool connectivity.',
+        faqs: [
+            {
+                question: 'Can I use ClawHub skills with non-OpenClaw agents?',
+                answer: 'Not directly. ClawHub skills are designed for the OpenClaw runtime. To use similar capabilities with other agents, look for MCP servers or native tool integrations for your framework.',
+            },
+            {
+                question: 'Is MCP replacing skill marketplaces?',
+                answer: 'Not necessarily. MCP standardizes how tools connect, but marketplaces like ClawHub add discovery, versioning, and community curation on top. A marketplace could distribute MCP servers in the future.',
+            },
+            {
+                question: 'Which approach is more secure?',
+                answer: 'Both have trade-offs. ClawHub had the ClawHavoc incident with 341 malicious skills. MCP servers run locally but require trusting the server code. In both cases, reviewing tool code before installing is essential.',
+            },
+        ],
+        related: ['openclaw-vs-langchain', 'multi-agent-vs-single-agent', 'claude-vs-openai'],
+    },
+    {
         slug: 'openrouter-vs-direct-api',
         title: 'OpenRouter vs Direct API Access',
         shortDesc:

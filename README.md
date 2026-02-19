@@ -1,4 +1,4 @@
-# subcult-corp
+# subcorp
 
 A self-hosted, closed-loop multi-agent system with 6 AI agents running autonomous workflows — proposals, missions, roundtable conversations, tool-augmented sessions, memory distillation, and initiative generation.
 
@@ -368,7 +368,7 @@ deploy/systemd/               # systemd service files (legacy)
 
 ## Roadmap
 
-Development is tracked across 17 epics and 114 issues. See [issue #114](https://github.com/subculture-collective/subcult-corp/issues/114) for the full roadmap in dependency order.
+Development is tracked across 17 epics and 114 issues. See [issue #114](https://github.com/subculture-collective/subcorp/issues/114) for the full roadmap in dependency order.
 
 | Phase | Epic                           | Status      |
 | ----- | ------------------------------ | ----------- |

@@ -84,6 +84,30 @@ export function SystemLogsSkeleton() {
     );
 }
 
+export function FileBrowserSkeleton() {
+    return (
+        <div className='space-y-4'>
+            <div className='flex items-center gap-2'>
+                <div className='h-7 w-40 rounded-lg bg-zinc-800/50 animate-pulse' />
+            </div>
+            <div className='rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden'>
+                <div className='px-3 py-2 border-b border-zinc-800'>
+                    <div className='h-4 w-32 rounded bg-zinc-700 animate-pulse' />
+                </div>
+                <div className='animate-pulse p-4 space-y-2'>
+                    {Array.from({ length: 8 }).map((_, i) => (
+                        <div key={i} className='flex items-center gap-3'>
+                            <div className='h-3.5 w-3.5 rounded bg-zinc-800' />
+                            <div className='h-3 rounded bg-zinc-800 flex-1' style={{ maxWidth: `${40 + i * 5}%` }} />
+                            <div className='h-3 w-10 rounded bg-zinc-800' />
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export function EventLogFeedSkeleton() {
     return (
         <div className='rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden'>

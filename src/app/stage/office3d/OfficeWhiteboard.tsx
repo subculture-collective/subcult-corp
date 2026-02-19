@@ -143,8 +143,8 @@ export function OfficeWhiteboard({
                 <boxGeometry args={[4.5, 2.8, 0.06]} />
                 <meshStandardMaterial color='#888' roughness={0.8} />
             </mesh>
-            {/* Board surface */}
-            <mesh>
+            {/* Board surface — z=0.02 to sit in front of frame and avoid z-fighting */}
+            <mesh position={[0, 0, 0.02]}>
                 <planeGeometry args={[4.2, 2.5]} />
                 <meshStandardMaterial map={texture} />
             </mesh>

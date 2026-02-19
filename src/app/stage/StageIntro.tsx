@@ -1,7 +1,7 @@
-// StageIntro — collapsible intro explaining what SUBCULT OPS is and what you can do
+// StageIntro — collapsible intro explaining what SUBCORP is and what you can do
 'use client';
 
-import { useState, useSyncExternalStore } from 'react';
+import { useState, useEffect } from 'react';
 import { AGENTS, AGENT_IDS } from '@/lib/agents';
 import {
     MicIcon,
@@ -23,17 +23,17 @@ const CAPABILITIES = [
     { icon: <FileTextIcon size={14} />, text: 'Track content drafts' },
 ];
 
-// Read localStorage without triggering setState inside an effect
-function getHasSeen() {
-    if (typeof window === 'undefined') return false;
-    return localStorage.getItem('subcult-intro-seen') === 'true';
-}
-const subscribe = () => () => {}; // localStorage doesn't fire events for same-tab writes
-
 export function StageIntro() {
-    // Read persisted state via useSyncExternalStore to avoid setState-in-effect
-    const hasSeen = useSyncExternalStore(subscribe, getHasSeen, () => false);
-    const [isOpen, setIsOpen] = useState(!getHasSeen());
+    // Start open on SSR, close after mount if user has seen it before
+    const [isOpen, setIsOpen] = useState(true);
+    const [hasSeen, setHasSeen] = useState(false);
+
+    useEffect(() => {
+        if (localStorage.getItem('subcult-intro-seen') === 'true') {
+            setIsOpen(false);
+            setHasSeen(true);
+        }
+    }, []);
 
     const handleToggle = () => {
         const newState = !isOpen;
@@ -49,13 +49,13 @@ export function StageIntro() {
             <button
                 onClick={handleToggle}
                 aria-expanded={isOpen}
-                aria-label='About SUBCULT OPS'
+                aria-label='About SUBCORP'
                 className='w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/30 transition-colors'
             >
                 <div className='flex items-center gap-2'>
                     <BrainIcon size={14} className='text-accent' />
                     <span className='text-xs font-medium text-zinc-300'>
-                        Welcome to SUBCULT OPS
+                        Welcome to SUBCORP
                     </span>
                     {!isOpen && (
                         <span className='text-[10px] text-zinc-600 ml-2'>
@@ -141,7 +141,9 @@ export function StageIntro() {
                                     key={i}
                                     className='flex items-center gap-2 text-[11px] text-zinc-400'
                                 >
-                                    <span className='text-zinc-500 shrink-0'>{cap.icon}</span>
+                                    <span className='text-zinc-500 shrink-0'>
+                                        {cap.icon}
+                                    </span>
                                     <span>{cap.text}</span>
                                 </div>
                             ))}
@@ -154,7 +156,7 @@ export function StageIntro() {
                             <span className='text-zinc-400 font-medium'>
                                 Tip:
                             </span>{' '}
-                            Use the tabs above to switch views. The{' '}
+                            Use the sidebar to switch views. The{' '}
                             <span className='text-zinc-300'>Feed</span> shows
                             live activity, the{' '}
                             <span className='text-zinc-300'>Office</span>{' '}

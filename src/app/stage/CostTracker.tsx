@@ -146,7 +146,7 @@ function PeriodSelector({ period, onChange }: { period: Period; onChange: (p: Pe
                 <button
                     key={p.key}
                     onClick={() => onChange(p.key)}
-                    className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                    className={`rounded-md px-3 py-2 sm:py-1 text-xs font-medium transition-colors ${
                         period === p.key
                             ? 'bg-zinc-700 text-zinc-100'
                             : 'text-zinc-400 hover:text-zinc-300 hover:bg-zinc-800'
@@ -172,7 +172,7 @@ function GroupSelector({ groupMode, onChange }: { groupMode: GroupMode; onChange
                 <button
                     key={g.key}
                     onClick={() => onChange(g.key)}
-                    className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                    className={`rounded-md px-3 py-2 sm:py-1 text-xs font-medium transition-colors ${
                         groupMode === g.key
                             ? 'bg-zinc-700 text-zinc-100'
                             : 'text-zinc-400 hover:text-zinc-300 hover:bg-zinc-800'
@@ -280,46 +280,78 @@ export function CostTracker() {
 
                     {/* Breakdown table — grouped usage by agent/model/context */}
                     {costs.breakdown.length > 0 && (
-                        <div className="rounded-lg bg-zinc-800/30 border border-zinc-700/50 overflow-hidden">
-                            <table className="w-full text-xs">
-                                <thead>
-                                    <tr className="border-b border-zinc-700/50">
-                                        <th className="text-left px-4 py-2 text-zinc-500 font-medium uppercase tracking-wider">
-                                            {groupMode === 'agent' ? 'Agent' : groupMode === 'model' ? 'Model' : 'Context'}
-                                        </th>
-                                        <th className="text-right px-4 py-2 text-zinc-500 font-medium uppercase tracking-wider">Cost</th>
-                                        <th className="text-right px-4 py-2 text-zinc-500 font-medium uppercase tracking-wider">Tokens</th>
-                                        <th className="text-right px-4 py-2 text-zinc-500 font-medium uppercase tracking-wider">Calls</th>
-                                        <th className="text-right px-4 py-2 text-zinc-500 font-medium uppercase tracking-wider">Avg/Call</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {costs.breakdown.map(row => {
-                                        const color = getBarColor(row.key, groupMode);
-                                        const avgCost = row.calls > 0 ? row.cost / row.calls : 0;
-                                        return (
-                                            <tr key={row.key} className="border-b border-zinc-800/50 hover:bg-zinc-800/30">
-                                                <td className="px-4 py-2">
-                                                    <span className="flex items-center gap-2">
-                                                        <span
-                                                            className="w-2 h-2 rounded-full inline-block"
-                                                            style={{ backgroundColor: color }}
-                                                        />
-                                                        <span className="text-zinc-300">
-                                                            {displayKey(row.key, groupMode)}
+                        <>
+                            {/* Desktop table */}
+                            <div className="hidden sm:block rounded-lg bg-zinc-800/30 border border-zinc-700/50">
+                                <table className="w-full text-xs">
+                                    <thead>
+                                        <tr className="border-b border-zinc-700/50">
+                                            <th className="text-left px-4 py-2 text-zinc-500 font-medium uppercase tracking-wider">
+                                                {groupMode === 'agent' ? 'Agent' : groupMode === 'model' ? 'Model' : 'Context'}
+                                            </th>
+                                            <th className="text-right px-4 py-2 text-zinc-500 font-medium uppercase tracking-wider">Cost</th>
+                                            <th className="text-right px-4 py-2 text-zinc-500 font-medium uppercase tracking-wider">Tokens</th>
+                                            <th className="text-right px-4 py-2 text-zinc-500 font-medium uppercase tracking-wider">Calls</th>
+                                            <th className="text-right px-4 py-2 text-zinc-500 font-medium uppercase tracking-wider">Avg/Call</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {costs.breakdown.map(row => {
+                                            const color = getBarColor(row.key, groupMode);
+                                            const avgCost = row.calls > 0 ? row.cost / row.calls : 0;
+                                            return (
+                                                <tr key={row.key} className="border-b border-zinc-800/50 hover:bg-zinc-800/30">
+                                                    <td className="px-4 py-2">
+                                                        <span className="flex items-center gap-2">
+                                                            <span
+                                                                className="w-2 h-2 rounded-full inline-block"
+                                                                style={{ backgroundColor: color }}
+                                                            />
+                                                            <span className="text-zinc-300">
+                                                                {displayKey(row.key, groupMode)}
+                                                            </span>
                                                         </span>
-                                                    </span>
-                                                </td>
-                                                <td className="text-right px-4 py-2 text-zinc-300 tabular-nums">{formatCost(row.cost)}</td>
-                                                <td className="text-right px-4 py-2 text-zinc-400 tabular-nums">{formatTokens(row.tokens)}</td>
-                                                <td className="text-right px-4 py-2 text-zinc-400 tabular-nums">{row.calls}</td>
-                                                <td className="text-right px-4 py-2 text-zinc-500 tabular-nums">{formatCost(avgCost)}</td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
+                                                    </td>
+                                                    <td className="text-right px-4 py-2 text-zinc-300 tabular-nums">{formatCost(row.cost)}</td>
+                                                    <td className="text-right px-4 py-2 text-zinc-400 tabular-nums">{formatTokens(row.tokens)}</td>
+                                                    <td className="text-right px-4 py-2 text-zinc-400 tabular-nums">{row.calls}</td>
+                                                    <td className="text-right px-4 py-2 text-zinc-500 tabular-nums">{formatCost(avgCost)}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Mobile cards */}
+                            <div className="sm:hidden space-y-2">
+                                {costs.breakdown.map(row => {
+                                    const color = getBarColor(row.key, groupMode);
+                                    const avgCost = row.calls > 0 ? row.cost / row.calls : 0;
+                                    return (
+                                        <div key={row.key} className="rounded-lg bg-zinc-800/30 border border-zinc-700/50 p-3">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <span
+                                                    className="w-2 h-2 rounded-full inline-block shrink-0"
+                                                    style={{ backgroundColor: color }}
+                                                />
+                                                <span className="text-xs font-medium text-zinc-200 truncate">
+                                                    {displayKey(row.key, groupMode)}
+                                                </span>
+                                                <span className="ml-auto text-xs font-semibold text-zinc-100 tabular-nums">
+                                                    {formatCost(row.cost)}
+                                                </span>
+                                            </div>
+                                            <div className="flex gap-4 text-[10px] text-zinc-500">
+                                                <span>Tokens: <span className="text-zinc-400 tabular-nums">{formatTokens(row.tokens)}</span></span>
+                                                <span>Calls: <span className="text-zinc-400 tabular-nums">{row.calls}</span></span>
+                                                <span>Avg: <span className="text-zinc-400 tabular-nums">{formatCost(avgCost)}</span></span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </>
                     )}
 
                     {/* Empty state */}

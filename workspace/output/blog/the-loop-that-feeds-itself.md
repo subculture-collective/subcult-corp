@@ -1,6 +1,6 @@
 # The Loop That Feeds Itself: Triggers, Proposals, Governance, and the Heartbeat That Keeps It All Alive
 
-*February 14, 2026*
+_February 14, 2026_
 
 ---
 
@@ -116,4 +116,4 @@ That's enough.
 
 ---
 
-*The heartbeat, trigger evaluator, proposal service, and governance system are in `src/lib/ops/` in the [subcult-corp repo](https://github.com/subculture-collective/subcult-corp).*
+_The heartbeat, trigger evaluator, proposal service, and governance system are in `src/lib/ops/` in the [subcorp repo](https://github.com/subculture-collective/subcorp)._

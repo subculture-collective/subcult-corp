@@ -9,6 +9,7 @@ import {
 } from './hooks';
 import { AGENTS } from '@/lib/agents';
 import type { AgentId } from '@/lib/types';
+import { useAuth } from '@/lib/auth/client';
 import {
     ClipboardListIcon,
     VoteIcon,
@@ -418,6 +419,7 @@ function ProposalCard({
 // ─── AgentDesigner ───
 
 export function AgentDesigner() {
+    const { requireAuth } = useAuth();
     const [activeTab, setActiveTab] = useState<AgentProposalStatus | 'all'>(
         'all',
     );
@@ -436,6 +438,12 @@ export function AgentDesigner() {
 
     const handleAction = useCallback(
         async (action: string, proposalId: string) => {
+            try {
+                await requireAuth('Managing agent proposals requires an account');
+            } catch {
+                return; // User cancelled auth
+            }
+
             setActionLoading(proposalId);
             setActionMessage(null);
 
@@ -474,7 +482,7 @@ export function AgentDesigner() {
                 setActionLoading(null);
             }
         },
-        [refetch],
+        [refetch, requireAuth],
     );
 
     // Sort: voting first, then approved, then by date
@@ -558,12 +566,12 @@ export function AgentDesigner() {
             )}
 
             {/* Filter tabs */}
-            <div className='flex gap-1 rounded-lg bg-zinc-800/50 p-1 border border-zinc-700/50 w-fit'>
+            <div className='flex gap-1 rounded-lg bg-zinc-800/50 p-1 border border-zinc-700/50 w-fit overflow-x-auto scrollbar-none'>
                 {STATUS_TABS.map(tab => (
                     <button
                         key={tab.key}
                         onClick={() => setActiveTab(tab.key)}
-                        className={`flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                        className={`flex items-center gap-1 rounded-md px-3 py-2.5 sm:py-1.5 text-xs font-medium transition-colors shrink-0 ${
                             activeTab === tab.key ?
                                 'bg-zinc-700 text-zinc-100'
                             :   'text-zinc-400 hover:text-zinc-300 hover:bg-zinc-800'

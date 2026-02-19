@@ -18,7 +18,7 @@ export default function LearnHub() {
                     url: `${BASE}/learn`,
                     isPartOf: {
                         '@type': 'WebSite',
-                        name: 'SUBCULT OPS',
+                        name: 'SUBCORP',
                         url: BASE,
                     },
                 }}

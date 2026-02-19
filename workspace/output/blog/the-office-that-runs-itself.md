@@ -1,6 +1,6 @@
 # The Office That Runs Itself: A 24-Hour Schedule for Agents Who Don't Sleep
 
-*February 14, 2026*
+_February 14, 2026_
 
 ---
 
@@ -96,4 +96,4 @@ The office runs itself. Most of the time it's just an office. But the best ideas
 
 ---
 
-*The schedule, formats, and orchestrator code are in `src/lib/roundtable/` in the [subcult-corp repo](https://github.com/subculture-collective/subcult-corp).*
+_The schedule, formats, and orchestrator code are in `src/lib/roundtable/` in the [subcorp repo](https://github.com/subculture-collective/subcorp)._

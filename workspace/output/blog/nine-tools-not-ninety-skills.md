@@ -1,6 +1,6 @@
 # Nine Tools, Not Ninety Skills: Why We Deleted 120 Skill Files and Built a Tool Registry
 
-*February 14, 2026*
+_February 14, 2026_
 
 ---
 
@@ -26,17 +26,17 @@ The root problem wasn't the model. It was the abstraction. A skill is a script. 
 
 Subcult Corp replaced all 120 skills with this:
 
-| Tool | Agents | What it does |
-|------|--------|-------------|
-| `bash` | praxis, mux | Execute in sandboxed toolbox container |
-| `web_search` | chora, subrosa, thaum, praxis | Brave Search API |
-| `web_fetch` | chora, thaum, praxis, mux | `curl` + `html2text` to markdown |
-| `file_read` | all 6 | Read from `/workspace/` |
-| `file_write` | all 6 | Write to `/workspace/` with ACL enforcement |
-| `send_to_agent` | all 6 | Write to another agent's inbox |
-| `spawn_droid` | praxis, mux, primus | Launch sub-agent (300s timeout) |
-| `check_droid` | all 6 | Query droid status and output |
-| `memory_search` | all 6 | Vector search via pgvector |
+| Tool            | Agents                        | What it does                                |
+| --------------- | ----------------------------- | ------------------------------------------- |
+| `bash`          | praxis, mux                   | Execute in sandboxed toolbox container      |
+| `web_search`    | chora, subrosa, thaum, praxis | Brave Search API                            |
+| `web_fetch`     | chora, thaum, praxis, mux     | `curl` + `html2text` to markdown            |
+| `file_read`     | all 6                         | Read from `/workspace/`                     |
+| `file_write`    | all 6                         | Write to `/workspace/` with ACL enforcement |
+| `send_to_agent` | all 6                         | Write to another agent's inbox              |
+| `spawn_droid`   | praxis, mux, primus           | Launch sub-agent (300s timeout)             |
+| `check_droid`   | all 6                         | Query droid status and output               |
+| `memory_search` | all 6                         | Vector search via pgvector                  |
 
 Nine tools. Typed parameters. Structured responses. Every call is tracked, cost-attributed, and stored in PostgreSQL with the agent session that made it.
 
@@ -48,12 +48,17 @@ Every agent can read all of `/workspace/`. Writing is restricted. The `WRITE_ACL
 
 ```typescript
 export const WRITE_ACLS: Record<AgentId, string[]> = {
-    chora:   ['agents/chora/', 'output/reports/', 'output/briefings/', 'output/digests/'],
+    chora: [
+        'agents/chora/',
+        'output/reports/',
+        'output/briefings/',
+        'output/digests/',
+    ],
     subrosa: ['agents/subrosa/', 'output/reviews/'],
-    thaum:   ['agents/thaum/', 'output/', 'projects/'],
-    praxis:  ['agents/praxis/', 'projects/', 'output/'],
-    mux:     ['agents/mux/', 'output/', 'projects/'],
-    primus:  ['agents/primus/', 'shared/', 'output/', 'projects/'],
+    thaum: ['agents/thaum/', 'output/', 'projects/'],
+    praxis: ['agents/praxis/', 'projects/', 'output/'],
+    mux: ['agents/mux/', 'output/', 'projects/'],
+    primus: ['agents/primus/', 'shared/', 'output/', 'projects/'],
 };
 ```
 
@@ -107,4 +112,4 @@ The 19% improvement isn't magic. It's the difference between an abstraction that
 
 ---
 
-*The tool registry, ACL system, and toolbox executor are in `src/lib/tools/` in the [subcult-corp repo](https://github.com/subculture-collective/subcult-corp).*
+_The tool registry, ACL system, and toolbox executor are in `src/lib/tools/` in the [subcorp repo](https://github.com/subculture-collective/subcorp)._

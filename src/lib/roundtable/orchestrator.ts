@@ -13,6 +13,8 @@ import { llmGenerate, sanitizeDialogue } from '../llm';
 import { emitEvent } from '../ops/events';
 import { distillConversationMemories } from '../ops/memory-distiller';
 import { synthesizeArtifact } from './artifact-synthesizer';
+import { collectDebateVotes } from '../ops/agent-proposal-voting';
+import { collectGovernanceDebateVotes } from '../ops/governance';
 import {
     loadAffinityMap,
     getAffinityFromMap,
@@ -29,9 +31,28 @@ import {
     postConversationTurn,
     postConversationSummary,
 } from '@/lib/discord';
+import { synthesizeSpeech } from '@/lib/tts/elevenlabs';
 import { logger } from '@/lib/logger';
 
 const log = logger.child({ module: 'orchestrator' });
+
+/**
+ * Word-level Jaccard similarity between two texts.
+ * Returns 0 (no overlap) to 1 (identical word sets).
+ * Used for repetition detection — not semantic, just lexical overlap.
+ */
+function wordJaccard(a: string, b: string): number {
+    const normalize = (s: string) =>
+        new Set(s.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean));
+    const setA = normalize(a);
+    const setB = normalize(b);
+    if (setA.size === 0 && setB.size === 0) return 1;
+    let intersection = 0;
+    for (const w of setA) {
+        if (setB.has(w)) intersection++;
+    }
+    return intersection / (setA.size + setB.size - intersection);
+}
 
 /**
  * Build the system prompt for a speaker in a conversation.
@@ -52,6 +73,7 @@ function buildSystemPrompt(
     scratchpad?: string,
     briefing?: string,
     memories?: string[],
+    recentArtifacts?: string[],
 ): string {
     const voice = getVoice(speakerId);
     if (!voice) {
@@ -113,6 +135,12 @@ function buildSystemPrompt(
     if (memories && memories.length > 0) {
         prompt += `\n═══ YOUR MEMORIES ═══\n`;
         prompt += memories.map(m => `- ${m}`).join('\n');
+        prompt += '\n';
+    }
+
+    if (recentArtifacts && recentArtifacts.length > 0) {
+        prompt += `\n═══ RECENT ARTIFACTS ═══\n`;
+        prompt += recentArtifacts.map(a => `- ${a}`).join('\n');
         prompt += '\n';
     }
 
@@ -192,7 +220,7 @@ function buildUserPrompt(
         return `Final turn. Land your point on "${topic}". No loose threads.`;
     }
 
-    return `Respond as ${speakerName}. Stay on: "${topic}".`;
+    return `Respond as ${speakerName}. Stay on: "${topic}". Advance the conversation — don't restate what's already been said. If consensus is reached, name next steps or close.`;
 }
 
 /**
@@ -208,6 +236,11 @@ export async function orchestrateConversation(
     session: RoundtableSession,
     delayBetweenTurns: boolean = true,
 ): Promise<ConversationTurnEntry[]> {
+    // Voice chat uses a separate event-driven orchestration loop
+    if (session.format === 'voice_chat') {
+        return orchestrateVoiceChat(session);
+    }
+
     const format = getFormat(session.format);
     const maxTurns = pickTurnCount(format);
     const history: ConversationTurnEntry[] = [];
@@ -293,6 +326,41 @@ export async function orchestrateConversation(
         }
     }
 
+    // Load recent artifact summaries for context
+    let recentArtifacts: string[] = [];
+    try {
+        const artifacts = await sql<
+            Array<{
+                agent_id: string;
+                completed_at: string;
+                preview: string;
+                format: string;
+                topic: string;
+            }>
+        >`
+            SELECT s.agent_id, s.completed_at,
+                LEFT(s.result->>'text', 200) as preview,
+                r.format, r.topic
+            FROM ops_agent_sessions s
+            JOIN ops_roundtable_sessions r ON r.id = s.source_id::uuid
+            WHERE s.source = 'conversation'
+              AND s.status = 'succeeded'
+              AND s.completed_at > now() - interval '24 hours'
+            ORDER BY s.completed_at DESC
+            LIMIT 3
+        `;
+        recentArtifacts = artifacts.map(a => {
+            const hoursAgo = Math.round(
+                (Date.now() - new Date(a.completed_at).getTime()) / 3_600_000,
+            );
+            const ago = hoursAgo < 1 ? 'just now' : `${hoursAgo}h ago`;
+            const preview = a.preview?.replace(/\n/g, ' ').trim() ?? '';
+            return `${a.agent_id} produced a ${a.format} artifact: "${preview.slice(0, 120)}..." (${ago})`;
+        });
+    } catch (err) {
+        log.error('Recent artifact loading failed (non-fatal)', { error: err });
+    }
+
     // Mark session as running
     await sql`
         UPDATE ops_roundtable_sessions
@@ -327,6 +395,10 @@ export async function orchestrateConversation(
     });
 
     let abortReason: string | null = null;
+
+    // Track last dialogue per speaker for repetition detection
+    const lastDialogueMap = new Map<string, string>();
+    let consecutiveStale = 0;
 
     for (let turn = 0; turn < maxTurns; turn++) {
         // Select speaker
@@ -376,6 +448,7 @@ export async function orchestrateConversation(
             scratchpadMap.get(speaker),
             briefingMap.get(speaker),
             memoryMap.get(speaker),
+            recentArtifacts,
         );
         const userPrompt = buildUserPrompt(
             session.topic,
@@ -420,6 +493,32 @@ export async function orchestrateConversation(
 
         const dialogue = sanitizeDialogue(rawDialogue);
 
+        // ─── Repetition detection ───
+        // If a speaker produces dialogue too similar to their previous turn,
+        // count it as stale. 2+ consecutive stale turns → early termination.
+        const prevDialogue = lastDialogueMap.get(speaker);
+        if (prevDialogue && turn >= format.minTurns) {
+            const similarity = wordJaccard(prevDialogue, dialogue);
+            if (similarity > 0.6) {
+                consecutiveStale++;
+                if (consecutiveStale >= 2) {
+                    log.info('Early termination: repetition detected', {
+                        sessionId: session.id,
+                        turn,
+                        speaker,
+                        similarity: similarity.toFixed(2),
+                        consecutiveStale,
+                    });
+                    break;
+                }
+            } else {
+                consecutiveStale = 0;
+            }
+        } else {
+            consecutiveStale = 0;
+        }
+        lastDialogueMap.set(speaker, dialogue);
+
         const entry: ConversationTurnEntry = {
             speaker,
             dialogue,
@@ -453,19 +552,44 @@ export async function orchestrateConversation(
             },
         });
 
-        // Post turn to Discord thread
-        // Await the last turn to avoid racing with the completion summary
-        if (discordWebhookUrl) {
-            const turnPost = postConversationTurn(session, entry, discordWebhookUrl).catch(() => {});
-            if (turn === maxTurns - 1) {
-                await turnPost;
-            }
-        }
+        // Post turn to Discord (with optional TTS audio if requested)
+        const useTTS = !!(session.metadata as Record<string, unknown>)?.tts;
 
-        // Natural delay between turns (3-8 seconds)
-        if (delayBetweenTurns && turn < maxTurns - 1) {
-            const delay = 3000 + Math.random() * 5000;
-            await new Promise(resolve => setTimeout(resolve, delay));
+        if (discordWebhookUrl) {
+            // Start TTS (if requested) and delay timer concurrently
+            const ttsPromise = useTTS
+                ? synthesizeSpeech({
+                    agentId: entry.speaker,
+                    text: entry.dialogue,
+                    turn,
+                }).catch((err) => {
+                    log.warn('TTS synthesis failed', { error: err, speaker: entry.speaker, turn });
+                    return null;
+                })
+                : Promise.resolve(null);
+
+            const delayPromise = (delayBetweenTurns && turn < maxTurns - 1)
+                ? new Promise<void>(resolve => setTimeout(resolve, 3000 + Math.random() * 5000))
+                : Promise.resolve();
+
+            // Wait for TTS (has internal 10s timeout)
+            const audioResult = await ttsPromise;
+
+            // Post turn with optional audio
+            const turnPost = postConversationTurn(
+                session, entry, discordWebhookUrl,
+                audioResult,
+            ).catch(() => {});
+
+            if (turn === maxTurns - 1) await turnPost;
+
+            // Ensure delay has elapsed
+            await delayPromise;
+        } else {
+            if (delayBetweenTurns && turn < maxTurns - 1) {
+                const delay = 3000 + Math.random() * 5000;
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
         }
     }
 
@@ -558,6 +682,348 @@ export async function orchestrateConversation(
                 error: err,
                 sessionId: session.id,
             });
+        }
+
+        // Structured voting round after agent proposal debates
+        const proposalId = (session.metadata as Record<string, unknown>)?.agent_proposal_id as string | undefined;
+        if (proposalId && finalStatus === 'completed') {
+            try {
+                const result = await collectDebateVotes(
+                    proposalId,
+                    session.participants,
+                    history,
+                );
+                log.info('Agent proposal voting finalized', {
+                    proposalId,
+                    result: result.result,
+                    approvals: result.approvals,
+                    rejections: result.rejections,
+                    sessionId: session.id,
+                });
+            } catch (err) {
+                log.error('Agent proposal vote collection failed', {
+                    error: err,
+                    proposalId,
+                    sessionId: session.id,
+                });
+            }
+        }
+
+        // Structured voting round after governance proposal debates
+        const govProposalId = (session.metadata as Record<string, unknown>)?.governance_proposal_id as string | undefined;
+        if (govProposalId && finalStatus === 'completed') {
+            try {
+                const result = await collectGovernanceDebateVotes(
+                    govProposalId,
+                    session.participants,
+                    history,
+                );
+                log.info('Governance proposal voting finalized', {
+                    proposalId: govProposalId,
+                    result: result.result,
+                    approvals: result.approvals,
+                    rejections: result.rejections,
+                    sessionId: session.id,
+                });
+            } catch (err) {
+                log.error('Governance proposal vote collection failed', {
+                    error: err,
+                    proposalId: govProposalId,
+                    sessionId: session.id,
+                });
+            }
+        }
+    }
+
+    return history;
+}
+
+// ─── Voice Chat Orchestration ───
+
+const VOICE_POLL_INTERVAL_MS = 1500;
+const VOICE_INACTIVITY_TIMEOUT_MS = 5 * 60_000; // 5 minutes of silence → end
+
+/**
+ * Orchestrate a voice_chat session — event-driven, pauses for user input.
+ *
+ * Flow:
+ * 1. Mark session as running, emit start event
+ * 2. Generate 1-2 agent opening responses to the topic
+ * 3. Wait for a user turn (poll DB)
+ * 4. On user turn, generate 1-2 agent responses
+ * 5. Repeat 3-4 until maxTurns or inactivity timeout
+ * 6. Wrap up
+ */
+async function orchestrateVoiceChat(
+    session: RoundtableSession,
+): Promise<ConversationTurnEntry[]> {
+    const format = getFormat(session.format);
+    const maxTurns = format.maxTurns;
+    const history: ConversationTurnEntry[] = [];
+
+    const affinityMap = await loadAffinityMap();
+
+    const userQuestion =
+        ((session.metadata as Record<string, unknown>)?.userQuestion as string) ??
+        session.topic;
+
+    // Load context per participant (same as standard orchestration)
+    const voiceModifiersMap = new Map<string, string[]>();
+    const scratchpadMap = new Map<string, string>();
+    const briefingMap = new Map<string, string>();
+    const memoryMap = new Map<string, string[]>();
+
+    for (const participant of session.participants) {
+        try {
+            const [mods, scratchpad, briefing, memories] = await Promise.all([
+                deriveVoiceModifiers(participant).catch(() => []),
+                getScratchpad(participant).catch(() => ''),
+                buildBriefing(participant).catch(() => ''),
+                queryRelevantMemories(participant, session.topic, {
+                    relevantLimit: 3,
+                    recentLimit: 2,
+                })
+                    .then(mems => mems.map(m => m.content))
+                    .catch(() => [] as string[]),
+            ]);
+            voiceModifiersMap.set(participant, mods as string[]);
+            scratchpadMap.set(participant, scratchpad);
+            briefingMap.set(participant, briefing);
+            memoryMap.set(participant, memories);
+        } catch {
+            voiceModifiersMap.set(participant, []);
+            scratchpadMap.set(participant, '');
+            briefingMap.set(participant, '');
+            memoryMap.set(participant, []);
+        }
+    }
+
+    let primeDirective = '';
+    try {
+        primeDirective = await loadPrimeDirective();
+    } catch {
+        // Continue without
+    }
+
+    // Mark session as running
+    await sql`
+        UPDATE ops_roundtable_sessions
+        SET status = 'running', started_at = NOW()
+        WHERE id = ${session.id}
+    `;
+
+    await emitEvent({
+        agent_id: 'system',
+        kind: 'conversation_started',
+        title: `voice_chat started: ${session.topic}`,
+        summary: `Participants: ${session.participants.join(', ')} | live voice session`,
+        tags: ['conversation', 'started', 'voice_chat'],
+        metadata: {
+            sessionId: session.id,
+            format: 'voice_chat',
+            participants: session.participants,
+        },
+    });
+
+    // Helper: generate and store an agent turn
+    async function generateAgentTurn(speaker: string, turnNumber: number): Promise<ConversationTurnEntry | null> {
+        const voice = getVoice(speaker);
+        const speakerName = voice?.displayName ?? speaker;
+
+        let interactionType: string | undefined;
+        if (history.length > 0) {
+            const lastSpeaker = history[history.length - 1].speaker;
+            if (lastSpeaker !== 'user') {
+                const affinity = getAffinityFromMap(affinityMap, speaker, lastSpeaker);
+                interactionType = getInteractionType(affinity);
+            }
+        }
+
+        const systemPrompt = buildSystemPrompt(
+            speaker,
+            history,
+            session.format,
+            session.topic,
+            interactionType,
+            voiceModifiersMap.get(speaker),
+            undefined,
+            primeDirective,
+            { question: userQuestion, isFirstSpeaker: turnNumber === 0 },
+            false,
+            scratchpadMap.get(speaker),
+            briefingMap.get(speaker),
+            memoryMap.get(speaker),
+        );
+
+        // User prompt tailored for voice_chat
+        const userPrompt =
+            turnNumber === 0
+                ? `A human is asking the room: "${session.topic}". Give a warm, conversational response. Be concise — this is a live voice chat.`
+                : `Respond naturally to what was just said. Keep it conversational and concise — this is a live voice chat, not a written essay.`;
+
+        try {
+            const rawDialogue = await llmGenerate({
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userPrompt },
+                ],
+                temperature: format.temperature,
+                maxTokens: 300, // shorter for voice
+                model: session.model ?? undefined,
+                trackingContext: {
+                    agentId: speaker,
+                    context: 'roundtable:voice_chat',
+                    sessionId: session.id,
+                },
+            });
+
+            const dialogue = sanitizeDialogue(rawDialogue);
+            const entry: ConversationTurnEntry = { speaker, dialogue, turn: turnNumber };
+            history.push(entry);
+
+            await sql`
+                INSERT INTO ops_roundtable_turns (session_id, turn_number, speaker, dialogue, metadata)
+                VALUES (${session.id}, ${turnNumber}, ${speaker}, ${dialogue}, ${jsonb({ speakerName })})
+            `;
+            await sql`
+                UPDATE ops_roundtable_sessions SET turn_count = ${turnNumber + 1} WHERE id = ${session.id}
+            `;
+            await emitEvent({
+                agent_id: speaker,
+                kind: 'conversation_turn',
+                title: `${speakerName}: ${dialogue}`,
+                tags: ['conversation', 'turn', 'voice_chat'],
+                metadata: { sessionId: session.id, turn: turnNumber, dialogue },
+            });
+
+            return entry;
+        } catch (err) {
+            log.error('Voice chat LLM failed', { error: err, speaker, turnNumber, sessionId: session.id });
+            return null;
+        }
+    }
+
+    // Helper: poll DB for a new user turn
+    async function waitForUserTurn(afterTurn: number): Promise<{ dialogue: string; turnNumber: number } | null> {
+        const deadline = Date.now() + VOICE_INACTIVITY_TIMEOUT_MS;
+
+        while (Date.now() < deadline) {
+            const rows = await sql<Array<{ dialogue: string; turn_number: number }>>`
+                SELECT dialogue, turn_number FROM ops_roundtable_turns
+                WHERE session_id = ${session.id}
+                  AND speaker = 'user'
+                  AND turn_number > ${afterTurn}
+                ORDER BY turn_number ASC
+                LIMIT 1
+            `;
+
+            if (rows.length > 0) {
+                return { dialogue: rows[0].dialogue, turnNumber: rows[0].turn_number };
+            }
+
+            // Check if session was ended externally
+            const [{ status }] = await sql<[{ status: string }]>`
+                SELECT status FROM ops_roundtable_sessions WHERE id = ${session.id}
+            `;
+            if (status === 'completed' || status === 'failed') {
+                return null; // Session ended externally
+            }
+
+            await new Promise(resolve => setTimeout(resolve, VOICE_POLL_INTERVAL_MS));
+        }
+
+        return null; // Inactivity timeout
+    }
+
+    let currentTurn = 0;
+
+    // ── Phase 1: Opening agent responses (1-2 agents) ──
+    const openingCount = Math.min(2, session.participants.length);
+    const shuffled = [...session.participants].sort(() => Math.random() - 0.5);
+
+    // Coordinator opens first if present
+    const coordinatorIdx = shuffled.indexOf(format.coordinatorRole);
+    if (coordinatorIdx > 0) {
+        shuffled.splice(coordinatorIdx, 1);
+        shuffled.unshift(format.coordinatorRole);
+    }
+
+    for (let i = 0; i < openingCount && currentTurn < maxTurns; i++) {
+        const entry = await generateAgentTurn(shuffled[i], currentTurn);
+        if (entry) {
+            currentTurn++;
+            // Small delay between opening agents
+            if (i < openingCount - 1) {
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+        }
+    }
+
+    // ── Phase 2: Listen → Respond loop ──
+    while (currentTurn < maxTurns) {
+        const lastTurnNumber = currentTurn - 1;
+
+        const userTurn = await waitForUserTurn(lastTurnNumber);
+        if (!userTurn) {
+            // Timeout or session ended
+            log.info('Voice chat ending: no user reply', { sessionId: session.id, currentTurn });
+            break;
+        }
+
+        // Record user turn in history (already in DB from reply endpoint)
+        history.push({
+            speaker: 'user',
+            dialogue: userTurn.dialogue,
+            turn: userTurn.turnNumber,
+        });
+        currentTurn = userTurn.turnNumber + 1;
+
+        // Pick 1-2 agents to respond
+        const respondCount = 1 + Math.floor(Math.random() * 2); // 1 or 2
+        const lastAgentSpeaker = history.filter(h => h.speaker !== 'user').pop()?.speaker;
+        const available = session.participants.filter(p => p !== lastAgentSpeaker);
+        const responders = available.length > 0
+            ? available.sort(() => Math.random() - 0.5).slice(0, respondCount)
+            : [session.participants[Math.floor(Math.random() * session.participants.length)]];
+
+        for (const responder of responders) {
+            if (currentTurn >= maxTurns) break;
+            const entry = await generateAgentTurn(responder, currentTurn);
+            if (entry) {
+                currentTurn++;
+                if (responders.length > 1) {
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                }
+            }
+        }
+    }
+
+    // ── Wrap up ──
+    await sql`
+        UPDATE ops_roundtable_sessions
+        SET status = 'completed', turn_count = ${history.length}, completed_at = NOW()
+        WHERE id = ${session.id}
+    `;
+
+    await emitEvent({
+        agent_id: 'system',
+        kind: 'conversation_completed',
+        title: `voice_chat completed: ${session.topic}`,
+        summary: `${history.length} turns | live voice session`,
+        tags: ['conversation', 'completed', 'voice_chat'],
+        metadata: {
+            sessionId: session.id,
+            turnCount: history.length,
+            speakers: [...new Set(history.map(h => h.speaker))],
+        },
+    });
+
+    // Distill memories if enough substance
+    if (history.length >= 4) {
+        try {
+            await distillConversationMemories(session.id, history, session.format);
+        } catch (err) {
+            log.error('Voice chat memory distillation failed', { error: err, sessionId: session.id });
         }
     }
 

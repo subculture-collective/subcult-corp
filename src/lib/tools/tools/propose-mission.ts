@@ -2,6 +2,7 @@
 import type { NativeTool } from '../types';
 import { createProposalAndMaybeAutoApprove } from '@/lib/ops/proposal-service';
 import type { StepKind } from '@/lib/types';
+import { ALL_AGENTS } from '@/lib/types';
 import { logger } from '@/lib/logger';
 
 const log = logger.child({ module: 'propose-mission' });
@@ -10,7 +11,7 @@ const log = logger.child({ module: 'propose-mission' });
  * Create a propose_mission execute function bound to a specific agentId.
  * The agentId is captured via closure to identify who is proposing.
  */
-export function createProposeMissionExecute(agentId: string) {
+export function createProposeMissionExecute(agentId: string, sessionId?: string) {
     return async (params: Record<string, unknown>) => {
         const title = params.title as string;
         const description = (params.description as string) ?? '';
@@ -36,6 +37,7 @@ export function createProposeMissionExecute(agentId: string) {
                     payload: s.payload,
                 })),
                 source: 'agent',
+                source_trace_id: sessionId,
             });
 
             log.info('Mission proposal created via tool', {
@@ -79,8 +81,8 @@ export function createProposeMissionExecute(agentId: string) {
 export const proposeMissionTool: NativeTool = {
     name: 'propose_mission',
     description:
-        'Propose a mission with concrete steps to execute. If all step kinds are in the auto-approve list, the mission will be created and executed immediately. Otherwise it goes to pending review. Use this to turn ideas and plans into actual work.',
-    agents: ['praxis', 'primus', 'mux'],
+        'Propose a mission with concrete steps. Call at most once per session — consolidate multiple ideas into one mission with multiple steps. If all step kinds are auto-approvable, the mission executes immediately; otherwise it goes to review.',
+    agents: [...ALL_AGENTS],
     parameters: {
         type: 'object',
         properties: {

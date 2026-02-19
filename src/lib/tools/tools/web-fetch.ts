@@ -1,11 +1,12 @@
 // web_fetch tool — fetch URL and convert to markdown via toolbox
 import type { NativeTool } from '../types';
+import { ALL_AGENTS } from '@/lib/types';
 import { execInToolbox } from '../executor';
 
 export const webFetchTool: NativeTool = {
     name: 'web_fetch',
     description: 'Fetch a URL and return its content as markdown text. Useful for reading articles, documentation, or web pages.',
-    agents: ['chora', 'thaum', 'praxis', 'mux'],
+    agents: [...ALL_AGENTS],
     parameters: {
         type: 'object',
         properties: {

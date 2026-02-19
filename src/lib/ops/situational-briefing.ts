@@ -33,7 +33,7 @@ export async function buildBriefing(agentId: string): Promise<string> {
         FROM ops_agent_events
         WHERE created_at > now() - interval '6 hours'
           AND agent_id NOT LIKE 'oc-%'
-          AND kind NOT IN ('heartbeat', 'step_dispatched')
+          AND kind NOT IN ('heartbeat', 'step_dispatched', 'missing_artifacts')
         ORDER BY created_at DESC
         LIMIT 15
     `;
@@ -68,7 +68,38 @@ export async function buildBriefing(agentId: string): Promise<string> {
         sections.push(`Active missions:\n${missionLines.join('\n')}`);
     }
 
-    // 3. Recent conversations this agent wasn't part of
+    // 3. Artifact stats (last 24h)
+    const synthesisCount = await sql<[{ count: number }]>`
+        SELECT COUNT(*)::int as count
+        FROM ops_agent_sessions
+        WHERE source = 'conversation'
+          AND status = 'succeeded'
+          AND completed_at > now() - interval '24 hours'
+    `;
+
+    const draftStats = await sql<
+        Array<{ status: string; count: number }>
+    >`
+        SELECT status, COUNT(*)::int as count
+        FROM ops_content_drafts
+        WHERE created_at > now() - interval '24 hours'
+        GROUP BY status
+    `;
+
+    const synthCount = synthesisCount[0]?.count ?? 0;
+    const lines: string[] = [];
+    if (synthCount > 0) {
+        lines.push(`- ${synthCount} synthesis reports completed`);
+    } else {
+        lines.push(`- No synthesis reports yet`);
+    }
+    if (draftStats.length > 0) {
+        const parts = draftStats.map(d => `${d.count} ${d.status}`);
+        lines.push(`- Content drafts: ${parts.join(', ')}`);
+    }
+    sections.push(`Artifacts (last 24h):\n${lines.join('\n')}`);
+
+    // 4. Recent conversations this agent wasn't part of
     const recentConversations = await sql<
         Array<{
             topic: string;
@@ -100,7 +131,7 @@ export async function buildBriefing(agentId: string): Promise<string> {
         );
     }
 
-    // 4. Pending proposals
+    // 5. Pending proposals
     const pendingProposals = await sql<
         Array<{ title: string; agent_id: string }>
     >`

@@ -1,5 +1,5 @@
 // Discord roundtable posting — plain messages in channel (no threads)
-import { postToWebhook } from './client';
+import { postToWebhook, postToWebhookWithFiles } from './client';
 import { getWebhookUrl, getChannelForFormat } from './channels';
 import { getVoice } from '../roundtable/voices';
 import { getAgentAvatarUrl } from './avatars';
@@ -56,18 +56,34 @@ export async function postConversationTurn(
     session: RoundtableSession,
     entry: ConversationTurnEntry,
     webhookUrl: string,
+    audio?: { audio: Buffer; filename: string } | null,
 ): Promise<void> {
     const voice = getVoice(entry.speaker);
     const username = voice
         ? `${voice.symbol} ${voice.displayName}`
         : entry.speaker;
+    const avatarUrl = getAgentAvatarUrl(entry.speaker);
 
-    await postToWebhook({
-        webhookUrl,
-        username,
-        avatarUrl: getAgentAvatarUrl(entry.speaker),
-        content: entry.dialogue,
-    });
+    const audioFile = audio
+        ? [{ filename: audio.filename, data: audio.audio, contentType: 'audio/mpeg' }]
+        : undefined;
+
+    // Discord enforces 2000 char limit per message — split long dialogue
+    if (entry.dialogue.length <= 2000) {
+        await postToWebhookWithFiles({
+            webhookUrl, username, avatarUrl, content: entry.dialogue,
+            files: audioFile,
+        });
+    } else {
+        const chunks = splitDialogue(entry.dialogue, 2000);
+        for (let i = 0; i < chunks.length; i++) {
+            // Attach audio to first chunk only
+            await postToWebhookWithFiles({
+                webhookUrl, username, avatarUrl, content: chunks[i],
+                files: i === 0 ? audioFile : undefined,
+            });
+        }
+    }
 }
 
 /**
@@ -147,6 +163,26 @@ export async function postArtifactToDiscord(
         roundtableSessionId,
         chunks: chunks.length,
     });
+}
+
+/** Split dialogue text at sentence/paragraph boundaries to stay under maxLen. */
+function splitDialogue(text: string, maxLen: number): string[] {
+    if (text.length <= maxLen) return [text];
+    const chunks: string[] = [];
+    let remaining = text;
+    while (remaining.length > 0) {
+        if (remaining.length <= maxLen) { chunks.push(remaining); break; }
+        let idx = remaining.lastIndexOf('\n\n', maxLen);
+        if (idx <= 0) idx = remaining.lastIndexOf('\n', maxLen);
+        if (idx <= 0) idx = remaining.lastIndexOf('. ', maxLen);
+        if (idx <= 0) idx = remaining.lastIndexOf(' ', maxLen);
+        if (idx <= 0) idx = maxLen;
+        // Include the period in the chunk
+        const end = remaining[idx] === '.' ? idx + 1 : idx;
+        chunks.push(remaining.slice(0, end).trimEnd());
+        remaining = remaining.slice(end).trimStart();
+    }
+    return chunks;
 }
 
 /** Split text into chunks at paragraph/line boundaries to stay under maxLen.

@@ -1,8 +1,8 @@
-# Multi-Agent Production Workflow, Collaborative Workspace, and Docker-Based Output Filing System for subcult-corp
+# Multi-Agent Production Workflow, Collaborative Workspace, and Docker-Based Output Filing System for subcorp
 
 ## Executive summary
 
-The current subcult-corp repository in entity["organization","subculture-collective","github org"] already contains a substantial foundation for a “living office” multi-agent system: a Docker-Compose stack, a Next.js app, multiple workers, a database-backed ops/heartbeat loop, a defined roster of six agents (primus/mux/chora/thaum/subrosa/praxis), and a “workspace” concept with coordination doctrine and agent identity/soul files. fileciteturn48file2L1-L1 fileciteturn96file1L1-L1 fileciteturn49file0L1-L1 fileciteturn100file0L1-L1 fileciteturn61file8L1-L1
+The current subcorp repository in entity["organization","subculture-collective","github org"] already contains a substantial foundation for a “living office” multi-agent system: a Docker-Compose stack, a Next.js app, multiple workers, a database-backed ops/heartbeat loop, a defined roster of six agents (primus/mux/chora/thaum/subrosa/praxis), and a “workspace” concept with coordination doctrine and agent identity/soul files. fileciteturn48file2L1-L1 fileciteturn96file1L1-L1 fileciteturn49file0L1-L1 fileciteturn100file0L1-L1 fileciteturn61file8L1-L1
 
 What’s missing for “production workflow + collaborative workspace + Docker-based filing” is not a new orchestration concept; it’s a **formal artifact system**: stable directories, explicit access rules, lifecycle/retention, provenance metadata, and a ship pipeline that reliably turns multi-agent activity (meetings, research, synthesis, integration) into **auditable outputs** (reports, PRs, release bundles) without polluting the repo with volatile logs. The repo currently includes cron job configs and JSONL run logs under `workspace/cron/…` and even an OpenRouter usage export committed at repo root, signaling a need for a clearer boundary between **durable deliverables** vs **ephemeral telemetry**. fileciteturn103file14L1-L1 fileciteturn105file0L1-L1 fileciteturn103file13L1-L1
 
@@ -12,7 +12,7 @@ This report recommends a **Balanced** proposal: add a Docker-mounted `/data` art
 
 ### What already exists and how it works now
 
-The Docker runtime is already structured as a multi-service system: the composition file defines an app, workers, a Postgres database, and an “openclaw-bridge” service that mounts host directories (e.g., `~/.openclaw/…`) into a container and pushes events into the database. fileciteturn96file1L1-L1 This implies a split between (a) the subcult-corp application stack and (b) an external agent runtime/telemetry system (“OpenClaw”) whose filesystem is treated as an input stream.
+The Docker runtime is already structured as a multi-service system: the composition file defines an app, workers, a Postgres database, and an “openclaw-bridge” service that mounts host directories (e.g., `~/.openclaw/…`) into a container and pushes events into the database. fileciteturn96file1L1-L1 This implies a split between (a) the subcorp application stack and (b) an external agent runtime/telemetry system (“OpenClaw”) whose filesystem is treated as an input stream.
 
 The container build (Dockerfile) uses a multi-stage Next.js build and copies `workspace/` into the runtime image alongside the app, indicating that “workspace” is presently a **repo-tracked** configuration bundle rather than a mounted, write-heavy runtime volume. fileciteturn97file1L1-L1
 
@@ -40,14 +40,15 @@ On the collaboration side, the repo contains lint/build scripts but no clearly e
 
 The central recommendation is to separate three categories of state:
 
-**Repo-tracked configuration and templates (`/app/workspace_spec`)**  
+**Repo-tracked configuration and templates (`/app/workspace_spec`)**
 Stable: agent identity/soul docs, format/schedule specs, operational templates, schemas, “what good looks like,” and integration policies. This remains in Git.
 
-**Runtime workspace (`/data`)**  
-Writable: per-agent personal areas, shared scratch, runs/logs, caches, and intermediate artifacts. This is a Docker volume (or bind mount) and is *not* committed.
+**Runtime workspace (`/data`)**
+Writable: per-agent personal areas, shared scratch, runs/logs, caches, and intermediate artifacts. This is a Docker volume (or bind mount) and is _not_ committed.
 
-**Shippable deliverables (`/data/outputs` → promoted to Git)**  
+**Shippable deliverables (`/data/outputs` → promoted to Git)**
 Curated: reports, release notes, PR bundles, final datasets. They are produced in `/data/outputs`, then either:
+
 - committed to the repo under a `deliverables/` directory (recommended for “final outputs”), or
 - attached/published externally (not assumed here), with only manifests committed.
 
@@ -120,6 +121,7 @@ This increases portability and de-risks accidental commits of runtime logs.
 ### Naming scheme: deterministic, sortable, human-legible
 
 A production filing system needs filenames that are:
+
 - chronological,
 - globally unique,
 - attributable to an agent and workflow stage,
@@ -130,11 +132,12 @@ Recommended filename convention:
 `YYYY-MM-DD__<workflow>__<artifact-type>__<slug>__<agent>__v<nn>.<ext>`
 
 Examples:
+
 - `2026-02-13__research__brief__docker-artifact-broker__chora__v01.md`
-- `2026-02-13__ship__release-notes__subcult-corp-0.2.0__mux__v03.md`
+- `2026-02-13__ship__release-notes__subcorp-0.2.0__mux__v03.md`
 - `2026-02-13__audit__risk-review__tweet-wave__subrosa__v01.md`
 
-The version suffix is intentionally simple for human handling; the *real* identity of the artifact is in metadata.
+The version suffix is intentionally simple for human handling; the _real_ identity of the artifact is in metadata.
 
 ### Metadata: front matter + manifest index
 
@@ -173,12 +176,13 @@ Define retention classes:
 The repo already shows failure modes like repeated cron delivery errors and rate-limiting traces in run logs; those are valuable for debugging but should be rotated and archived, not committed forever. fileciteturn105file1L1-L1 fileciteturn105file0L1-L1
 
 Operationally:
+
 - Add a daily “retention worker” that:
-  1. scans `/data/workspace/logs`, `/data/workspace/sessions`, `/data/workspace/cache`;
-  2. applies rules from `retention.yml`;
-  3. compresses eligible logs (e.g., `.jsonl` → `.jsonl.gz`);
-  4. deletes expired items;
-  5. writes a retention report under `/data/outputs/reports/…`.
+    1. scans `/data/workspace/logs`, `/data/workspace/sessions`, `/data/workspace/cache`;
+    2. applies rules from `retention.yml`;
+    3. compresses eligible logs (e.g., `.jsonl` → `.jsonl.gz`);
+    4. deletes expired items;
+    5. writes a retention report under `/data/outputs/reports/…`.
 
 ## Agent roles, permissions model, and droid spawning lifecycle
 
@@ -199,27 +203,27 @@ A filing system should **encode** this: not all agents should be able to write e
 
 ### Permissions model: broker-enforced ACLs, not “best effort” conventions
 
-Linux file permissions inside a container won’t reliably govern LLM-driven tools, because the real authority is *the skill/tool interface*. The recommended model is:
+Linux file permissions inside a container won’t reliably govern LLM-driven tools, because the real authority is _the skill/tool interface_. The recommended model is:
 
 1. Implement a single “artifact broker” service (or skill) with API:
-   - `create_artifact(metadata, path_hint, content|bytes)`
-   - `append_artifact(artifact_id, content_delta)`
-   - `promote_artifact(artifact_id, new_status)`
-   - `publish_artifact(artifact_id, target=git|release_bundle)`
+    - `create_artifact(metadata, path_hint, content|bytes)`
+    - `append_artifact(artifact_id, content_delta)`
+    - `promote_artifact(artifact_id, new_status)`
+    - `publish_artifact(artifact_id, target=git|release_bundle)`
 2. The broker enforces ACLs based on `agent_id` and `retention_class`.
 3. All agents write through the broker; direct filesystem writes are limited to droid scratch and caches.
 
 A practical directory ACL matrix:
 
-| Area | Write allowed | Notes |
-|---|---|---|
-| `/data/workspace/personal/<agent>/…` | **that agent only** | Personal drafting, scratch, partial notes |
-| `/data/workspace/shared/inbox/…` | chora, praxis, mux | Intake only; no “finals” here |
-| `/data/workspace/shared/integration/…` | mux (primary), praxis (secondary) | “Ready-to-ship” staging |
-| `/data/outputs/reports/…` | mux, chora | mux finalizes, chora authors |
-| `/data/outputs/releases/…` | mux, praxis | mux packages, praxis approves |
-| `/data/outputs/manifests/…` | broker-only | provenance integrity |
-| `/data/workspace/logs/…` | system/workers only | agents cannot edit logs |
+| Area                                   | Write allowed                     | Notes                                     |
+| -------------------------------------- | --------------------------------- | ----------------------------------------- |
+| `/data/workspace/personal/<agent>/…`   | **that agent only**               | Personal drafting, scratch, partial notes |
+| `/data/workspace/shared/inbox/…`       | chora, praxis, mux                | Intake only; no “finals” here             |
+| `/data/workspace/shared/integration/…` | mux (primary), praxis (secondary) | “Ready-to-ship” staging                   |
+| `/data/outputs/reports/…`              | mux, chora                        | mux finalizes, chora authors              |
+| `/data/outputs/releases/…`             | mux, praxis                       | mux packages, praxis approves             |
+| `/data/outputs/manifests/…`            | broker-only                       | provenance integrity                      |
+| `/data/workspace/logs/…`               | system/workers only               | agents cannot edit logs                   |
 
 This matches the intent of the roles: mux executes packaging; praxis commits; subrosa vetoes; thaum reframes but doesn’t ship. fileciteturn61file8L1-L1
 
@@ -227,19 +231,20 @@ This matches the intent of the roles: mux executes packaging; praxis commits; su
 
 Your system already hints at dispatching external coding agents as background processes. fileciteturn100file3L1-L1 To make this safe and reliable, formalize “droids” as:
 
-**Definition**  
+**Definition**
 A droid is an ephemeral worker instance (process or container) spawned by one of the six agents to perform a bounded task (research, code change, test run, packaging) and emit outputs into a single designated directory.
 
 **Lifecycle**
+
 1. **Spawn request**: parent agent submits `droid_spec` to a queue (DB table or `/data/workspace/state/queues` spool).
 2. **Provision**: droid-runner allocates:
-   - `droid_id` (UUID)
-   - working directory: `/data/workspace/sessions/droids/<droid_id>/`
-   - input snapshot (optional): read-only bind mount of needed repo subset or artifact refs
+    - `droid_id` (UUID)
+    - working directory: `/data/workspace/sessions/droids/<droid_id>/`
+    - input snapshot (optional): read-only bind mount of needed repo subset or artifact refs
 3. **Execution**: droid runs with:
-   - strict time limit (e.g., 5–30 minutes)
-   - bounded CPU/memory
-   - restricted network by default (only allow if needed)
+    - strict time limit (e.g., 5–30 minutes)
+    - bounded CPU/memory
+    - restricted network by default (only allow if needed)
 4. **Output sealing**: droid writes outputs to its working directory + a `droid_result.json`.
 5. **Import**: parent agent must explicitly “check in” outputs via artifact broker (promote from droid scratch → workspace/shared or outputs).
 6. **Termination**: droid directory is either deleted (ephemeral class) or archived/compressed (standard class).
@@ -250,6 +255,7 @@ Use container-level hardening patterns (rootless where feasible; user namespace 
 For higher-assurance security guidance, map the “least privilege + reduced attack surface” approach to NIST container security recommendations (SP 800-190 is the canonical reference point, even if you apply only a subset). fileciteturn88file0L1-L1
 
 **Security boundary rules**
+
 - Droids cannot write into `/data/outputs` directly.
 - Droids cannot modify `/app` (repo code) directly; code changes must be staged as patches and then applied by a governed “code integration” step.
 - Droids cannot access secrets unless explicitly granted for a single job.
@@ -263,38 +269,44 @@ This structure also aligns with “agentic software engineering” systems that 
 The repo already has meeting primitives (formats + schedule) and an ops heartbeat for periodic orchestration. fileciteturn99file0L1-L1 fileciteturn48file0L1-L1 The recommended production workflow overlays a deterministic artifact pipeline on top:
 
 **Meetings (Roundtable sessions)**
+
 - Trigger: schedule slot fires or a human/request is added to `/data/workspace/shared/inbox`.
 - Output: transcript + meeting summary artifact:
-  - transcript path: `/data/workspace/sessions/roundtable/<session_id>/transcript.jsonl`
-  - summary path: `/data/outputs/reports/YYYY-MM-DD__meeting-summary__<topic>__mux__v01.md`
+    - transcript path: `/data/workspace/sessions/roundtable/<session_id>/transcript.jsonl`
+    - summary path: `/data/outputs/reports/YYYY-MM-DD__meeting-summary__<topic>__mux__v01.md`
 
 **Research**
+
 - Owner: chora (primary), thaum optional for reframing, subrosa optional for risk constraints.
 - Outputs:
-  - research briefs in `/data/workspace/personal/chora/…`
-  - curated research packet promoted to `/data/workspace/shared/reference/…`
+    - research briefs in `/data/workspace/personal/chora/…`
+    - curated research packet promoted to `/data/workspace/shared/reference/…`
 
 **Synthesize**
+
 - Owner: chora synthesizes; thaum may generate alternate frames; subrosa validates exposure risks.
 - Output: a synthesis memo artifact, tagged with evidence pointers.
 
 **Integrate**
+
 - Owner: mux packages; praxis chooses; subrosa reviews risks; primus invoked only if strategic conflict arises.
 - Output: integrated bundle in `/data/workspace/shared/integration/<bundle_id>/…` containing:
-  - decision record
-  - patch set (if code)
-  - report draft
-  - release checklist
+    - decision record
+    - patch set (if code)
+    - report draft
+    - release checklist
 
 **Report**
+
 - Owner: mux produces final deliverable; chora may author narrative sections; subrosa signs off on public-facing exposure.
 - Output: final report in `/data/outputs/reports/…` with manifest entry.
 
 **Ship**
+
 - Owner: praxis signs; mux executes ship action.
 - Outputs:
-  - if code: PR opened, checks run, approvals required, merge performed under policy
-  - if docs/report: commit deliverable to repo or export bundle
+    - if code: PR opened, checks run, approvals required, merge performed under policy
+    - if docs/report: commit deliverable to repo or export bundle
 
 This maps naturally onto your existing role sequencing doctrine. fileciteturn61file8L1-L1
 
@@ -305,17 +317,17 @@ To safely integrate agent-produced code, use a protected-branch + PR-based model
 Recommended governance controls:
 
 - Add `.github/CODEOWNERS` to encode review requirements:
-  - `/src/lib/skills/**` → subrosa + praxis (security/tooling)
-  - `/src/lib/ops/**` → praxis
-  - `/workspace/**` → chora + mux
-  - `/db/migrations/**` → praxis + subrosa
+    - `/src/lib/skills/**` → subrosa + praxis (security/tooling)
+    - `/src/lib/ops/**` → praxis
+    - `/workspace/**` → chora + mux
+    - `/db/migrations/**` → praxis + subrosa
 - Protect `main` with:
-  - required status checks (`lint`, `typecheck`, `build`)
-  - required reviews (at least one; add “security review required” for sensitive areas)
-  - disallow direct pushes
+    - required status checks (`lint`, `typecheck`, `build`)
+    - required reviews (at least one; add “security review required” for sensitive areas)
+    - disallow direct pushes
 - Implement a “bot PR” convention:
-  - branch naming: `agent/<agent_id>/<slug>`
-  - PR template requires: intent summary, risk notes, test evidence, and artifact manifest link.
+    - branch naming: `agent/<agent_id>/<slug>`
+    - PR template requires: intent summary, risk notes, test evidence, and artifact manifest link.
 
 Even if you use external coding agents (as your skills registry anticipates), the merge gate stays the same: agent output is a proposal until it passes checks + review. fileciteturn100file3L1-L1
 
@@ -324,6 +336,7 @@ Even if you use external coding agents (as your skills registry anticipates), th
 Your system already logs heartbeat actions into ops tables. fileciteturn48file0L1-L1 Expand this with an artifact-focused observability layer:
 
 **Minimum viable metrics**
+
 - `artifacts_created_total{type,agent,stage}`
 - `artifacts_promoted_total{from_status,to_status}`
 - `artifact_pipeline_latency_seconds{stage}` (time from meeting → ship)
@@ -331,6 +344,7 @@ Your system already logs heartbeat actions into ops tables. fileciteturn48
 - `droid_failures_total{reason}`
 
 **Operational SLIs (service-level indicators)**
+
 - “Output freshness”: time since last `report` artifact of each class
 - “Queue health”: count of pending mission steps / droid jobs
 - “Ship rate”: shipped artifacts per week
@@ -342,53 +356,53 @@ Using OpenTelemetry as the common format for stability and evolution of telemetr
 
 ### Proposal definitions
 
-**Minimal**  
+**Minimal**
 A directory standard + conventions-only permissions. Agents write directly into `/data` areas. Manual retention. Git used only by humans.
 
-**Balanced (recommended)**  
+**Balanced (recommended)**
 A directory standard + artifact broker enforcing ACLs + manifests + basic droid runner + Git governance (CODEOWNERS, protected branch, required checks). Automated retention.
 
-**Ambitious**  
+**Ambitious**
 A full artifact store (content-addressed), automated PR generation + review workflow, sandboxed execution (strong isolation), full telemetry pipeline and dashboards, and policy-as-code around outputs.
 
 ### Comparison table
 
-| Dimension | Minimal | Balanced | Ambitious |
-|---|---|---|---|
-| Output directory structure | ✅ | ✅✅ | ✅✅✅ |
-| Enforced permissions | ❌ (convention) | ✅ (broker ACL) | ✅✅ (broker + OS/container isolation) |
-| Provenance metadata | basic front matter | ✅ manifests + index | ✅✅ content-addressed + provenance graph |
-| Retention automation | ❌ | ✅ | ✅✅ |
-| Droid/sub-agent model | ad hoc | ✅ resource-limited runner | ✅✅ sandboxed, policy-driven |
-| Git workflow + CI/CD | light/manual | ✅ protected branch + checks | ✅✅ automated PR factory + governance |
-| Engineering effort | Low | Med | High |
-| Risk of repo pollution | High | Low | Low |
-| Risk of unsafe tool execution | High | Med | Low |
-| Fit to current repo shape | Medium | High | Medium |
+| Dimension                     | Minimal            | Balanced                     | Ambitious                                 |
+| ----------------------------- | ------------------ | ---------------------------- | ----------------------------------------- |
+| Output directory structure    | ✅                 | ✅✅                         | ✅✅✅                                    |
+| Enforced permissions          | ❌ (convention)    | ✅ (broker ACL)              | ✅✅ (broker + OS/container isolation)    |
+| Provenance metadata           | basic front matter | ✅ manifests + index         | ✅✅ content-addressed + provenance graph |
+| Retention automation          | ❌                 | ✅                           | ✅✅                                      |
+| Droid/sub-agent model         | ad hoc             | ✅ resource-limited runner   | ✅✅ sandboxed, policy-driven             |
+| Git workflow + CI/CD          | light/manual       | ✅ protected branch + checks | ✅✅ automated PR factory + governance    |
+| Engineering effort            | Low                | Med                          | High                                      |
+| Risk of repo pollution        | High               | Low                          | Low                                       |
+| Risk of unsafe tool execution | High               | Med                          | Low                                       |
+| Fit to current repo shape     | Medium             | High                         | Medium                                    |
 
 ### Recommended choice: Balanced
 
-Balanced best matches what subcult-corp already is: a DB-backed ops system with scheduled meetings and workers, plus an established agent governance doctrine. fileciteturn48file0L1-L1 fileciteturn61file8L1-L1 It adds the missing production layer—artifact reliability and controlled execution—without forcing a redesign into a separate platform.
+Balanced best matches what subcorp already is: a DB-backed ops system with scheduled meetings and workers, plus an established agent governance doctrine. fileciteturn48file0L1-L1 fileciteturn61file8L1-L1 It adds the missing production layer—artifact reliability and controlled execution—without forcing a redesign into a separate platform.
 
 ## Implementation roadmap, effort estimates, and key risks
 
 ### Milestones
 
-| Milestone | What ships | Effort | Key risks |
-|---|---|---|---|
-| Artifact volume + directory spec | `/data` volume mounted everywhere; directory skeleton created at boot; remove/relocate repo-committed volatile logs | Low | Backward compatibility with current OpenClaw mounts |
-| Artifact broker + ACL | Broker API/skill; agent → directory permission map; write all outputs through broker | Med | Requires discipline: disable direct writes or they’ll bypass governance |
-| Metadata + manifest indexing | Front-matter schema; `index.jsonl`; “artifact created” events logged | Med | Incomplete metadata becomes garbage-in; needs validation |
-| Retention worker | `retention.yml`; daily cleanup; compression + archival | Low–Med | Accidental deletion; must implement dry-run + audit logs |
-| Droid runner | Standard droid spec; resource limits; scratch dirs; import protocol | Med | Security: avoid Docker socket exposure, avoid secrets leaks |
-| Git governance + CI | CODEOWNERS + protected branch + required checks; PR templates | Low–Med | Initial friction; tuning required to avoid blocking flow |
-| Observability | Artifact metrics; dashboards; alerts on “no outputs produced” | Med | Alert fatigue; define a small set of meaningful SLIs |
+| Milestone                        | What ships                                                                                                          | Effort  | Key risks                                                               |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------- | ----------------------------------------------------------------------- |
+| Artifact volume + directory spec | `/data` volume mounted everywhere; directory skeleton created at boot; remove/relocate repo-committed volatile logs | Low     | Backward compatibility with current OpenClaw mounts                     |
+| Artifact broker + ACL            | Broker API/skill; agent → directory permission map; write all outputs through broker                                | Med     | Requires discipline: disable direct writes or they’ll bypass governance |
+| Metadata + manifest indexing     | Front-matter schema; `index.jsonl`; “artifact created” events logged                                                | Med     | Incomplete metadata becomes garbage-in; needs validation                |
+| Retention worker                 | `retention.yml`; daily cleanup; compression + archival                                                              | Low–Med | Accidental deletion; must implement dry-run + audit logs                |
+| Droid runner                     | Standard droid spec; resource limits; scratch dirs; import protocol                                                 | Med     | Security: avoid Docker socket exposure, avoid secrets leaks             |
+| Git governance + CI              | CODEOWNERS + protected branch + required checks; PR templates                                                       | Low–Med | Initial friction; tuning required to avoid blocking flow                |
+| Observability                    | Artifact metrics; dashboards; alerts on “no outputs produced”                                                       | Med     | Alert fatigue; define a small set of meaningful SLIs                    |
 
 ### Recommended timeline (Mermaid)
 
 ```mermaid
 gantt
-  title subcult-corp balanced roadmap
+  title subcorp balanced roadmap
   dateFormat  YYYY-MM-DD
   axisFormat  %b %d
 
@@ -464,35 +478,40 @@ gantt
 
 ```markdown
 ---
-artifact_id: "<uuidv7>"
-created_at: "<RFC3339>"
-agent_id: "mux"
-workflow_stage: "report"
-status: "draft"
-sensitivity: "internal"
-retention_class: "record"
+artifact_id: '<uuidv7>'
+created_at: '<RFC3339>'
+agent_id: 'mux'
+workflow_stage: 'report'
+status: 'draft'
+sensitivity: 'internal'
+retention_class: 'record'
 source_refs:
-  - kind: "roundtable_session"
-    id: "<session_id>"
-  - kind: "mission"
-    id: "<mission_id>"
+    - kind: 'roundtable_session'
+      id: '<session_id>'
+    - kind: 'mission'
+      id: '<mission_id>'
 ---
 
 # Operational Status Report — <YYYY-MM-DD>
 
 ## What shipped since last report
+
 (Expository summary; link to artifacts/PRs; note risk sign-offs.)
 
 ## What’s in progress
+
 (One paragraph per stream; include blockers.)
 
 ## Risks / vetoes / exposure notes
+
 (Subrosa notes; privacy/security concerns; unresolved.)
 
 ## Next 24–72 hours
+
 (Praxis decisions, Mux execution plan, dependencies.)
 
 ## Output ledger
+
 - Artifact created: <path>
 - Manifest entry: <artifact_id>
 ```
@@ -501,39 +520,45 @@ source_refs:
 
 ```markdown
 ---
-artifact_id: "<uuidv7>"
-created_at: "<RFC3339>"
-agent_id: "chora"
-workflow_stage: "report"
-status: "final"
-sensitivity: "public"
-retention_class: "record"
-version: "v01"
+artifact_id: '<uuidv7>'
+created_at: '<RFC3339>'
+agent_id: 'chora'
+workflow_stage: 'report'
+status: 'final'
+sensitivity: 'public'
+retention_class: 'record'
+version: 'v01'
 source_refs:
-  - kind: "repo"
-    id: "subculture-collective/subcult-corp"
-  - kind: "manifest"
-    id: "<artifact_id>"
+    - kind: 'repo'
+      id: 'subculture-collective/subcorp'
+    - kind: 'manifest'
+      id: '<artifact_id>'
 ---
 
 # <Deliverable Title>
 
 ## Executive summary
+
 (Short, decision-oriented.)
 
 ## Background
+
 (What triggered this; constraints; scope.)
 
 ## Findings
+
 (Expository; cite evidence; emphasize trade-offs.)
 
 ## Recommendations
+
 (Preferred choice + rationale + alternatives.)
 
 ## Implementation plan
+
 (Milestones, owners, risks.)
 
 ## Appendix
+
 (File tree, configs, templates.)
 ```
 

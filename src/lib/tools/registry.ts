@@ -28,6 +28,10 @@ import {
     proposeMissionTool,
     createProposeMissionExecute,
 } from './tools/propose-mission';
+import {
+    castVetoTool,
+    createCastVetoExecute,
+} from './tools/cast-veto';
 
 /** All registered native tools */
 const ALL_TOOLS: NativeTool[] = [
@@ -45,6 +49,7 @@ const ALL_TOOLS: NativeTool[] = [
     scratchpadUpdateTool,
     proposePolicyChangeTool,
     proposeMissionTool,
+    castVetoTool,
 ];
 
 /**
@@ -53,7 +58,7 @@ const ALL_TOOLS: NativeTool[] = [
  * For file_write, binds the agentId into the execute function for ACL enforcement.
  * For propose_policy_change, binds the agentId to track who is proposing.
  */
-export function getAgentTools(agentId: AgentId): ToolDefinition[] {
+export function getAgentTools(agentId: AgentId, sessionId?: string): ToolDefinition[] {
     return ALL_TOOLS
         .filter(tool => tool.agents.includes(agentId))
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -73,7 +78,14 @@ export function getAgentTools(agentId: AgentId): ToolDefinition[] {
             if (tool.name === 'propose_mission') {
                 return {
                     ...tool,
-                    execute: createProposeMissionExecute(agentId),
+                    execute: createProposeMissionExecute(agentId, sessionId),
+                };
+            }
+            // Bind agentId into cast_veto to track who is vetoing
+            if (tool.name === 'cast_veto') {
+                return {
+                    ...tool,
+                    execute: createCastVetoExecute(agentId),
                 };
             }
             // Bind agentId into memory tools

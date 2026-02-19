@@ -2,12 +2,15 @@
 // Integrates with roundtable sessions for structured voting debates.
 import { sql, jsonb } from '@/lib/db';
 import { emitEventAndCheckReactions } from './events';
+import { llmGenerate } from '@/lib/llm';
+import { getVoice } from '@/lib/roundtable/voices';
 import { logger } from '@/lib/logger';
 import type {
     AgentProposal,
     AgentProposalStatus,
     AgentProposalVote,
 } from './agent-designer';
+import type { ConversationTurnEntry } from '@/lib/types';
 
 const log = logger.child({ module: 'agent-proposal-voting' });
 
@@ -300,4 +303,109 @@ ${proposal.rationale}
 4. Are the proposed skills concrete and actionable?
 
 End your response with your vote: **APPROVE** or **REJECT**, followed by your reasoning.`;
+}
+
+// ─── Collect votes via structured LLM calls after a debate ───
+
+/**
+ * After a debate session completes, ask each participant for a structured vote.
+ * Each agent gets a focused LLM call with the debate transcript and must respond
+ * with a JSON object: { "vote": "approve"|"reject", "reasoning": "..." }
+ * Returns the consensus result after all votes are collected.
+ */
+export async function collectDebateVotes(
+    proposalId: string,
+    participants: string[],
+    debateHistory: ConversationTurnEntry[],
+): Promise<ConsensusResult> {
+    const [proposal] = await sql<[AgentProposal?]>`
+        SELECT * FROM ops_agent_proposals WHERE id = ${proposalId}
+    `;
+    if (!proposal) throw new Error(`Proposal "${proposalId}" not found`);
+    if (proposal.status !== 'voting') {
+        throw new Error(`Proposal not in voting status (current: ${proposal.status})`);
+    }
+
+    // Build debate transcript
+    const transcript = debateHistory.map(t => {
+        const voice = getVoice(t.speaker);
+        const name = voice?.displayName ?? t.speaker;
+        return `${name}: ${t.dialogue}`;
+    }).join('\n');
+
+    const personality = proposal.personality as {
+        tone?: string; traits?: string[]; speaking_style?: string;
+    };
+
+    const proposalSummary = [
+        `Agent: ${proposal.agent_name}`,
+        `Role: ${proposal.agent_role}`,
+        `Proposed by: ${proposal.proposed_by}`,
+        `Personality: ${personality.tone ?? 'unspecified'} — ${(personality.traits ?? []).join(', ')}`,
+        `Skills: ${(proposal.skills as string[]).join(', ')}`,
+        `Rationale: ${proposal.rationale}`,
+    ].join('\n');
+
+    // Collect a vote from each participant
+    for (const agentId of participants) {
+        // Skip the proposer — they implicitly approve
+        if (agentId === proposal.proposed_by) {
+            await submitVote(proposalId, agentId, 'approve', 'I proposed this agent.');
+            continue;
+        }
+
+        const voice = getVoice(agentId);
+        const agentName = voice?.displayName ?? agentId;
+
+        try {
+            const response = await llmGenerate({
+                messages: [
+                    {
+                        role: 'system',
+                        content: `You are ${agentName}. You just participated in a debate about a proposed new agent. Based on the debate, you must now cast your formal vote.\n\nRespond with ONLY a JSON object, no other text:\n{"vote": "approve" or "reject", "reasoning": "one sentence explaining your vote"}`,
+                    },
+                    {
+                        role: 'user',
+                        content: `## Proposal\n${proposalSummary}\n\n## Debate Transcript\n${transcript}\n\nCast your vote as ${agentName}. JSON only:`,
+                    },
+                ],
+                temperature: 0.3,
+                maxTokens: 150,
+                trackingContext: {
+                    agentId,
+                    context: 'agent-proposal-vote',
+                    sessionId: proposalId,
+                },
+            });
+
+            // Parse the JSON vote
+            const jsonMatch = response.match(/\{[^}]*"vote"\s*:\s*"(approve|reject)"[^}]*\}/i);
+            if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]) as { vote: string; reasoning?: string };
+                const vote = parsed.vote.toLowerCase() === 'approve' ? 'approve' as const : 'reject' as const;
+                const reasoning = parsed.reasoning ?? response.slice(0, 200);
+                await submitVote(proposalId, agentId, vote, reasoning);
+            } else {
+                // Fallback: look for keywords in the raw response
+                const upper = response.toUpperCase();
+                if (upper.includes('APPROVE') && !upper.includes('NOT APPROVE')) {
+                    await submitVote(proposalId, agentId, 'approve', response.slice(0, 200));
+                } else {
+                    // Default to reject if we can't parse a clear approve
+                    await submitVote(proposalId, agentId, 'reject', response.slice(0, 200));
+                }
+                log.warn('Vote response was not valid JSON, used fallback parsing', {
+                    agentId, proposalId, response: response.slice(0, 200),
+                });
+            }
+        } catch (err) {
+            log.error('Failed to collect vote from agent', {
+                error: err, agentId, proposalId,
+            });
+            // Don't block other votes if one fails
+        }
+    }
+
+    // Finalize — tally votes and update proposal status
+    return finalizeVoting(proposalId);
 }

@@ -505,3 +505,49 @@ export function SettingsIcon(props: IconProps) {
         </Icon>
     );
 }
+
+export function FolderIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d='M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z' />
+        </Icon>
+    );
+}
+
+export function DownloadIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' />
+            <polyline points='7 10 12 15 17 10' />
+            <line x1='12' y1='15' x2='12' y2='3' />
+        </Icon>
+    );
+}
+
+export function ChevronRightIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d='m9 18 6-6-6-6' />
+        </Icon>
+    );
+}
+
+export function MailIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <rect x='2' y='4' width='20' height='16' rx='2' />
+            <path d='m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7' />
+        </Icon>
+    );
+}
+
+export function NewspaperIcon(props: IconProps) {
+    return (
+        <Icon {...props}>
+            <path d='M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2' />
+            <path d='M18 14h-8' />
+            <path d='M15 18h-5' />
+            <path d='M10 6h8v4h-8V6Z' />
+        </Icon>
+    );
+}

@@ -16,10 +16,10 @@ import path from 'node:path';
 export const WRITE_ACLS: Record<AgentId, string[]> = {
     chora:   ['agents/chora/', 'output/reports/', 'output/briefings/', 'output/digests/'],
     subrosa: ['agents/subrosa/', 'output/reviews/'],
-    thaum:   ['agents/thaum/', 'output/', 'projects/'],
-    praxis:  ['agents/praxis/', 'projects/', 'output/'],
-    mux:     ['agents/mux/', 'output/', 'projects/'],
-    primus:  ['agents/primus/', 'shared/', 'output/', 'projects/'],
+    thaum:   ['agents/thaum/', 'output/'],
+    praxis:  ['agents/praxis/', 'output/'],
+    mux:     ['agents/mux/', 'output/'],
+    primus:  ['agents/primus/', 'shared/', 'output/'],
 };
 
 /** Droids write to their own scratch directory only */

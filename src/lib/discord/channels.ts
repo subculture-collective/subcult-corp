@@ -1,4 +1,10 @@
 // Discord channel registry — backed by ops_discord_channels table
+// Environment variable overrides:
+//   DISCORD_CHANNEL_<NAME>=<discord_channel_id>
+//   e.g. DISCORD_CHANNEL_ROUNDTABLE=1471411876213686313
+//        DISCORD_CHANNEL_DAILY_DIGEST=1471411999999999999
+// Hyphens in channel names become underscores in env var names.
+// New channels are auto-created in DB on first lookup.
 import { sql } from '@/lib/db';
 import { getOrCreateWebhook } from './client';
 import { logger } from '@/lib/logger';
@@ -16,7 +22,8 @@ export type DiscordChannelName =
     | 'research'
     | 'insights'
     | 'proposals'
-    | 'project';
+    | 'project'
+    | 'daily-digest';
 
 /** Map conversation formats to Discord channel names */
 const FORMAT_CHANNEL_MAP: Record<ConversationFormat, DiscordChannelName> = {
@@ -37,11 +44,65 @@ const FORMAT_CHANNEL_MAP: Record<ConversationFormat, DiscordChannelName> = {
     writing_room: 'drafts',
     watercooler: 'watercooler',
     agent_design: 'roundtable',
+    voice_chat: 'roundtable',
 };
 
 /** Build a webhook URL from separate id + token columns */
 function buildWebhookUrl(webhookId: string, webhookToken: string): string {
     return `https://discord.com/api/webhooks/${webhookId}/${webhookToken}`;
+}
+
+// ─── Env var sync ───
+
+const ENV_PREFIX = 'DISCORD_CHANNEL_';
+let envSynced = false;
+
+/**
+ * Parse DISCORD_CHANNEL_* env vars and upsert into ops_discord_channels.
+ * Called once on first getWebhookUrl() call.
+ *
+ * Env var naming:
+ *   DISCORD_CHANNEL_ROUNDTABLE=1471411876213686313
+ *   DISCORD_CHANNEL_DAILY_DIGEST=1471411999999999999
+ *
+ * Underscores in env var names become hyphens in channel names.
+ *   DAILY_DIGEST → daily-digest
+ */
+async function syncEnvToDb(): Promise<void> {
+    if (envSynced) return;
+    envSynced = true;
+
+    const guildId = process.env.DISCORD_GUILD_ID;
+    if (!guildId) return;
+
+    for (const [key, value] of Object.entries(process.env)) {
+        if (!key.startsWith(ENV_PREFIX) || !value) continue;
+
+        const rawName = key.slice(ENV_PREFIX.length);
+        if (!rawName) continue;
+
+        // Convert UPPER_SNAKE to lower-kebab: DAILY_DIGEST → daily-digest
+        const channelName = rawName.toLowerCase().replace(/_/g, '-');
+        const channelId = value.trim();
+
+        if (!channelId) continue;
+
+        try {
+            await sql`
+                INSERT INTO ops_discord_channels (discord_channel_id, discord_guild_id, name, category, purpose)
+                VALUES (${channelId}, ${guildId}, ${channelName}, 'env', ${'Set via DISCORD_CHANNEL env var'})
+                ON CONFLICT (discord_channel_id) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    enabled = true
+            `;
+            // Also handle name conflicts (different channel_id for same name)
+            // The name index isn't unique, so we just update by channel_id above
+            channelCache.delete(channelName);
+            log.info('Discord channel synced from env', { name: channelName, channelId });
+        } catch (error) {
+            log.error('Failed to sync discord channel env var', { name: channelName, channelId, error });
+        }
+    }
 }
 
 // In-memory cache: channelName -> { channelId, webhookUrl }
@@ -52,8 +113,10 @@ const channelCache = new Map<
 
 /** Get the webhook URL for a named channel. Auto-provisions if missing. */
 export async function getWebhookUrl(
-    channelName: DiscordChannelName,
+    channelName: DiscordChannelName | string,
 ): Promise<string | null> {
+    await syncEnvToDb();
+
     const cached = channelCache.get(channelName);
     if (cached) {
         if (!cached.enabled) return null;
@@ -125,7 +188,7 @@ export async function getWebhookUrl(
 
 /** Get both the webhook URL and Discord channel ID for a named channel. */
 export async function getChannelInfo(
-    channelName: DiscordChannelName,
+    channelName: DiscordChannelName | string,
 ): Promise<{ webhookUrl: string; channelId: string } | null> {
     const webhookUrl = await getWebhookUrl(channelName);
     if (!webhookUrl) return null;

@@ -39,11 +39,21 @@ function buildSynthesisPrompt(
 
     prompt += `Your task: Synthesize this conversation into a structured ${artifact.type}.\n\n`;
 
+    const outputDir = artifact.outputDir;
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const topicSlug = session.topic
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 40);
+    const filename = `${dateStr}__${session.format}__${artifact.type}__${topicSlug}__${artifact.synthesizer}__v01.md`;
+
     prompt += `Requirements:\n`;
-    prompt += `1. Include a clear title and summary\n`;
+    prompt += `1. Include a clear title (as a markdown # heading) and summary\n`;
     prompt += `2. Capture key points, decisions, action items, and disagreements\n`;
     prompt += `3. Be concise but thorough — aim for 300-800 words\n`;
-    prompt += `4. Output the artifact content directly as your response — do NOT use any tools or XML tags\n\n`;
+    prompt += `4. Write the artifact to the workspace using file_write to path: ${outputDir}/${filename}\n`;
+    prompt += `5. Also include the full artifact content as your text response\n\n`;
 
     prompt += `Do NOT just repeat the transcript. Synthesize, structure, and add value.\n`;
 
@@ -76,7 +86,7 @@ export async function synthesizeArtifact(
                 'conversation',
                 ${session.id},
                 180,
-                1,
+                15,
                 'pending'
             )
             RETURNING id

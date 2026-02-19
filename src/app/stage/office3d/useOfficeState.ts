@@ -1,7 +1,7 @@
 // office3d/useOfficeState.ts — combined state management for the 3D office
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSystemStats, useConversations, useInterval } from '../hooks';
 import { AGENTS } from '@/lib/agents';
 import type { AgentId, AgentEvent, Mission } from '@/lib/types';
@@ -16,6 +16,40 @@ import {
 import { clientLogger } from '@/lib/client-logger';
 
 const log = clientLogger.child({ component: 'useOfficeState' });
+
+// ─── Droid State ───
+export interface DroidState {
+    droid_id: string;
+    spawned_by: string;
+    task: string;
+    status: string;
+}
+
+function useDroids(): DroidState[] {
+    const [droids, setDroids] = useState<DroidState[]>([]);
+    const mountedRef = useRef(true);
+
+    const fetchDroids = useCallback(async () => {
+        try {
+            const res = await fetch('/api/ops/droids');
+            if (!res.ok) return;
+            const data = await res.json();
+            if (mountedRef.current) setDroids(data.droids ?? []);
+        } catch {
+            // Non-fatal — keep previous state
+        }
+    }, []);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        fetchDroids();
+        return () => { mountedRef.current = false; };
+    }, [fetchDroids]);
+
+    useInterval(fetchDroids, 15_000);
+
+    return droids;
+}
 
 // ─── Agent 3D State ───
 export interface Agent3DState {
@@ -69,6 +103,7 @@ function createInitialAgents(): Agent3DState[] {
 export function useOfficeState() {
     const { stats } = useSystemStats();
     const { sessions } = useConversations(5);
+    const droids = useDroids();
     const [agents, setAgents] = useState<Agent3DState[]>(createInitialAgents);
     const [selected, setSelected] = useState<SelectedObject>(null);
     const [draggingAgent, setDraggingAgent] = useState<AgentId | null>(null);
@@ -138,8 +173,13 @@ export function useOfficeState() {
         fetchTurns();
     }, [sessions]);
 
-    // Derive behavior from real data (deterministic fallback to 'idle')
+    // Derive behavior from real data, with random chance of movement
     const deriveBehavior = useCallback((agentId: AgentId): AgentBehavior => {
+        // Random chance of walking or coffee break — keeps office feeling alive
+        const roll = Math.random();
+        if (roll < 0.08) return 'coffee';
+        if (roll < 0.18) return 'walking';
+
         // Check if agent has active mission
         const hasMission = activeMissions.some(m => m.created_by === agentId);
         if (hasMission) return 'working';
@@ -176,7 +216,18 @@ export function useOfficeState() {
                             -8 + Math.random() * 18,
                         ];
                     } else if (newBehavior === 'coffee') {
-                        targetPosition = [PROPS.coffeeMachine[0] - 0.5, 0.01, PROPS.coffeeMachine[2] + 1];
+                        targetPosition = [
+                            PROPS.coffeeMachine[0] - 1 + Math.random() * 2,
+                            0.01,
+                            PROPS.coffeeMachine[2] + 1 + Math.random(),
+                        ];
+                    } else if (newBehavior === 'chatting') {
+                        // Gather near the meeting table
+                        targetPosition = [
+                            PROPS.meetingTable[0] - 2 + Math.random() * 4,
+                            0.01,
+                            PROPS.meetingTable[2] + 1 + Math.random() * 2,
+                        ];
                     }
 
                     // Speech bubble from real conversation data
@@ -251,5 +302,6 @@ export function useOfficeState() {
         moveAgent,
         recentEvents,
         activeMissions,
+        droids,
     };
 }

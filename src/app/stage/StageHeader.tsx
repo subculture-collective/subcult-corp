@@ -11,18 +11,6 @@ import { StatsBarSkeleton } from './StageSkeletons';
 import { AGENTS } from '@/lib/agents';
 import type { AgentId } from '@/lib/types';
 import {
-    SignalIcon,
-    TargetIcon,
-    BuildingIcon,
-    BrainIcon,
-    WalletIcon,
-    DnaIcon,
-    NetworkIcon,
-    FileTextIcon,
-    ScaleIcon,
-    CloudIcon,
-    UsersIcon,
-    ArchiveIcon,
     LinkIcon,
     CheckIcon,
     MessageCircleIcon,
@@ -39,10 +27,14 @@ export type ViewMode =
     | 'memories'
     | 'relationships'
     | 'content'
+    | 'files'
     | 'governance'
     | 'dreams'
     | 'agent-designer'
-    | 'archaeology';
+    | 'archaeology'
+    | 'questions'
+    | 'newspaper'
+    | 'newsletter';
 
 function ConnectionIndicator({ status }: { status: ConnectionStatus }) {
     const config: Record<
@@ -107,12 +99,8 @@ function StatCard({ label, value }: { label: string; value: number | string }) {
 }
 
 export function StageHeader({
-    view,
-    onViewChange,
     connectionStatus,
 }: {
-    view: ViewMode;
-    onViewChange: (v: ViewMode) => void;
     connectionStatus?: ConnectionStatus;
 }) {
     const { stats, loading } = useSystemStats();
@@ -138,37 +126,6 @@ export function StageHeader({
         );
     }, []);
 
-    const views: { key: ViewMode; label: string; icon: React.ReactNode }[] = [
-        { key: 'feed', label: 'Signal Feed', icon: <SignalIcon size={14} /> },
-        { key: 'missions', label: 'Missions', icon: <TargetIcon size={14} /> },
-        { key: 'office', label: 'Office', icon: <BuildingIcon size={14} /> },
-        { key: 'logs', label: 'Cortex', icon: <BrainIcon size={14} /> },
-        { key: 'costs', label: 'Costs', icon: <WalletIcon size={14} /> },
-        { key: 'memories', label: 'Memories', icon: <DnaIcon size={14} /> },
-        {
-            key: 'relationships',
-            label: 'Graph',
-            icon: <NetworkIcon size={14} />,
-        },
-        { key: 'content', label: 'Content', icon: <FileTextIcon size={14} /> },
-        {
-            key: 'governance',
-            label: 'Governance',
-            icon: <ScaleIcon size={14} />,
-        },
-        { key: 'dreams', label: 'Dreams', icon: <CloudIcon size={14} /> },
-        {
-            key: 'agent-designer',
-            label: 'Agents',
-            icon: <UsersIcon size={14} />,
-        },
-        {
-            key: 'archaeology',
-            label: 'Archaeology',
-            icon: <ArchiveIcon size={14} />,
-        },
-    ];
-
     return (
         <header className='space-y-4'>
             {/* Title row */}
@@ -176,7 +133,7 @@ export function StageHeader({
                 <div>
                     <div className='flex items-center gap-2'>
                         <h1 className='text-xl font-bold text-zinc-100 tracking-tight'>
-                            SUBCULT OPS
+                            SUBCORP
                         </h1>
                         {connectionStatus && (
                             <ConnectionIndicator status={connectionStatus} />
@@ -191,7 +148,7 @@ export function StageHeader({
                 <div className='flex items-center gap-2'>
                     <Link
                         href='/sanctum'
-                        className='flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors border border-zinc-700/50 cursor-pointer'
+                        className='flex items-center gap-1.5 rounded-md px-2.5 py-2.5 sm:py-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors border border-zinc-700/50 cursor-pointer'
                         title='Open Sanctum chat'
                     >
                         <MessageCircleIcon size={14} />
@@ -199,7 +156,7 @@ export function StageHeader({
                     </Link>
                     <button
                         onClick={handleShareClick}
-                        className='flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors border border-zinc-700/50 cursor-pointer'
+                        className='flex items-center gap-1.5 rounded-md px-2.5 py-2.5 sm:py-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors border border-zinc-700/50 cursor-pointer'
                         title='Copy /live link (Alt+click to open)'
                     >
                         {copied ?
@@ -221,26 +178,6 @@ export function StageHeader({
                         }
                     </button>
                 </div>
-            </div>
-
-            {/* View toggle - separate row */}
-            <div className='flex gap-1 rounded-lg bg-zinc-800/50 p-1 border border-zinc-700/50 overflow-x-auto scrollbar-thin scrollbar-thumb-zinc-700'>
-                {views.map(v => (
-                    <button
-                        key={v.key}
-                        onClick={() => onViewChange(v.key)}
-                        aria-label={v.label}
-                        aria-current={view === v.key ? 'page' : undefined}
-                        className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
-                            view === v.key ?
-                                'bg-zinc-700 text-zinc-100'
-                            :   'text-zinc-400 hover:text-zinc-300 hover:bg-zinc-800'
-                        }`}
-                    >
-                        {v.icon}
-                        <span className='hidden sm:inline'>{v.label}</span>
-                    </button>
-                ))}
             </div>
 
             {/* Stats bar */}
@@ -275,7 +212,11 @@ function StatsBar({ stats }: { stats: SystemStats }) {
                                     key={agent}
                                     className={`flex items-center gap-1 text-xs font-medium ${color}`}
                                 >
-                                    <AgentAvatar agentId={agentId} size='xs' showBorder={false} />
+                                    <AgentAvatar
+                                        agentId={agentId}
+                                        size='xs'
+                                        showBorder={false}
+                                    />
                                     {count}
                                 </span>
                             );

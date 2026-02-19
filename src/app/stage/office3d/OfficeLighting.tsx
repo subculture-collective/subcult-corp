@@ -4,27 +4,28 @@
 import * as THREE from 'three';
 import { COLORS } from './constants';
 
-// Shared fixture geometries (8 instances each)
+// Shared fixture geometries
 const FIXTURE_HOUSING = new THREE.BoxGeometry(1.2, 0.08, 0.4);
 const FIXTURE_GLOW = new THREE.BoxGeometry(0.8, 0.04, 0.2);
 
-// 4 ceiling lights — one per quadrant, wider spacing to reduce overlap
-// Each covers ~16 unit radius, enough for a 40x24 room without redundancy
+// 16 ceiling lights in a 4x4 grid for even coverage across the 40x24 room.
+// x: ±16, ±6 covers wall-to-wall; z: ±9, ±3 covers front-to-back with no dark corners.
 const LIGHT_POSITIONS: [number, number][] = [
-    [-10, -4], [10, -4],
-    [-10, 5],  [10, 5],
+    [-16, -9], [-6, -9], [6, -9], [16, -9],
+    [-16, -3], [-6, -3], [6, -3], [16, -3],
+    [-16,  3], [-6,  3], [6,  3], [16,  3],
+    [-16,  9], [-6,  9], [6,  9], [16,  9],
 ];
 
-// All 8 fixture positions (visual meshes at ceiling, even where no point light)
-const FIXTURE_POSITIONS: [number, number][] = [
-    [-14, -4], [-6, -4], [6, -4], [14, -4],
-    [-14, 4],  [-6, 4],  [6, 4],  [14, 4],
-];
+// Visual fixture meshes match light positions
+const FIXTURE_POSITIONS = LIGHT_POSITIONS;
 
+// PointLight intensity is in candela (physically correct lighting in R3F v8+).
+// At decay=2, illuminance = intensity / distance². 16 lights for uniform wash.
 const PERIOD_CONFIG = {
-    day:   { ambient: 0.35, spot: 0.9,  hemi: 0.3,  dirFill: 0.2,  glowEmissive: 0.3, hemiSky: '#1e3a5f', hemiGround: '#1e1e2e' },
-    dusk:  { ambient: 0.25, spot: 0.7,  hemi: 0.2,  dirFill: 0.1,  glowEmissive: 0.6, hemiSky: '#3d1f5e', hemiGround: '#1a0a2e' },
-    night: { ambient: 0.15, spot: 0.5,  hemi: 0.1,  dirFill: 0.03, glowEmissive: 0.9, hemiSky: '#0a0a1a', hemiGround: '#050510' },
+    day:   { ambient: 0.7,  spot: 35, hemi: 0.5,  dirFill: 0.5,  glowEmissive: 0.3, hemiSky: '#1e3a5f', hemiGround: '#1e1e2e' },
+    dusk:  { ambient: 0.5,  spot: 25, hemi: 0.35, dirFill: 0.25, glowEmissive: 0.6, hemiSky: '#3d1f5e', hemiGround: '#1a0a2e' },
+    night: { ambient: 0.25, spot: 15, hemi: 0.2,  dirFill: 0.05, glowEmissive: 0.9, hemiSky: '#0a0a1a', hemiGround: '#050510' },
 } as const;
 
 export function OfficeLighting({
@@ -60,13 +61,13 @@ export function OfficeLighting({
                 </group>
             ))}
 
-            {/* 4 point lights — one per quadrant */}
+            {/* 16 point lights — 4x4 grid for uniform coverage */}
             {LIGHT_POSITIONS.map(([x, z], i) => (
                 <pointLight
                     key={`light-${i}`}
                     position={[x, 3.5, z]}
                     intensity={cfg.spot}
-                    distance={18}
+                    distance={24}
                     decay={2}
                     color={COLORS.yellow}
                 />

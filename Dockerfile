@@ -1,4 +1,4 @@
-# ─── SUBCULT-CORP — Multi-stage Next.js Dockerfile ───
+# ─── SUBCORP — Multi-stage Next.js Dockerfile ───
 FROM node:22-alpine AS base
 
 # ── Install dependencies ──

@@ -1,4 +1,4 @@
-# ─── SUBCULT-CORP — Docker Compose ───
+# ─── SUBCORP — Docker Compose ───
 # 4 containers: postgres (pgvector), app, worker, toolbox
 services:
     # ── PostgreSQL (pgvector) ──
@@ -33,6 +33,11 @@ services:
                 condition: service_healthy
         env_file:
             - .env.local
+        group_add:
+            - '988'
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+            - workspace:/workspace
         networks:
             - web
             - internal

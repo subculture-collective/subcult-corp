@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql, jsonb } from '@/lib/db';
 import { emitEvent } from '@/lib/ops/events';
+import { requireAuthOrCron } from '@/lib/auth/middleware';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,12 +39,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-    // Auth check
-    const authHeader = req.headers.get('authorization');
-    const cronSecret = process.env.CRON_SECRET;
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const authResult = await requireAuthOrCron(req);
+    if (authResult instanceof NextResponse) return authResult;
 
     try {
         const body = (await req.json()) as {

@@ -208,6 +208,72 @@ export async function getOrCreateWebhook(
     }
 }
 
+// ─── Multipart webhook (file attachments) ───
+
+export interface WebhookFileAttachment {
+    filename: string;
+    data: Buffer;
+    contentType: string; // e.g. "audio/mpeg"
+}
+
+/**
+ * POST to a Discord webhook with file attachments via multipart/form-data.
+ * If no files provided, delegates to existing postToWebhook.
+ * Uses Node 22 native FormData — no external dependencies.
+ */
+export async function postToWebhookWithFiles(
+    options: WebhookPostOptions & { files?: WebhookFileAttachment[] },
+): Promise<{ id: string; channel_id: string } | null> {
+    if (!options.files || options.files.length === 0) {
+        return postToWebhook(options);
+    }
+
+    const url = new URL(options.webhookUrl);
+    url.searchParams.set('wait', 'true');
+    if (options.threadId) {
+        url.searchParams.set('thread_id', options.threadId);
+    }
+
+    const payload: Record<string, unknown> = {};
+    if (options.username) payload.username = options.username;
+    if (options.avatarUrl) payload.avatar_url = options.avatarUrl;
+    if (options.content) payload.content = options.content;
+    if (options.embeds) payload.embeds = options.embeds;
+
+    const formData = new FormData();
+    formData.append('payload_json', JSON.stringify(payload));
+
+    for (let i = 0; i < options.files.length; i++) {
+        const file = options.files[i];
+        const blob = new Blob([new Uint8Array(file.data)], { type: file.contentType });
+        formData.append(`files[${i}]`, blob, file.filename);
+    }
+
+    try {
+        const res = await fetch(url.toString(), {
+            method: 'POST',
+            body: formData,
+            // No Content-Type header — auto multipart boundary
+        });
+
+        if (!res.ok) {
+            const text = await res.text().catch(() => '');
+            log.warn('Webhook multipart POST failed', {
+                status: res.status,
+                body: text.slice(0, 200),
+            });
+            return null;
+        }
+
+        return (await res.json()) as { id: string; channel_id: string };
+    } catch (err) {
+        log.warn('Webhook multipart POST error', {
+            error: (err as Error).message,
+        });
+        return null;
+    }
+}
+
 /** Convert hex color string to decimal int for Discord embeds. */
 export function hexToDecimal(hex: string): number {
     return parseInt(hex.replace('#', ''), 16);

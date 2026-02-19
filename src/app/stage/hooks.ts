@@ -343,6 +343,8 @@ export function useEventStream(filters?: {
                     // Update ref with newest event ID
                     lastEventIdRef.current = parsed.id;
                     setEvents(prev => {
+                        // Dedup — skip if already in the list
+                        if (prev.some(ev => ev.id === parsed.id)) return prev;
                         const next = [parsed, ...prev];
                         return next.length > maxCap ?
                                 next.slice(0, maxCap)
@@ -1109,6 +1111,50 @@ export function useAgentProposals(filters?: {
     return { proposals, loading, error, refetch };
 }
 
+// ─── useNewsDigests — fetch news digest data ───
+
+export interface NewsDigestEntry {
+    id: string;
+    slot: string;
+    digest_date: string;
+    summary: string;
+    item_count: number;
+    items: { title: string; link: string | null; feed_name: string; category: string }[];
+    generated_by: string;
+    created_at: string;
+}
+
+export function useNewsDigests(limit = 3) {
+    const [digests, setDigests] = useState<NewsDigestEntry[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    const fetchDigests = useCallback(async () => {
+        try {
+            const data = await fetchJson<{ digests: NewsDigestEntry[] }>(
+                `/api/ops/rss?type=digests&limit=${limit}`,
+            );
+            setDigests(data.digests);
+            setError(null);
+        } catch (err) {
+            setError((err as Error).message);
+        } finally {
+            setLoading(false);
+        }
+    }, [limit]);
+
+    useEffect(() => {
+        fetchDigests();
+    }, [fetchDigests]);
+
+    // Poll every 60 seconds
+    useInterval(() => {
+        fetchDigests();
+    }, 60000);
+
+    return { digests, loading, error };
+}
+
 // ─── useInterval — for animations and polling ───
 
 // ─── useRebellionState — fetch active rebellion states ───
@@ -1285,6 +1331,91 @@ export function useArchaeology(options?: { limit?: number }) {
         triggerDig,
         refetch,
     };
+}
+
+// ─── useWorkspaceDirectory — browse agent workspace filesystem ───
+
+export interface WorkspaceEntry {
+    name: string;
+    type: 'dir' | 'file';
+    size: number;
+    modified: number;
+}
+
+export function useWorkspaceDirectory(path: string) {
+    const [directory, setDirectory] = useState<WorkspaceEntry[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [refreshKey, setRefreshKey] = useState(0);
+
+    const fetchDir = useCallback(async () => {
+        try {
+            setLoading(true);
+            const data = await fetchJson<{ path: string; entries: WorkspaceEntry[] }>(
+                `/api/ops/workspace?path=${encodeURIComponent(path)}`,
+            );
+            setDirectory(data.entries);
+            setError(null);
+        } catch (err) {
+            setError((err as Error).message);
+        } finally {
+            setLoading(false);
+        }
+    }, [path]);
+
+    useEffect(() => {
+        fetchDir();
+    }, [fetchDir, refreshKey]);
+
+    const refetch = useCallback(() => setRefreshKey(k => k + 1), []);
+
+    return { directory, loading, error, refetch };
+}
+
+// ─── useWorkspaceFile — read a file from agent workspace ───
+
+export interface WorkspaceFile {
+    path: string;
+    content: string;
+    size: number;
+}
+
+export function useWorkspaceFile(filePath: string | null) {
+    const [file, setFile] = useState<WorkspaceFile | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!filePath) {
+            setFile(null);
+            return;
+        }
+
+        let cancelled = false;
+        setLoading(true);
+
+        async function fetchFile() {
+            try {
+                const data = await fetchJson<WorkspaceFile>(
+                    `/api/ops/workspace?path=${encodeURIComponent(filePath!)}&raw=true`,
+                );
+                if (!cancelled) {
+                    setFile(data);
+                    setError(null);
+                }
+            } catch (err) {
+                if (!cancelled) setError((err as Error).message);
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        }
+
+        fetchFile();
+
+        return () => { cancelled = true; };
+    }, [filePath]);
+
+    return { file, loading, error };
 }
 
 // ─── useInterval — setinterval with saved callback ───

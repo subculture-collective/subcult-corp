@@ -67,6 +67,7 @@ export {
     transitionToVoting,
     finalizeVoting,
     createVotingRoundtablePrompt,
+    collectDebateVotes,
 } from './agent-proposal-voting';
 export { prepareSpawn, executeSpawn } from './agent-spawner';
 export {
@@ -85,3 +86,26 @@ export type {
     DigSummary,
     StoredFinding,
 } from './memory-archaeology';
+export {
+    castVeto,
+    hasActiveVeto,
+    overrideVeto,
+    withdrawVeto,
+    getActiveVetoes,
+} from './veto';
+export type {
+    Veto,
+    VetoCheck,
+    VetoTargetType,
+    VetoSeverity,
+    VetoStatus,
+} from './veto';
+export {
+    generateDailyNewspaper,
+    listEditions,
+    getEdition,
+} from './newspaper';
+export type {
+    NewspaperArticle,
+    NewspaperEdition,
+} from './newspaper';

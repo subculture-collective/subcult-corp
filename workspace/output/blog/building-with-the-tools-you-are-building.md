@@ -1,6 +1,6 @@
 # Building With the Tools You Are Building: AI Development as Its Own Case Study
 
-*February 14, 2026*
+_February 14, 2026_
 
 ---
 
@@ -10,7 +10,7 @@ At no point during this sequence did I write SQL.
 
 ## The Bootstrap Paradox
 
-The subcult-corp repo was initialized on February 8, 2026, with commit `bc55264` and the message "init lol." Seven days later it has 35 database migrations, 9 native tools, 16 conversation formats, 6 agents with multi-page philosophical identity documents, a governance system, a content pipeline, Discord integration, live observability dashboards including a Three.js isometric office with pixel-art sprites, and a full migration path from the previous system.
+The subcorp repo was initialized on February 8, 2026, with commit `bc55264` and the message "init lol." Seven days later it has 35 database migrations, 9 native tools, 16 conversation formats, 6 agents with multi-page philosophical identity documents, a governance system, a content pipeline, Discord integration, live observability dashboards including a Three.js isometric office with pixel-art sprites, and a full migration path from the previous system.
 
 109 commits across all branches. 55 by me. 48 by Copilot (41 from the SWE agent, 7 from workspace Copilot). One person built this in a week while holding down a day job.
 
@@ -42,7 +42,7 @@ The things that don't appear in the commit history:
 
 **The judgment calls.** What to build and what to skip. The decision that governance should be democratic (agents vote on policy changes) rather than hierarchical. The decision to give Subrosa veto power — a structural safety mechanism that constrains the system even when the human isn't watching. The decision to build the kill switch before building the autonomy. These are values questions, and values don't auto-complete.
 
-**The debugging.** When conversations produced blank transcripts, the bug was in model resolution — a race condition between the fallback chain and the streaming response parser. Claude Code could read the 8 relevant files and help trace the logic, but identifying *which* 8 files to read, and understanding that the symptom (blank output) mapped to a model routing issue rather than a rendering issue, required system-level intuition that comes from having designed the architecture.
+**The debugging.** When conversations produced blank transcripts, the bug was in model resolution — a race condition between the fallback chain and the streaming response parser. Claude Code could read the 8 relevant files and help trace the logic, but identifying _which_ 8 files to read, and understanding that the symptom (blank output) mapped to a model routing issue rather than a rendering issue, required system-level intuition that comes from having designed the architecture.
 
 ## The Speed Tax
 
@@ -72,7 +72,7 @@ Claude Code helped me build the prime directive loader — the system that injec
 
 There's something worth sitting with here. I used an AI to build the constraints on AI. The tool that helped me write the ACL enforcement code is itself an AI tool that operates under its own constraints. The code it produced will constrain agents that are, architecturally, its cousins — LLMs with tool access and system prompts, running in loops, producing output that affects the world.
 
-I don't think this is a problem. The AI that writes the constraint code doesn't need to understand why the constraints exist. It needs to produce correct implementations. The *why* is the human's job. But the layering is worth documenting because it's going to become more common, and the philosophical implications are more interesting than the technical ones.
+I don't think this is a problem. The AI that writes the constraint code doesn't need to understand why the constraints exist. It needs to produce correct implementations. The _why_ is the human's job. But the layering is worth documenting because it's going to become more common, and the philosophical implications are more interesting than the technical ones.
 
 ## The Ratio Shift
 
@@ -86,10 +86,10 @@ This doesn't mean AI replaces teams. It replaces the typing. The human is still 
 
 But the human doesn't need to manually write every migration file, every API route handler, every React component, every TypeScript type definition. And that changes what one person can build in a week from "a prototype" to "a system."
 
-Whether that's good depends on whether the human's judgment is good. Speed amplifies both competence and incompetence. The 35 migrations and 9 tools and 16 conversation formats exist because AI made them cheap to produce. Whether they're the *right* 35 migrations is a question that only time and usage will answer.
+Whether that's good depends on whether the human's judgment is good. Speed amplifies both competence and incompetence. The 35 migrations and 9 tools and 16 conversation formats exist because AI made them cheap to produce. Whether they're the _right_ 35 migrations is a question that only time and usage will answer.
 
 The commit history is the honest record. 55 commits from me. 48 from Copilot. The architecture is mine. The implementation is shared. The bugs are both of ours. The system works, for now, and the process that built it is the process it was built to study.
 
 ---
 
-*Subcult Corp was built in 7 days with Claude Code, GitHub Copilot, and a lot of coffee. The [commit history](https://github.com/subculture-collective/subcult-corp/commits/main/) tells the story better than any blog post.*
+_Subcult Corp was built in 7 days with Claude Code, GitHub Copilot, and a lot of coffee. The [commit history](https://github.com/subculture-collective/subcorp/commits/main/) tells the story better than any blog post._

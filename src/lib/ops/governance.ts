@@ -2,7 +2,10 @@
 import { sql, jsonb } from '@/lib/db';
 import { getPolicy, setPolicy, clearPolicyCache } from './policy';
 import { emitEventAndCheckReactions } from './events';
+import { llmGenerate } from '@/lib/llm';
+import { getVoice } from '@/lib/roundtable/voices';
 import { logger } from '@/lib/logger';
+import type { ConversationTurnEntry } from '@/lib/types';
 
 const log = logger.child({ module: 'governance' });
 
@@ -32,7 +35,7 @@ export interface GovernanceProposal {
 
 // ─── Protected policies that cannot be proposed ───
 
-const PROTECTED_POLICIES = new Set(['system_enabled']);
+const PROTECTED_POLICIES = new Set(['system_enabled', 'veto_authority']);
 
 // ─── Create proposal ───
 
@@ -162,6 +165,31 @@ export async function castGovernanceVote(
     ).length;
 
     if (approvals >= proposal.required_votes) {
+        // Check for binding veto before accepting
+        const { hasActiveVeto } = await import('./veto');
+        const vetoCheck = await hasActiveVeto('governance', proposalId);
+        if (vetoCheck.vetoed && vetoCheck.severity === 'binding') {
+            log.info('Governance proposal blocked by binding veto', {
+                proposalId,
+                vetoId: vetoCheck.vetoId,
+                reason: vetoCheck.reason,
+            });
+            await sql`
+                UPDATE ops_governance_proposals
+                SET status = 'rejected', resolved_at = NOW()
+                WHERE id = ${proposalId}
+            `;
+            await emitEventAndCheckReactions({
+                agent_id: proposal.proposer,
+                kind: 'governance_proposal_vetoed',
+                title: `Policy change to "${proposal.policy_key}" blocked by binding veto`,
+                summary: vetoCheck.reason ?? 'Binding veto active',
+                tags: ['governance', 'vetoed', proposal.policy_key],
+                metadata: { proposalId, vetoId: vetoCheck.vetoId },
+            });
+            return;
+        }
+
         // Accepted — apply policy change
         await sql`
             UPDATE ops_governance_proposals
@@ -289,4 +317,112 @@ export async function updateProposalStatus(
             WHERE id = ${proposalId}
         `;
     }
+}
+
+// ─── Collect votes via structured LLM calls after a governance debate ───
+
+export async function collectGovernanceDebateVotes(
+    proposalId: string,
+    participants: string[],
+    debateHistory: ConversationTurnEntry[],
+): Promise<{ result: 'accepted' | 'rejected' | 'pending'; approvals: number; rejections: number }> {
+    const [proposal] = await sql<[GovernanceProposal?]>`
+        SELECT * FROM ops_governance_proposals WHERE id = ${proposalId}
+    `;
+    if (!proposal) throw new Error(`Governance proposal "${proposalId}" not found`);
+    if (proposal.status !== 'voting') {
+        throw new Error(`Proposal not in voting status (current: ${proposal.status})`);
+    }
+
+    const transcript = debateHistory.map(t => {
+        const voice = getVoice(t.speaker);
+        const name = voice?.displayName ?? t.speaker;
+        return `${name}: ${t.dialogue}`;
+    }).join('\n');
+
+    const proposalSummary = [
+        `Policy: ${proposal.policy_key}`,
+        `Proposed by: ${proposal.proposer}`,
+        `Current value: ${JSON.stringify(proposal.current_value)}`,
+        `Proposed value: ${JSON.stringify(proposal.proposed_value)}`,
+        `Rationale: ${proposal.rationale}`,
+    ].join('\n');
+
+    for (const agentId of participants) {
+        // Proposer implicitly approves
+        if (agentId === proposal.proposer) {
+            await castGovernanceVote(proposalId, agentId, 'approve', 'I proposed this change.');
+            continue;
+        }
+
+        const voice = getVoice(agentId);
+        const agentName = voice?.displayName ?? agentId;
+
+        try {
+            const response = await llmGenerate({
+                messages: [
+                    {
+                        role: 'system',
+                        content: `You are ${agentName}. You just participated in a governance debate about a policy change. Based on the debate, cast your formal vote.\n\nRespond with ONLY a JSON object, no other text:\n{"vote": "approve" or "reject", "reason": "one sentence explaining your vote"}`,
+                    },
+                    {
+                        role: 'user',
+                        content: `## Proposal\n${proposalSummary}\n\n## Debate Transcript\n${transcript}\n\nCast your vote as ${agentName}. JSON only:`,
+                    },
+                ],
+                temperature: 0.3,
+                maxTokens: 150,
+                trackingContext: {
+                    agentId,
+                    context: 'governance-vote',
+                    sessionId: proposalId,
+                },
+            });
+
+            const jsonMatch = response.match(/\{[^}]*"vote"\s*:\s*"(approve|reject)"[^}]*\}/i);
+            if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]) as { vote: string; reason?: string };
+                const vote = parsed.vote.toLowerCase() === 'approve' ? 'approve' as const : 'reject' as const;
+                await castGovernanceVote(proposalId, agentId, vote, parsed.reason ?? response.slice(0, 200));
+            } else {
+                const upper = response.toUpperCase();
+                if (upper.includes('APPROVE') && !upper.includes('NOT APPROVE')) {
+                    await castGovernanceVote(proposalId, agentId, 'approve', response.slice(0, 200));
+                } else {
+                    await castGovernanceVote(proposalId, agentId, 'reject', response.slice(0, 200));
+                }
+                log.warn('Governance vote was not valid JSON, used fallback', {
+                    agentId, proposalId, response: response.slice(0, 200),
+                });
+            }
+        } catch (err) {
+            log.error('Failed to collect governance vote', {
+                error: err, agentId, proposalId,
+            });
+        }
+    }
+
+    // Re-read votes to determine outcome
+    const [updated] = await sql<[GovernanceProposal]>`
+        SELECT * FROM ops_governance_proposals WHERE id = ${proposalId}
+    `;
+    const votes: Record<string, GovernanceVote> =
+        typeof updated.votes === 'object' && updated.votes !== null
+            ? (updated.votes as Record<string, GovernanceVote>)
+            : {};
+
+    const approvals = Object.values(votes).filter(v => v.vote === 'approve').length;
+    const rejections = Object.values(votes).filter(v => v.vote === 'reject').length;
+
+    // castGovernanceVote already handles resolution (accept/reject) internally
+    // but if it didn't resolve (edge case), return pending
+    const [final] = await sql<[{ status: string }]>`
+        SELECT status FROM ops_governance_proposals WHERE id = ${proposalId}
+    `;
+
+    const result = final.status === 'accepted' ? 'accepted' as const
+        : final.status === 'rejected' ? 'rejected' as const
+        : 'pending' as const;
+
+    return { result, approvals, rejections };
 }

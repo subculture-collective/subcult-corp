@@ -1,4 +1,4 @@
-# SUBCULT OPS — Deployment
+# SUBCORP — Deployment
 
 ## Docker-based deployment (current)
 

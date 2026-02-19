@@ -26,6 +26,7 @@ const VALID_FORMATS: ConversationFormat[] = [
     'writing_room',
     'content_review',
     'watercooler',
+    'voice_chat',
 ];
 
 // ─── Rate limiting (in-memory, per IP, 1 req / 60s) ───
@@ -130,6 +131,8 @@ export async function POST(req: NextRequest) {
             );
         }
 
+        const isVoice = body.voiceMode === true;
+
         // Pick participants
         const participants = pickParticipants();
 
@@ -142,6 +145,7 @@ export async function POST(req: NextRequest) {
             metadata: {
                 source: 'user_question',
                 userQuestion: question,
+                ...(isVoice && { voiceMode: true }),
             },
         });
 

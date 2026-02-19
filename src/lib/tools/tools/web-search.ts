@@ -1,5 +1,6 @@
 // web_search tool — Brave Search API
 import type { NativeTool } from '../types';
+import { ALL_AGENTS } from '@/lib/types';
 import { logger } from '@/lib/logger';
 
 const log = logger.child({ module: 'web-search' });
@@ -10,7 +11,7 @@ const BRAVE_SEARCH_URL = 'https://api.search.brave.com/res/v1/web/search';
 export const webSearchTool: NativeTool = {
     name: 'web_search',
     description: 'Search the web using Brave Search. Returns titles, URLs, and descriptions of matching results.',
-    agents: ['chora', 'subrosa', 'thaum', 'praxis'],
+    agents: [...ALL_AGENTS],
     parameters: {
         type: 'object',
         properties: {

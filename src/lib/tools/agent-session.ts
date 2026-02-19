@@ -75,7 +75,7 @@ export async function executeAgentSession(session: AgentSession): Promise<void> 
         // Load agent tools — droids get a limited toolset with ACL-bound file_write
         const tools = isDroid
             ? getDroidTools(session.agent_id)
-            : getAgentTools(agentId);
+            : getAgentTools(agentId, session.id);
 
         // Load memories via semantic relevance to the prompt (skip for droids)
         const memories = isDroid ? [] : await queryRelevantMemories(

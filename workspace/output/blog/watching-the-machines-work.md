@@ -1,6 +1,6 @@
 # Watching the Machines Work: Pixel Art, Live Dashboards, and the Case for Agent Observability
 
-*February 14, 2026*
+_February 14, 2026_
 
 ---
 
@@ -94,4 +94,4 @@ The poster on the wall says "AUTONOMY THROUGH ALIGNMENT." The alignment part isn
 
 ---
 
-*The Three.js office, SVG office, Sanctum, and content pipeline are in `src/app/stage/` and `src/app/sanctum/` in the [subcult-corp repo](https://github.com/subculture-collective/subcult-corp).*
+_The Three.js office, SVG office, Sanctum, and content pipeline are in `src/app/stage/` and `src/app/sanctum/` in the [subcorp repo](https://github.com/subculture-collective/subcorp)._

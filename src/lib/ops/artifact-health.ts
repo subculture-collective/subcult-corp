@@ -4,6 +4,13 @@
 import { sql } from '@/lib/db';
 import { execInToolbox } from '@/lib/tools/executor';
 import { emitEvent } from './events';
+import { FORMATS } from '@/lib/roundtable/formats';
+import type { ConversationFormat } from '@/lib/types';
+
+/** Formats that have artifact configs and should produce synthesis output */
+const ARTIFACT_FORMATS = Object.entries(FORMATS)
+    .filter(([, cfg]) => cfg.artifact)
+    .map(([name]) => name) as ConversationFormat[];
 
 export interface ArtifactHealthResult {
     manifest_entries_today: number;
@@ -37,12 +44,13 @@ export async function checkArtifactFreshness(): Promise<ArtifactHealthResult> {
         AND created_at >= ${todayISO}
     `;
 
-    // Count completed roundtables today (to compare against synthesis sessions)
+    // Count completed roundtables today that should produce artifacts
     const [roundtableCounts] = await sql<[{ total: number }]>`
         SELECT COUNT(*)::int as total
         FROM ops_roundtable_sessions
         WHERE status = 'completed'
         AND completed_at >= ${todayISO}
+        AND format = ANY(${ARTIFACT_FORMATS})
     `;
 
     // Read manifest for today's entries
@@ -87,8 +95,8 @@ export async function checkArtifactFreshness(): Promise<ArtifactHealthResult> {
         ? synthCounts.succeeded / synthCounts.total
         : 0;
 
-    // Emit event if roundtables completed but no artifacts were produced
-    if (roundtableCounts.total > 0 && manifestEntriesToday === 0) {
+    // Emit event if roundtables completed but nothing was produced (DB or filesystem)
+    if (roundtableCounts.total > 0 && synthCounts.succeeded === 0 && manifestEntriesToday === 0) {
         await emitEvent({
             agent_id: 'system',
             kind: 'missing_artifacts',
@@ -97,6 +105,7 @@ export async function checkArtifactFreshness(): Promise<ArtifactHealthResult> {
             metadata: {
                 roundtables_completed: roundtableCounts.total,
                 synthesis_sessions: synthCounts.total,
+                synthesis_succeeded: synthCounts.succeeded,
                 manifest_entries: manifestEntriesToday,
             },
         });

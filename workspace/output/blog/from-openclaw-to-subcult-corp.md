@@ -1,6 +1,6 @@
 # From OpenClaw to Subcult Corp: How We Outgrew Our AI Gateway in a Week
 
-*February 14, 2026*
+_February 14, 2026_
 
 ---
 
@@ -104,7 +104,7 @@ I don't regret the OpenClaw phase. It taught us things we couldn't have learned 
 
 **State needs a database.** JSON files, JSONL logs, and file-system state work for personal assistants. They break when you need transactions, queries, concurrent access, or anything that looks like infrastructure. PostgreSQL isn't glamorous. It's correct.
 
-**Identity is architecture.** Giving an agent a name and an emoji isn't identity. Identity is the set of constraints, values, and failure modes that determine what the agent does when the prompt doesn't cover the situation. The philosophical grounding in subcult-corp isn't pretension — it's a load-bearing structure that makes agent behavior coherent without exhaustive instruction.
+**Identity is architecture.** Giving an agent a name and an emoji isn't identity. Identity is the set of constraints, values, and failure modes that determine what the agent does when the prompt doesn't cover the situation. The philosophical grounding in subcorp isn't pretension — it's a load-bearing structure that makes agent behavior coherent without exhaustive instruction.
 
 **Self-hosting is non-negotiable.** Not as a lifestyle choice. As an engineering requirement. When OpenRouter ran out of credits at midnight, the system pivoted to Ollama cloud models in 30 minutes because we owned every layer. When we wanted Discord integration, we didn't file a feature request — we wrote a webhook client. The surface area of possible actions is bounded by what you control.
 
@@ -120,4 +120,4 @@ The fourth commit was right. Fuck services. Build the thing.
 
 ---
 
-*Subcult Corp is open source at [github.com/subculture-collective/subcult-corp](https://github.com/subculture-collective/subcult-corp). It was built in 7 days by one person and six agents who don't exist yet but already have opinions.*
+_Subcult Corp is open source at [github.com/subculture-collective/subcorp](https://github.com/subculture-collective/subcorp). It was built in 7 days by one person and six agents who don't exist yet but already have opinions._
