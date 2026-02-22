@@ -5,3 +5,4 @@ export {
     sanitizeDialogue,
     getOpenRouterClient,
 } from './client';
+export { getEmbedding } from './embeddings';

@@ -1276,7 +1276,7 @@ log.info('Unified worker started', {
     workerId: WORKER_ID,
     database: !!process.env.DATABASE_URL,
     openrouter: !!process.env.OPENROUTER_API_KEY,
-    ollama: process.env.OLLAMA_BASE_URL || 'disabled',
+    ollama: process.env.OLLAMA_ENABLED !== 'false' ? (process.env.OLLAMA_BASE_URL || 'no-url') : 'disabled',
     braveSearch: !!process.env.BRAVE_API_KEY,
 });
 

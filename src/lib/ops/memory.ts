@@ -7,32 +7,11 @@ import type {
     MemoryCache,
 } from '../types';
 import { logger } from '@/lib/logger';
+import { getEmbedding } from '@/lib/llm/embeddings';
 
 const log = logger.child({ module: 'memory' });
 
 const MAX_MEMORIES_PER_AGENT = 200;
-const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL ?? '';
-const EMBEDDING_MODEL = 'bge-m3';
-
-/** Get embedding vector from Ollama (fire-and-forget safe) */
-async function getEmbedding(text: string): Promise<number[] | null> {
-    if (!OLLAMA_BASE_URL) return null;
-    try {
-        const response = await fetch(`${OLLAMA_BASE_URL}/v1/embeddings`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: EMBEDDING_MODEL, input: text }),
-            signal: AbortSignal.timeout(10_000),
-        });
-        if (!response.ok) return null;
-        const data = await response.json() as {
-            data?: Array<{ embedding: number[] }>;
-        };
-        return data.data?.[0]?.embedding ?? null;
-    } catch {
-        return null;
-    }
-}
 
 export async function queryAgentMemories(
     query: MemoryQuery,
@@ -129,7 +108,7 @@ export async function writeMemory(input: MemoryInput): Promise<string | null> {
     }
 
     try {
-        // Compute embedding (best-effort — null if Ollama unavailable)
+        // Compute embedding (best-effort — null if unavailable)
         const embedding = await getEmbedding(input.content);
 
         const insertData: Record<string, unknown> = {

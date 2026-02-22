@@ -9,6 +9,7 @@
 //   4. ops_agent_relationships  — 15 pairwise agent relationships
 //   5. ops_rss_feeds            — 15 RSS feeds for SUBCULT Daily
 //   6. ops_discord_channels     — 16 Discord channels
+//   7. users (admin)            — first admin user (via ADMIN_EMAIL, ADMIN_USERNAME, ADMIN_PASSWORD)
 //
 // Safe to re-run: uses ON CONFLICT ... DO UPDATE everywhere.
 // Triggers use name-based dedup (no unique constraint on name — uses DELETE + INSERT per trigger).
@@ -29,8 +30,10 @@
 //   node scripts/go-live/seed.mjs --only relationships
 //   node scripts/go-live/seed.mjs --only rss-feeds
 //   node scripts/go-live/seed.mjs --only discord-channels
+//   node scripts/go-live/seed.mjs --only admin
 
 import postgres from 'postgres';
+import argon2 from 'argon2';
 import dotenv from 'dotenv';
 import { createLogger } from '../lib/logger.mjs';
 
@@ -48,7 +51,18 @@ const sql = postgres(process.env.DATABASE_URL);
 // ─────────────────────────────────────────────
 const onlyArg = process.argv.indexOf('--only');
 const only = onlyArg !== -1 ? process.argv[onlyArg + 1] : null;
-const sections = only ? [only] : ['agents', 'policy', 'triggers', 'relationships', 'rss-feeds', 'discord-channels'];
+const sections =
+    only ?
+        [only]
+    :   [
+            'agents',
+            'policy',
+            'triggers',
+            'relationships',
+            'rss-feeds',
+            'discord-channels',
+            'admin',
+        ];
 
 // ═════════════════════════════════════════════
 // 1. AGENT REGISTRY
@@ -311,13 +325,22 @@ const policies = [
         value: {
             enabled: true,
             allowed_step_kinds: [
-                'research_topic', 'scan_signals', 'draft_essay', 'draft_thread',
-                'audit_system', 'patch_code', 'distill_insight', 'document_lesson',
-                'critique_content', 'consolidate_memory', 'memory_archaeology',
+                'research_topic',
+                'scan_signals',
+                'draft_essay',
+                'draft_thread',
+                'audit_system',
+                'patch_code',
+                'distill_insight',
+                'document_lesson',
+                'critique_content',
+                'consolidate_memory',
+                'memory_archaeology',
                 'draft_product_spec',
             ],
         },
-        description: 'Which step kinds can be auto-approved without human review',
+        description:
+            'Which step kinds can be auto-approved without human review',
     },
     {
         key: 'x_daily_quota',
@@ -369,7 +392,8 @@ const policies = [
     {
         key: 'roundtable_format_weights',
         value: { standup: 1.0, debate: 0.7, watercooler: 0.5 },
-        description: 'Probability multipliers per format. 1.0 = full schedule probability, 0.0 = never.',
+        description:
+            'Probability multipliers per format. 1.0 = full schedule probability, 0.0 = never.',
     },
     {
         key: 'roundtable_distillation',
@@ -379,7 +403,8 @@ const policies = [
             max_action_items_per_conversation: 3,
             min_confidence_threshold: 0.4,
         },
-        description: 'Controls for post-conversation memory extraction and action item generation.',
+        description:
+            'Controls for post-conversation memory extraction and action item generation.',
     },
     {
         key: 'voice_evolution_policy',
@@ -388,7 +413,8 @@ const policies = [
             max_modifiers_per_agent: 3,
             cache_ttl_minutes: 10,
         },
-        description: 'Voice evolution system — modifies agent personality based on accumulated memories.',
+        description:
+            'Voice evolution system — modifies agent personality based on accumulated memories.',
     },
 
     // ─── Threshold policies ───
@@ -399,7 +425,11 @@ const policies = [
     },
     {
         key: 'trigger_defaults',
-        value: { stall_minutes: 120, failure_rate_threshold: 0.3, lookback_hours: 48 },
+        value: {
+            stall_minutes: 120,
+            failure_rate_threshold: 0.3,
+            lookback_hours: 48,
+        },
         description: 'Default thresholds for trigger condition evaluation',
     },
 
@@ -414,7 +444,8 @@ const policies = [
             default_expiry_hours: 72,
             protected_step_kinds: ['create_pull_request', 'update_directive'],
         },
-        description: 'Veto authority configuration — binding agents can halt proposals/missions, soft vetoes trigger review holds',
+        description:
+            'Veto authority configuration — binding agents can halt proposals/missions, soft vetoes trigger review holds',
     },
 
     // ─── Reference data ───
@@ -422,23 +453,95 @@ const policies = [
         key: 'reaction_matrix',
         value: {
             patterns: [
-                { source: '*', tags: ['mission', 'failed'], target: 'chora', type: 'diagnose', probability: 1.0, cooldown: 60 },
-                { source: 'praxis', tags: ['content', 'published'], target: 'chora', type: 'review', probability: 0.5, cooldown: 120 },
-                { source: 'praxis', tags: ['post', 'shipped'], target: 'chora', type: 'analyze_response', probability: 0.3, cooldown: 120 },
-                { source: 'chora', tags: ['insight', 'discovered'], target: 'praxis', type: 'propose_action', probability: 0.4, cooldown: 60 },
-                { source: 'subrosa', tags: ['risk', 'identified'], target: 'chora', type: 'root_cause_analysis', probability: 0.8, cooldown: 180 },
-                { source: 'thaum', tags: ['pattern', 'stalled'], target: 'chora', type: 'reframe_with_context', probability: 0.6, cooldown: 120 },
+                {
+                    source: '*',
+                    tags: ['mission', 'failed'],
+                    target: 'chora',
+                    type: 'diagnose',
+                    probability: 1.0,
+                    cooldown: 60,
+                },
+                {
+                    source: 'praxis',
+                    tags: ['content', 'published'],
+                    target: 'chora',
+                    type: 'review',
+                    probability: 0.5,
+                    cooldown: 120,
+                },
+                {
+                    source: 'praxis',
+                    tags: ['post', 'shipped'],
+                    target: 'chora',
+                    type: 'analyze_response',
+                    probability: 0.3,
+                    cooldown: 120,
+                },
+                {
+                    source: 'chora',
+                    tags: ['insight', 'discovered'],
+                    target: 'praxis',
+                    type: 'propose_action',
+                    probability: 0.4,
+                    cooldown: 60,
+                },
+                {
+                    source: 'subrosa',
+                    tags: ['risk', 'identified'],
+                    target: 'chora',
+                    type: 'root_cause_analysis',
+                    probability: 0.8,
+                    cooldown: 180,
+                },
+                {
+                    source: 'thaum',
+                    tags: ['pattern', 'stalled'],
+                    target: 'chora',
+                    type: 'reframe_with_context',
+                    probability: 0.6,
+                    cooldown: 120,
+                },
             ],
         },
-        description: 'Agent-to-agent reaction patterns based on OpenClaw coordination model',
+        description:
+            'Agent-to-agent reaction patterns based on OpenClaw coordination model',
     },
     {
         key: 'subcult_step_kinds',
         value: {
-            analysis: ['analyze_discourse', 'scan_signals', 'research_topic', 'classify_pattern', 'trace_incentive', 'identify_assumption'],
-            content: ['draft_thread', 'draft_essay', 'critique_content', 'refine_narrative', 'prepare_statement', 'write_issue'],
-            operations: ['audit_system', 'review_policy', 'distill_insight', 'consolidate_memory', 'map_dependency', 'patch_code', 'document_lesson', 'create_pull_request'],
-            coordination: ['log_event', 'tag_memory', 'escalate_risk', 'convene_roundtable', 'propose_workflow'],
+            analysis: [
+                'analyze_discourse',
+                'scan_signals',
+                'research_topic',
+                'classify_pattern',
+                'trace_incentive',
+                'identify_assumption',
+            ],
+            content: [
+                'draft_thread',
+                'draft_essay',
+                'critique_content',
+                'refine_narrative',
+                'prepare_statement',
+                'write_issue',
+            ],
+            operations: [
+                'audit_system',
+                'review_policy',
+                'distill_insight',
+                'consolidate_memory',
+                'map_dependency',
+                'patch_code',
+                'document_lesson',
+                'create_pull_request',
+            ],
+            coordination: [
+                'log_event',
+                'tag_memory',
+                'escalate_risk',
+                'convene_roundtable',
+                'propose_workflow',
+            ],
             product: ['draft_product_spec', 'update_directive'],
         },
         description: 'Subcult-specific step kinds organized by function',
@@ -446,8 +549,21 @@ const policies = [
     {
         key: 'memory_tags',
         value: {
-            categories: ['insight', 'pattern', 'strategy', 'preference', 'lesson'],
-            subcult_tags: ['platform-capture', 'extraction-risk', 'cultural-praxis', 'system-incentive', 'coordination-friction', 'autonomy-threat'],
+            categories: [
+                'insight',
+                'pattern',
+                'strategy',
+                'preference',
+                'lesson',
+            ],
+            subcult_tags: [
+                'platform-capture',
+                'extraction-risk',
+                'cultural-praxis',
+                'system-incentive',
+                'coordination-friction',
+                'autonomy-threat',
+            ],
         },
         description: 'Memory categorization and Subcult-specific semantic tags',
     },
@@ -478,15 +594,50 @@ async function seedPolicies() {
 
 const triggers = [
     // ─── Reactive triggers ───
-    { name: 'Mission failure diagnosis (Chora)', trigger_event: 'mission_failed', conditions: { lookback_minutes: 60 }, action_config: { target_agent: 'chora', action: 'diagnose' }, cooldown_minutes: 120, enabled: true },
-    { name: 'Content published review (Chora)', trigger_event: 'content_published', conditions: { lookback_minutes: 60 }, action_config: { target_agent: 'chora', action: 'analyze_reception' }, cooldown_minutes: 120, enabled: true },
-    { name: 'Content draft auto-review (Subrosa)', trigger_event: 'content_draft_created', conditions: { lookback_minutes: 30 }, action_config: { target_agent: 'subrosa', action: 'content_review' }, cooldown_minutes: 15, enabled: true },
-    { name: 'Public content risk check (Subrosa)', trigger_event: 'content_marked_public', conditions: { lookback_minutes: 5 }, action_config: { target_agent: 'subrosa', action: 'risk_assessment' }, cooldown_minutes: 60, enabled: true },
+    {
+        name: 'Mission failure diagnosis (Chora)',
+        trigger_event: 'mission_failed',
+        conditions: { lookback_minutes: 60 },
+        action_config: { target_agent: 'chora', action: 'diagnose' },
+        cooldown_minutes: 120,
+        enabled: true,
+    },
+    {
+        name: 'Content published review (Chora)',
+        trigger_event: 'content_published',
+        conditions: { lookback_minutes: 60 },
+        action_config: { target_agent: 'chora', action: 'analyze_reception' },
+        cooldown_minutes: 120,
+        enabled: true,
+    },
+    {
+        name: 'Content draft auto-review (Subrosa)',
+        trigger_event: 'content_draft_created',
+        conditions: { lookback_minutes: 30 },
+        action_config: { target_agent: 'subrosa', action: 'content_review' },
+        cooldown_minutes: 15,
+        enabled: true,
+    },
+    {
+        name: 'Public content risk check (Subrosa)',
+        trigger_event: 'content_marked_public',
+        conditions: { lookback_minutes: 5 },
+        action_config: { target_agent: 'subrosa', action: 'risk_assessment' },
+        cooldown_minutes: 60,
+        enabled: true,
+    },
     {
         name: 'Proactive signal scan (Thaum)',
         trigger_event: 'proactive_scan_signals',
         conditions: {
-            topics: ['AI trends', 'emerging tech', 'startup ecosystem', 'developer tools', 'cultural shifts', 'platform politics'],
+            topics: [
+                'AI trends',
+                'emerging tech',
+                'startup ecosystem',
+                'developer tools',
+                'cultural shifts',
+                'platform politics',
+            ],
             skip_probability: 0.1,
             jitter_min_minutes: 25,
             jitter_max_minutes: 45,
@@ -495,26 +646,88 @@ const triggers = [
         cooldown_minutes: 180,
         enabled: true,
     },
-    { name: 'Creativity unlock (Thaum)', trigger_event: 'work_stalled', conditions: { stall_minutes: 120 }, action_config: { target_agent: 'thaum', action: 'propose_reframe' }, cooldown_minutes: 240, enabled: true },
-    { name: 'Auto-proposal acceptance (Praxis)', trigger_event: 'proposal_ready', conditions: { auto_approved: true }, action_config: { target_agent: 'praxis', action: 'commit' }, cooldown_minutes: 30, enabled: true },
-    { name: 'Milestone reached (Praxis)', trigger_event: 'mission_milestone_hit', conditions: { lookback_minutes: 30 }, action_config: { target_agent: 'praxis', action: 'log_completion' }, cooldown_minutes: 60, enabled: true },
+    {
+        name: 'Creativity unlock (Thaum)',
+        trigger_event: 'work_stalled',
+        conditions: { stall_minutes: 120 },
+        action_config: { target_agent: 'thaum', action: 'propose_reframe' },
+        cooldown_minutes: 240,
+        enabled: true,
+    },
+    {
+        name: 'Auto-proposal acceptance (Praxis)',
+        trigger_event: 'proposal_ready',
+        conditions: { auto_approved: true },
+        action_config: { target_agent: 'praxis', action: 'commit' },
+        cooldown_minutes: 30,
+        enabled: true,
+    },
+    {
+        name: 'Milestone reached (Praxis)',
+        trigger_event: 'mission_milestone_hit',
+        conditions: { lookback_minutes: 30 },
+        action_config: { target_agent: 'praxis', action: 'log_completion' },
+        cooldown_minutes: 60,
+        enabled: true,
+    },
     {
         name: 'Roundtable convening (Mux dispatch)',
         trigger_event: 'daily_roundtable',
-        conditions: { participants: ['chora', 'subrosa', 'thaum', 'praxis'], topic_source: 'recent_events' },
+        conditions: {
+            participants: ['chora', 'subrosa', 'thaum', 'praxis'],
+            topic_source: 'recent_events',
+        },
         action_config: { target_agent: 'mux', action: 'convene_roundtable' },
         cooldown_minutes: 1440,
         enabled: true,
     },
-    { name: 'Memory consolidation (Chora)', trigger_event: 'memory_consolidation_due', conditions: { lookback_days: 1 }, action_config: { target_agent: 'chora', action: 'distill_and_tag' }, cooldown_minutes: 1440, enabled: true },
-    { name: 'Governance debate (All agents)', trigger_event: 'governance_proposal_created', conditions: { lookback_minutes: 60 }, action_config: { target_agent: 'primus', action: 'convene_governance_debate' }, cooldown_minutes: 30, enabled: true },
-    { name: 'Memory archaeology dig (Chora)', trigger_event: 'memory_archaeology_due', conditions: { min_days_between_digs: 7 }, action_config: { target_agent: 'chora', action: 'memory_archaeology', max_memories: 100 }, cooldown_minutes: 10080, enabled: true },
+    {
+        name: 'Memory consolidation (Chora)',
+        trigger_event: 'memory_consolidation_due',
+        conditions: { lookback_days: 1 },
+        action_config: { target_agent: 'chora', action: 'distill_and_tag' },
+        cooldown_minutes: 1440,
+        enabled: true,
+    },
+    {
+        name: 'Governance debate (All agents)',
+        trigger_event: 'governance_proposal_created',
+        conditions: { lookback_minutes: 60 },
+        action_config: {
+            target_agent: 'primus',
+            action: 'convene_governance_debate',
+        },
+        cooldown_minutes: 30,
+        enabled: true,
+    },
+    {
+        name: 'Memory archaeology dig (Chora)',
+        trigger_event: 'memory_archaeology_due',
+        conditions: { min_days_between_digs: 7 },
+        action_config: {
+            target_agent: 'chora',
+            action: 'memory_archaeology',
+            max_memories: 100,
+        },
+        cooldown_minutes: 10080,
+        enabled: true,
+    },
 
     // ─── Proactive triggers ───
     {
         name: 'Proactive tweet drafting',
         trigger_event: 'proactive_draft_tweet',
-        conditions: { topics: ['AI insights', 'tech commentary', 'productivity tips', 'industry observations'], skip_probability: 0.15, jitter_min_minutes: 25, jitter_max_minutes: 45 },
+        conditions: {
+            topics: [
+                'AI insights',
+                'tech commentary',
+                'productivity tips',
+                'industry observations',
+            ],
+            skip_probability: 0.15,
+            jitter_min_minutes: 25,
+            jitter_max_minutes: 45,
+        },
         action_config: { target_agent: 'chora' },
         cooldown_minutes: 240,
         enabled: true,
@@ -522,7 +735,17 @@ const triggers = [
     {
         name: 'Proactive deep research',
         trigger_event: 'proactive_research',
-        conditions: { topics: ['multi-agent systems', 'LLM optimization', 'autonomous workflows', 'knowledge management'], skip_probability: 0.1, jitter_min_minutes: 30, jitter_max_minutes: 45 },
+        conditions: {
+            topics: [
+                'multi-agent systems',
+                'LLM optimization',
+                'autonomous workflows',
+                'knowledge management',
+            ],
+            skip_probability: 0.1,
+            jitter_min_minutes: 30,
+            jitter_max_minutes: 45,
+        },
         action_config: { target_agent: 'chora' },
         cooldown_minutes: 360,
         enabled: true,
@@ -530,7 +753,11 @@ const triggers = [
     {
         name: 'Proactive ops analysis',
         trigger_event: 'proactive_analyze_ops',
-        conditions: { skip_probability: 0.1, jitter_min_minutes: 25, jitter_max_minutes: 45 },
+        conditions: {
+            skip_probability: 0.1,
+            jitter_min_minutes: 25,
+            jitter_max_minutes: 45,
+        },
         action_config: { target_agent: 'subrosa' },
         cooldown_minutes: 480,
         enabled: true,
@@ -538,7 +765,16 @@ const triggers = [
     {
         name: 'Proactive content planning',
         trigger_event: 'proactive_content_plan',
-        conditions: { topics: ['content calendar', 'audience growth', 'engagement strategy'], skip_probability: 0.2, jitter_min_minutes: 30, jitter_max_minutes: 60 },
+        conditions: {
+            topics: [
+                'content calendar',
+                'audience growth',
+                'engagement strategy',
+            ],
+            skip_probability: 0.2,
+            jitter_min_minutes: 30,
+            jitter_max_minutes: 60,
+        },
         action_config: { target_agent: 'praxis' },
         cooldown_minutes: 720,
         enabled: true,
@@ -546,7 +782,11 @@ const triggers = [
     {
         name: 'Proactive system health check',
         trigger_event: 'proactive_health_check',
-        conditions: { skip_probability: 0.05, jitter_min_minutes: 10, jitter_max_minutes: 30 },
+        conditions: {
+            skip_probability: 0.05,
+            jitter_min_minutes: 10,
+            jitter_max_minutes: 30,
+        },
         action_config: { target_agent: 'subrosa' },
         cooldown_minutes: 360,
         enabled: true,
@@ -554,29 +794,75 @@ const triggers = [
     {
         name: 'Proactive memory consolidation',
         trigger_event: 'proactive_memory_consolidation',
-        conditions: { skip_probability: 0.1, jitter_min_minutes: 20, jitter_max_minutes: 40 },
+        conditions: {
+            skip_probability: 0.1,
+            jitter_min_minutes: 20,
+            jitter_max_minutes: 40,
+        },
         action_config: { target_agent: 'chora' },
         cooldown_minutes: 720,
         enabled: true,
     },
-    { name: 'Proposal backlog monitor (Mux)', trigger_event: 'proactive_proposal_triage', conditions: { pending_threshold: 10 }, action_config: { target_agent: 'mux', action: 'triage_proposals' }, cooldown_minutes: 360, enabled: true },
-    { name: 'Operational status report (Mux)', trigger_event: 'proactive_ops_report', conditions: {}, action_config: { target_agent: 'mux', action: 'ops_report' }, cooldown_minutes: 720, enabled: true },
-    { name: 'Strategic drift detector (Primus)', trigger_event: 'strategic_drift_check', conditions: { lookback_hours: 48, failure_rate_threshold: 0.3 }, action_config: { target_agent: 'primus', action: 'strategic_review' }, cooldown_minutes: 2880, enabled: true },
+    {
+        name: 'Proposal backlog monitor (Mux)',
+        trigger_event: 'proactive_proposal_triage',
+        conditions: { pending_threshold: 10 },
+        action_config: { target_agent: 'mux', action: 'triage_proposals' },
+        cooldown_minutes: 360,
+        enabled: true,
+    },
+    {
+        name: 'Operational status report (Mux)',
+        trigger_event: 'proactive_ops_report',
+        conditions: {},
+        action_config: { target_agent: 'mux', action: 'ops_report' },
+        cooldown_minutes: 720,
+        enabled: true,
+    },
+    {
+        name: 'Strategic drift detector (Primus)',
+        trigger_event: 'strategic_drift_check',
+        conditions: { lookback_hours: 48, failure_rate_threshold: 0.3 },
+        action_config: { target_agent: 'primus', action: 'strategic_review' },
+        cooldown_minutes: 2880,
+        enabled: true,
+    },
 
     // ─── Special triggers ───
     {
         name: 'Monthly agent design review (Thaum)',
         trigger_event: 'agent_design_review',
-        conditions: { schedule: 'monthly', day_of_month: 1, description: 'Monthly review of collective composition — propose new agents if gaps identified', min_agents_before_proposing: 4, max_pending_proposals: 2 },
-        action_config: { target_agent: 'thaum', action: 'agent_design_proposal', module: 'agent-designer', function: 'generateAgentProposal' },
+        conditions: {
+            schedule: 'monthly',
+            day_of_month: 1,
+            description:
+                'Monthly review of collective composition — propose new agents if gaps identified',
+            min_agents_before_proposing: 4,
+            max_pending_proposals: 2,
+        },
+        action_config: {
+            target_agent: 'thaum',
+            action: 'agent_design_proposal',
+            module: 'agent-designer',
+            function: 'generateAgentProposal',
+        },
         cooldown_minutes: 43200,
         enabled: true,
     },
     {
         name: 'Agent proposal voting trigger',
         trigger_event: 'agent_proposal_created',
-        conditions: { lookback_minutes: 60, description: 'Automatically transition new agent proposals to voting by creating a debate roundtable' },
-        action_config: { target_agent: 'mux', action: 'start_agent_proposal_debate', module: 'triggers', function: 'checkAgentProposalCreated' },
+        conditions: {
+            lookback_minutes: 60,
+            description:
+                'Automatically transition new agent proposals to voting by creating a debate roundtable',
+        },
+        action_config: {
+            target_agent: 'mux',
+            action: 'start_agent_proposal_debate',
+            module: 'triggers',
+            function: 'checkAgentProposalCreated',
+        },
         cooldown_minutes: 5,
         enabled: true,
     },
@@ -644,25 +930,25 @@ async function seedTriggers() {
 
 const relationships = [
     // Chora relationships
-    { agent_a: 'chora', agent_b: 'mux',     affinity: 0.70 },
-    { agent_a: 'chora', agent_b: 'praxis',  affinity: 0.85 },
-    { agent_a: 'chora', agent_b: 'primus',  affinity: 0.60 },
-    { agent_a: 'chora', agent_b: 'subrosa', affinity: 0.80 },
-    { agent_a: 'chora', agent_b: 'thaum',   affinity: 0.70 },
+    { agent_a: 'chora', agent_b: 'mux', affinity: 0.7 },
+    { agent_a: 'chora', agent_b: 'praxis', affinity: 0.85 },
+    { agent_a: 'chora', agent_b: 'primus', affinity: 0.6 },
+    { agent_a: 'chora', agent_b: 'subrosa', affinity: 0.8 },
+    { agent_a: 'chora', agent_b: 'thaum', affinity: 0.7 },
     // Mux relationships
-    { agent_a: 'mux', agent_b: 'praxis',  affinity: 0.80 },
-    { agent_a: 'mux', agent_b: 'primus',  affinity: 0.50 },
+    { agent_a: 'mux', agent_b: 'praxis', affinity: 0.8 },
+    { agent_a: 'mux', agent_b: 'primus', affinity: 0.5 },
     { agent_a: 'mux', agent_b: 'subrosa', affinity: 0.75 },
-    { agent_a: 'mux', agent_b: 'thaum',   affinity: 0.65 },
+    { agent_a: 'mux', agent_b: 'thaum', affinity: 0.65 },
     // Praxis relationships
-    { agent_a: 'praxis', agent_b: 'primus',  affinity: 0.65 },
-    { agent_a: 'praxis', agent_b: 'subrosa', affinity: 0.90 },
-    { agent_a: 'praxis', agent_b: 'thaum',   affinity: 0.75 },
+    { agent_a: 'praxis', agent_b: 'primus', affinity: 0.65 },
+    { agent_a: 'praxis', agent_b: 'subrosa', affinity: 0.9 },
+    { agent_a: 'praxis', agent_b: 'thaum', affinity: 0.75 },
     // Primus relationships
     { agent_a: 'primus', agent_b: 'subrosa', affinity: 0.55 },
-    { agent_a: 'primus', agent_b: 'thaum',   affinity: 0.45 },
+    { agent_a: 'primus', agent_b: 'thaum', affinity: 0.45 },
     // Subrosa relationships
-    { agent_a: 'subrosa', agent_b: 'thaum',  affinity: 0.60 },
+    { agent_a: 'subrosa', agent_b: 'thaum', affinity: 0.6 },
 ];
 
 async function seedRelationships() {
@@ -680,7 +966,10 @@ async function seedRelationships() {
             ON CONFLICT (agent_a, agent_b) DO UPDATE SET
                 affinity = EXCLUDED.affinity
         `;
-        log.info('  relationship', { pair: `${rel.agent_a} <> ${rel.agent_b}`, affinity: rel.affinity });
+        log.info('  relationship', {
+            pair: `${rel.agent_a} <> ${rel.agent_b}`,
+            affinity: rel.affinity,
+        });
     }
     log.info('Relationships done', { count: relationships.length });
 }
@@ -690,21 +979,77 @@ async function seedRelationships() {
 // ═════════════════════════════════════════════
 
 const rssFeeds = [
-    { name: 'MIT Technology Review', url: 'https://www.technologyreview.com/feed/', category: 'tech' },
-    { name: 'Organizing Upgrade', url: 'https://organizingupgrade.com/feed/', category: 'organizing' },
-    { name: 'DropSite News', url: 'https://www.dropsitenews.com/feed', category: 'politics' },
-    { name: 'Ken Klippenstein', url: 'https://www.kenklippenstein.com/feed', category: 'politics' },
-    { name: '404 Media', url: 'https://www.404media.co/rss/', category: 'tech' },
-    { name: 'Schneier on Security', url: 'https://www.schneier.com/feed/atom/', category: 'security' },
-    { name: 'BleepingComputer', url: 'https://www.bleepingcomputer.com/feed/', category: 'security' },
-    { name: 'GitHub Blog', url: 'https://github.blog/feed/', category: 'open-source' },
-    { name: 'Linux Foundation', url: 'https://www.linuxfoundation.org/blog/rss.xml', category: 'open-source' },
-    { name: 'Hacker News Best', url: 'https://hnrss.org/best', category: 'tech' },
-    { name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index', category: 'tech' },
+    {
+        name: 'MIT Technology Review',
+        url: 'https://www.technologyreview.com/feed/',
+        category: 'tech',
+    },
+    {
+        name: 'Organizing Upgrade',
+        url: 'https://organizingupgrade.com/feed/',
+        category: 'organizing',
+    },
+    {
+        name: 'DropSite News',
+        url: 'https://www.dropsitenews.com/feed',
+        category: 'politics',
+    },
+    {
+        name: 'Ken Klippenstein',
+        url: 'https://www.kenklippenstein.com/feed',
+        category: 'politics',
+    },
+    {
+        name: '404 Media',
+        url: 'https://www.404media.co/rss/',
+        category: 'tech',
+    },
+    {
+        name: 'Schneier on Security',
+        url: 'https://www.schneier.com/feed/atom/',
+        category: 'security',
+    },
+    {
+        name: 'BleepingComputer',
+        url: 'https://www.bleepingcomputer.com/feed/',
+        category: 'security',
+    },
+    {
+        name: 'GitHub Blog',
+        url: 'https://github.blog/feed/',
+        category: 'open-source',
+    },
+    {
+        name: 'Linux Foundation',
+        url: 'https://www.linuxfoundation.org/blog/rss.xml',
+        category: 'open-source',
+    },
+    {
+        name: 'Hacker News Best',
+        url: 'https://hnrss.org/best',
+        category: 'tech',
+    },
+    {
+        name: 'Ars Technica',
+        url: 'https://feeds.arstechnica.com/arstechnica/index',
+        category: 'tech',
+    },
     { name: 'Wired', url: 'https://www.wired.com/feed/rss', category: 'tech' },
-    { name: 'The Register', url: 'https://www.theregister.com/headlines.atom', category: 'tech' },
-    { name: "It's FOSS", url: 'https://itsfoss.com/rss/', category: 'open-source' },
-    { name: 'SCMP', url: 'https://www.scmp.com/rss/91/feed', category: 'world' },
+    {
+        name: 'The Register',
+        url: 'https://www.theregister.com/headlines.atom',
+        category: 'tech',
+    },
+    {
+        name: "It's FOSS",
+        url: 'https://itsfoss.com/rss/',
+        category: 'open-source',
+    },
+    {
+        name: 'SCMP',
+        url: 'https://www.scmp.com/rss/91/feed',
+        category: 'world',
+    },
 ];
 
 async function seedRssFeeds() {
@@ -718,7 +1063,10 @@ async function seedRssFeeds() {
             RETURNING id
         `;
         if (result.length > 0) inserted++;
-        log.info('  feed', { name: feed.name, status: result.length > 0 ? 'added' : 'exists' });
+        log.info('  feed', {
+            name: feed.name,
+            status: result.length > 0 ? 'added' : 'exists',
+        });
     }
     log.info('RSS feeds done', { inserted, total: rssFeeds.length });
 }
@@ -730,22 +1078,102 @@ async function seedRssFeeds() {
 const discordGuildId = process.env.DISCORD_GUILD_ID || '1471207885936529593';
 
 const discordChannels = [
-    { name: 'roundtable',    discord_channel_id: process.env.DISCORD_CHANNEL_ROUNDTABLE    || '1473890683998830625', category: 'operations' },
-    { name: 'brainstorm',    discord_channel_id: process.env.DISCORD_CHANNEL_BRAINSTORM    || '1473889682776653926', category: 'operations' },
-    { name: 'drafts',        discord_channel_id: process.env.DISCORD_CHANNEL_DRAFTS        || '1473890272156061830', category: 'content' },
-    { name: 'missions',      discord_channel_id: process.env.DISCORD_CHANNEL_MISSIONS      || '1473890599756366037', category: 'operations' },
-    { name: 'system-log',    discord_channel_id: process.env.DISCORD_CHANNEL_SYSTEM_LOG    || '1473890400371474522', category: 'system' },
-    { name: 'research',      discord_channel_id: process.env.DISCORD_CHANNEL_RESEARCH      || '1473890155734503600', category: 'intel' },
-    { name: 'insights',      discord_channel_id: process.env.DISCORD_CHANNEL_INSIGHTS      || '1473890009818988614', category: 'intel' },
-    { name: 'proposals',     discord_channel_id: process.env.DISCORD_CHANNEL_PROPOSALS     || '1473889805753389096', category: 'governance' },
-    { name: 'project',       discord_channel_id: process.env.DISCORD_CHANNEL_PROJECT       || '1473889603999105096', category: 'operations' },
-    { name: 'watercooler',   discord_channel_id: process.env.DISCORD_CHANNEL_WATERCOOLER   || '1473889305813323836', category: 'social' },
-    { name: 'daily-digest',  discord_channel_id: process.env.DISCORD_CHANNEL_DAILY_DIGEST  || '1473580926544908359', category: 'content' },
-    { name: 'news-digest',   discord_channel_id: process.env.DISCORD_CHANNEL_NEWS_DIGEST   || '1474190325542027456', category: 'content' },
-    { name: 'dreams',        discord_channel_id: process.env.DISCORD_CHANNEL_DREAMS        || '1474191303481884808', category: 'creative' },
-    { name: 'sanctum-chat',  discord_channel_id: process.env.DISCORD_CHANNEL_SANCTUM_CHAT  || '1474191712514605251', category: 'social' },
-    { name: 'newsletter',    discord_channel_id: process.env.DISCORD_CHANNEL_NEWSLETTER    || '1474230135707140117', category: 'content' },
-    { name: 'voice-general', discord_channel_id: process.env.DISCORD_CHANNEL_VOICE_GENERAL || '1471207887970898125', category: 'voice' },
+    {
+        name: 'roundtable',
+        discord_channel_id:
+            process.env.DISCORD_CHANNEL_ROUNDTABLE || '1473890683998830625',
+        category: 'operations',
+    },
+    {
+        name: 'brainstorm',
+        discord_channel_id:
+            process.env.DISCORD_CHANNEL_BRAINSTORM || '1473889682776653926',
+        category: 'operations',
+    },
+    {
+        name: 'drafts',
+        discord_channel_id:
+            process.env.DISCORD_CHANNEL_DRAFTS || '1473890272156061830',
+        category: 'content',
+    },
+    {
+        name: 'missions',
+        discord_channel_id:
+            process.env.DISCORD_CHANNEL_MISSIONS || '1473890599756366037',
+        category: 'operations',
+    },
+    {
+        name: 'system-log',
+        discord_channel_id:
+            process.env.DISCORD_CHANNEL_SYSTEM_LOG || '1473890400371474522',
+        category: 'system',
+    },
+    {
+        name: 'research',
+        discord_channel_id:
+            process.env.DISCORD_CHANNEL_RESEARCH || '1473890155734503600',
+        category: 'intel',
+    },
+    {
+        name: 'insights',
+        discord_channel_id:
+            process.env.DISCORD_CHANNEL_INSIGHTS || '1473890009818988614',
+        category: 'intel',
+    },
+    {
+        name: 'proposals',
+        discord_channel_id:
+            process.env.DISCORD_CHANNEL_PROPOSALS || '1473889805753389096',
+        category: 'governance',
+    },
+    {
+        name: 'project',
+        discord_channel_id:
+            process.env.DISCORD_CHANNEL_PROJECT || '1473889603999105096',
+        category: 'operations',
+    },
+    {
+        name: 'watercooler',
+        discord_channel_id:
+            process.env.DISCORD_CHANNEL_WATERCOOLER || '1473889305813323836',
+        category: 'social',
+    },
+    {
+        name: 'daily-digest',
+        discord_channel_id:
+            process.env.DISCORD_CHANNEL_DAILY_DIGEST || '1473580926544908359',
+        category: 'content',
+    },
+    {
+        name: 'news-digest',
+        discord_channel_id:
+            process.env.DISCORD_CHANNEL_NEWS_DIGEST || '1474190325542027456',
+        category: 'content',
+    },
+    {
+        name: 'dreams',
+        discord_channel_id:
+            process.env.DISCORD_CHANNEL_DREAMS || '1474191303481884808',
+        category: 'creative',
+    },
+    {
+        name: 'sanctum-chat',
+        discord_channel_id:
+            process.env.DISCORD_CHANNEL_SANCTUM_CHAT || '1474191712514605251',
+        category: 'social',
+    },
+    {
+        name: 'newsletter',
+        discord_channel_id:
+            process.env.DISCORD_CHANNEL_NEWSLETTER || '1474230135707140117',
+        category: 'content',
+    },
+    {
+        name: 'voice-general',
+        discord_channel_id:
+            process.env.DISCORD_CHANNEL_VOICE_GENERAL || '1471207887970898125',
+        category: 'voice',
+    },
 ];
 
 async function seedDiscordChannels() {
@@ -764,6 +1192,62 @@ async function seedDiscordChannels() {
 }
 
 // ═════════════════════════════════════════════
+// 7. ADMIN USER
+// ═════════════════════════════════════════════
+
+async function seedAdmin() {
+    const email = process.env.ADMIN_EMAIL;
+    const username = process.env.ADMIN_USERNAME;
+    const password = process.env.ADMIN_PASSWORD;
+
+    if (!email || !username || !password) {
+        log.info(
+            'Skipping admin seed (ADMIN_EMAIL, ADMIN_USERNAME, ADMIN_PASSWORD not all set)',
+        );
+        return;
+    }
+
+    if (password.length < 8) {
+        log.warn(
+            'ADMIN_PASSWORD must be at least 8 characters, skipping admin seed',
+        );
+        return;
+    }
+
+    log.info('Seeding admin user', { email, username });
+
+    const passwordHash = await argon2.hash(password, {
+        type: argon2.argon2id,
+        memoryCost: 65536,
+        timeCost: 3,
+        parallelism: 1,
+    });
+
+    await sql.begin(async tx => {
+        const [user] = await tx`
+            INSERT INTO users (email, username, role)
+            VALUES (${email.toLowerCase()}, ${username.toLowerCase()}, 'admin')
+            ON CONFLICT (email) DO UPDATE SET role = 'admin', updated_at = NOW()
+            RETURNING id, email, username, role
+        `;
+
+        await tx`
+            INSERT INTO user_credentials (user_id, password_hash)
+            VALUES (${user.id}, ${passwordHash})
+            ON CONFLICT (user_id) DO UPDATE SET password_hash = ${passwordHash}, updated_at = NOW()
+        `;
+
+        log.info('  admin', {
+            id: user.id,
+            email: user.email,
+            username: user.username,
+        });
+    });
+
+    log.info('Admin done');
+}
+
+// ═════════════════════════════════════════════
 // RUN
 // ═════════════════════════════════════════════
 
@@ -771,12 +1255,13 @@ async function main() {
     log.info('Starting seed', { sections });
 
     try {
-        if (sections.includes('agents'))           await seedAgents();
-        if (sections.includes('policy'))           await seedPolicies();
-        if (sections.includes('triggers'))         await seedTriggers();
-        if (sections.includes('relationships'))    await seedRelationships();
-        if (sections.includes('rss-feeds'))        await seedRssFeeds();
+        if (sections.includes('agents')) await seedAgents();
+        if (sections.includes('policy')) await seedPolicies();
+        if (sections.includes('triggers')) await seedTriggers();
+        if (sections.includes('relationships')) await seedRelationships();
+        if (sections.includes('rss-feeds')) await seedRssFeeds();
         if (sections.includes('discord-channels')) await seedDiscordChannels();
+        if (sections.includes('admin')) await seedAdmin();
 
         log.info('Seed complete');
     } catch (err) {

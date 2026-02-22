@@ -102,10 +102,12 @@ function getClient(): OpenRouter {
 export { getClient as getOpenRouterClient };
 
 // ─── Ollama (cloud via ollama.com + local via Tailscale) ───
+// Set OLLAMA_ENABLED=false to disable all Ollama paths (defaults to true when credentials exist)
 
-const OLLAMA_LOCAL_URL = process.env.OLLAMA_BASE_URL ?? '';
+const OLLAMA_ENABLED = process.env.OLLAMA_ENABLED !== 'false';
+const OLLAMA_LOCAL_URL = OLLAMA_ENABLED ? (process.env.OLLAMA_BASE_URL ?? '') : '';
 const OLLAMA_CLOUD_URL = 'https://ollama.com';
-const OLLAMA_API_KEY = process.env.OLLAMA_API_KEY ?? '';
+const OLLAMA_API_KEY = OLLAMA_ENABLED ? (process.env.OLLAMA_API_KEY ?? '') : '';
 const OLLAMA_TIMEOUT_MS = 60_000;
 
 interface OllamaModelSpec {
