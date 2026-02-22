@@ -2,6 +2,7 @@
 
 .PHONY: dev build start lint typecheck clean \
         seed seed-agents seed-policy seed-triggers seed-relationships seed-rss seed-discord \
+        purge-discord \
         verify up down restart status logs logs-app logs-worker logs-db \
         heartbeat db-migrate db-shell nuke fresh init-workspace \
         engage disengage help
@@ -41,8 +42,10 @@ down: ## Stop all containers
 restart: ## Restart all containers
 	docker compose restart
 
-rebuild: ## Rebuild images and recreate containers
-	docker compose up -d --build --force-recreate --remove-orphans
+rebuild: ## Rebuild images (no cache) and recreate containers
+	docker compose build --no-cache
+	docker compose up -d --force-recreate --remove-orphans
+	docker image prune -f
 
 status: ## Show status of all containers
 	docker compose ps
@@ -107,6 +110,9 @@ seed-rss: ## Seed RSS feeds only
 seed-discord: ## Seed Discord channels only
 	DATABASE_URL="$(DB_URL)" node scripts/go-live/seed.mjs --only discord-channels
 
+purge-discord: ## Purge all messages from Discord channels
+	DATABASE_URL="$(DB_URL)" node scripts/go-live/purge-discord.mjs
+
 # ──────────────────────────────────────────
 # Fresh Start
 # ──────────────────────────────────────────
@@ -115,13 +121,16 @@ nuke: ## Wipe everything: containers, volumes, images — full reset
 	docker compose down -v --rmi local --remove-orphans
 	@echo "Nuked. All containers, volumes, and local images removed."
 
-fresh: ## Full fresh start: nuke → build → migrate → seed → init workspace
+fresh: ## Full fresh start: nuke → clean build → migrate → seed → init workspace
 	$(MAKE) nuke
-	docker compose up -d --build --remove-orphans
+	docker compose build --no-cache
+	docker compose up -d --remove-orphans
+	docker image prune -f
 	@echo "Waiting for Postgres to be healthy..."
 	@until docker compose exec -T postgres pg_isready -U subcult -d subcult_ops >/dev/null 2>&1; do sleep 1; done
 	$(MAKE) db-migrate
 	$(MAKE) seed
+	$(MAKE) purge-discord
 	docker compose exec toolbox /usr/local/bin/init-workspace.sh
 	@echo "Fresh start complete. Run 'make heartbeat' to kick things off."
 

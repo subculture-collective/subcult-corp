@@ -47,6 +47,8 @@ export interface ProposalInput {
 export interface ProposedStep {
     kind: StepKind;
     payload?: Record<string, unknown>;
+    assigned_agent?: string;
+    output_path?: string;
 }
 
 export interface Proposal {
@@ -113,7 +115,10 @@ export type StepKind =
     | 'escalate_risk'
     | 'convene_roundtable'
     | 'propose_workflow'
-    | 'memory_archaeology';
+    | 'memory_archaeology'
+    | 'draft_product_spec'
+    | 'update_directive'
+    | 'create_pull_request';
 
 export type StepStatus =
     | 'queued'

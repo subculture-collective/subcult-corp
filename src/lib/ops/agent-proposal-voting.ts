@@ -388,11 +388,16 @@ export async function collectDebateVotes(
             } else {
                 // Fallback: look for keywords in the raw response
                 const upper = response.toUpperCase();
-                if (upper.includes('APPROVE') && !upper.includes('NOT APPROVE')) {
+                if (upper.includes('APPROVE') && !upper.includes('NOT APPROVE') && !upper.includes("DON'T APPROVE")) {
                     await submitVote(proposalId, agentId, 'approve', response.slice(0, 200));
-                } else {
-                    // Default to reject if we can't parse a clear approve
+                } else if (upper.includes('REJECT')) {
                     await submitVote(proposalId, agentId, 'reject', response.slice(0, 200));
+                } else {
+                    // Truly ambiguous — skip this agent's vote rather than biasing toward reject
+                    log.warn('Could not determine vote from response, skipping agent', {
+                        agentId, proposalId, response: response.slice(0, 200),
+                    });
+                    continue;
                 }
                 log.warn('Vote response was not valid JSON, used fallback parsing', {
                     agentId, proposalId, response: response.slice(0, 200),

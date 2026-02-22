@@ -34,6 +34,9 @@ const DIM = '\x1b[2m';
 
 // ── Configuration ───────────────────────────────────────────
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const USE_JSON =
+    process.env.LOG_FORMAT === 'json' ||
+    (process.env.LOG_FORMAT !== 'pretty' && IS_PRODUCTION);
 const LOG_LEVEL = (process.env.LOG_LEVEL ??
     (IS_PRODUCTION ? 'info' : 'debug')) as LogLevel;
 const MIN_LEVEL = LEVEL_VALUES[LOG_LEVEL] ?? LEVEL_VALUES.info;
@@ -118,21 +121,7 @@ function writePretty(
     const time = new Date().toISOString().slice(11, 23); // HH:mm:ss.SSS
     const tag = level.toUpperCase().padEnd(5);
 
-    // Merge bindings context for display
-    const bindingStr =
-        Object.keys(bindings).length > 0 ?
-            ` ${DIM}${formatBindings(bindings)}${RESET}`
-        :   '';
-
-    let line = `${DIM}${time}${RESET} ${color}${tag}${RESET}${bindingStr} ${msg}`;
-
-    // Append extra context
-    if (ctx && Object.keys(ctx).length > 0) {
-        const ctxStr = formatContext(ctx);
-        if (ctxStr) {
-            line += ` ${DIM}${ctxStr}${RESET}`;
-        }
-    }
+    let line = `${DIM}${time}${RESET} ${color}${tag}${RESET} ${msg}`;
 
     // Inject request ID if available
     const reqCtx = requestContext.get();
@@ -140,13 +129,14 @@ function writePretty(
         line += ` ${DIM}[${reqCtx.requestId.slice(0, 8)}]${RESET}`;
     }
 
-    process.stderr.write(line + '\n');
-}
+    // Append bindings + context as compact key=value pairs on the same line
+    const merged = { ...bindings, ...(ctx ?? {}) };
+    const pairs = formatContext(merged);
+    if (pairs) {
+        line += ` ${DIM}${pairs}${RESET}`;
+    }
 
-function formatBindings(bindings: LogContext): string {
-    return Object.entries(bindings)
-        .map(([k, v]) => `${k}=${String(v)}`)
-        .join(' ');
+    process.stderr.write(line + '\n');
 }
 
 function formatContext(ctx: LogContext): string {
@@ -176,7 +166,7 @@ function formatContext(ctx: LogContext): string {
 // ── Logger factory ──────────────────────────────────────────
 
 function createLoggerInternal(bindings: LogContext): Logger {
-    const write = IS_PRODUCTION ? writeJson : writePretty;
+    const write = USE_JSON ? writeJson : writePretty;
 
     function log(level: LogLevel, msg: string, ctx?: LogContext): void {
         if (LEVEL_VALUES[level] < MIN_LEVEL) return;

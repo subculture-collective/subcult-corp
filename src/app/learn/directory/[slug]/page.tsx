@@ -33,6 +33,7 @@ export async function generateMetadata(props: {
 // Map directory slugs to matching glossary slugs
 const DIRECTORY_TO_GLOSSARY: Record<string, string> = {
     openclaw: 'openclaw',
+    clawhub: 'clawhub',
     openrouter: 'openrouter',
     ollama: 'ollama',
     'anthropic-mcp': 'mcp-protocol',

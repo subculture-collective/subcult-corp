@@ -8,6 +8,9 @@ var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __esm = (fn, res) => function __init() {
   return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
 };
+var __commonJS = (cb, mod) => function __require() {
+  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+};
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
@@ -28,6 +31,449 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
+
+// node_modules/dotenv/package.json
+var require_package = __commonJS({
+  "node_modules/dotenv/package.json"(exports2, module2) {
+    module2.exports = {
+      name: "dotenv",
+      version: "17.2.4",
+      description: "Loads environment variables from .env file",
+      main: "lib/main.js",
+      types: "lib/main.d.ts",
+      exports: {
+        ".": {
+          types: "./lib/main.d.ts",
+          require: "./lib/main.js",
+          default: "./lib/main.js"
+        },
+        "./config": "./config.js",
+        "./config.js": "./config.js",
+        "./lib/env-options": "./lib/env-options.js",
+        "./lib/env-options.js": "./lib/env-options.js",
+        "./lib/cli-options": "./lib/cli-options.js",
+        "./lib/cli-options.js": "./lib/cli-options.js",
+        "./package.json": "./package.json"
+      },
+      scripts: {
+        "dts-check": "tsc --project tests/types/tsconfig.json",
+        lint: "standard",
+        pretest: "npm run lint && npm run dts-check",
+        test: "tap run tests/**/*.js --allow-empty-coverage --disable-coverage --timeout=60000",
+        "test:coverage": "tap run tests/**/*.js --show-full-coverage --timeout=60000 --coverage-report=text --coverage-report=lcov",
+        prerelease: "npm test",
+        release: "standard-version"
+      },
+      repository: {
+        type: "git",
+        url: "git://github.com/motdotla/dotenv.git"
+      },
+      homepage: "https://github.com/motdotla/dotenv#readme",
+      funding: "https://dotenvx.com",
+      keywords: [
+        "dotenv",
+        "env",
+        ".env",
+        "environment",
+        "variables",
+        "config",
+        "settings"
+      ],
+      readmeFilename: "README.md",
+      license: "BSD-2-Clause",
+      devDependencies: {
+        "@types/node": "^18.11.3",
+        decache: "^4.6.2",
+        sinon: "^14.0.1",
+        standard: "^17.0.0",
+        "standard-version": "^9.5.0",
+        tap: "^19.2.0",
+        typescript: "^4.8.4"
+      },
+      engines: {
+        node: ">=12"
+      },
+      browser: {
+        fs: false
+      }
+    };
+  }
+});
+
+// node_modules/dotenv/lib/main.js
+var require_main = __commonJS({
+  "node_modules/dotenv/lib/main.js"(exports2, module2) {
+    var fs2 = require("fs");
+    var path3 = require("path");
+    var os = require("os");
+    var crypto3 = require("crypto");
+    var packageJson = require_package();
+    var version2 = packageJson.version;
+    var TIPS = [
+      "\u{1F510} encrypt with Dotenvx: https://dotenvx.com",
+      "\u{1F510} prevent committing .env to code: https://dotenvx.com/precommit",
+      "\u{1F510} prevent building .env in docker: https://dotenvx.com/prebuild",
+      "\u{1F4E1} add observability to secrets: https://dotenvx.com/ops",
+      "\u{1F465} sync secrets across teammates & machines: https://dotenvx.com/ops",
+      "\u{1F5C2}\uFE0F backup and recover secrets: https://dotenvx.com/ops",
+      "\u2705 audit secrets and track compliance: https://dotenvx.com/ops",
+      "\u{1F504} add secrets lifecycle management: https://dotenvx.com/ops",
+      "\u{1F511} add access controls to secrets: https://dotenvx.com/ops",
+      "\u{1F6E0}\uFE0F  run anywhere with `dotenvx run -- yourcommand`",
+      "\u2699\uFE0F  specify custom .env file path with { path: '/custom/path/.env' }",
+      "\u2699\uFE0F  enable debug logging with { debug: true }",
+      "\u2699\uFE0F  override existing env vars with { override: true }",
+      "\u2699\uFE0F  suppress all logs with { quiet: true }",
+      "\u2699\uFE0F  write to custom object with { processEnv: myObject }",
+      "\u2699\uFE0F  load multiple .env files with { path: ['.env.local', '.env'] }"
+    ];
+    function _getRandomTip() {
+      return TIPS[Math.floor(Math.random() * TIPS.length)];
+    }
+    function parseBoolean(value) {
+      if (typeof value === "string") {
+        return !["false", "0", "no", "off", ""].includes(value.toLowerCase());
+      }
+      return Boolean(value);
+    }
+    function supportsAnsi() {
+      return process.stdout.isTTY;
+    }
+    function dim(text) {
+      return supportsAnsi() ? `\x1B[2m${text}\x1B[0m` : text;
+    }
+    var LINE = /(?:^|^)\s*(?:export\s+)?([\w.-]+)(?:\s*=\s*?|:\s+?)(\s*'(?:\\'|[^'])*'|\s*"(?:\\"|[^"])*"|\s*`(?:\\`|[^`])*`|[^#\r\n]+)?\s*(?:#.*)?(?:$|$)/mg;
+    function parse3(src) {
+      const obj = {};
+      let lines = src.toString();
+      lines = lines.replace(/\r\n?/mg, "\n");
+      let match;
+      while ((match = LINE.exec(lines)) != null) {
+        const key = match[1];
+        let value = match[2] || "";
+        value = value.trim();
+        const maybeQuote = value[0];
+        value = value.replace(/^(['"`])([\s\S]*)\1$/mg, "$2");
+        if (maybeQuote === '"') {
+          value = value.replace(/\\n/g, "\n");
+          value = value.replace(/\\r/g, "\r");
+        }
+        obj[key] = value;
+      }
+      return obj;
+    }
+    function _parseVault(options) {
+      options = options || {};
+      const vaultPath = _vaultPath(options);
+      options.path = vaultPath;
+      const result = DotenvModule.configDotenv(options);
+      if (!result.parsed) {
+        const err = new Error(`MISSING_DATA: Cannot parse ${vaultPath} for an unknown reason`);
+        err.code = "MISSING_DATA";
+        throw err;
+      }
+      const keys = _dotenvKey(options).split(",");
+      const length = keys.length;
+      let decrypted;
+      for (let i = 0; i < length; i++) {
+        try {
+          const key = keys[i].trim();
+          const attrs = _instructions(result, key);
+          decrypted = DotenvModule.decrypt(attrs.ciphertext, attrs.key);
+          break;
+        } catch (error48) {
+          if (i + 1 >= length) {
+            throw error48;
+          }
+        }
+      }
+      return DotenvModule.parse(decrypted);
+    }
+    function _warn(message) {
+      console.error(`[dotenv@${version2}][WARN] ${message}`);
+    }
+    function _debug(message) {
+      console.log(`[dotenv@${version2}][DEBUG] ${message}`);
+    }
+    function _log(message) {
+      console.log(`[dotenv@${version2}] ${message}`);
+    }
+    function _dotenvKey(options) {
+      if (options && options.DOTENV_KEY && options.DOTENV_KEY.length > 0) {
+        return options.DOTENV_KEY;
+      }
+      if (process.env.DOTENV_KEY && process.env.DOTENV_KEY.length > 0) {
+        return process.env.DOTENV_KEY;
+      }
+      return "";
+    }
+    function _instructions(result, dotenvKey) {
+      let uri;
+      try {
+        uri = new URL(dotenvKey);
+      } catch (error48) {
+        if (error48.code === "ERR_INVALID_URL") {
+          const err = new Error("INVALID_DOTENV_KEY: Wrong format. Must be in valid uri format like dotenv://:key_1234@dotenvx.com/vault/.env.vault?environment=development");
+          err.code = "INVALID_DOTENV_KEY";
+          throw err;
+        }
+        throw error48;
+      }
+      const key = uri.password;
+      if (!key) {
+        const err = new Error("INVALID_DOTENV_KEY: Missing key part");
+        err.code = "INVALID_DOTENV_KEY";
+        throw err;
+      }
+      const environment = uri.searchParams.get("environment");
+      if (!environment) {
+        const err = new Error("INVALID_DOTENV_KEY: Missing environment part");
+        err.code = "INVALID_DOTENV_KEY";
+        throw err;
+      }
+      const environmentKey = `DOTENV_VAULT_${environment.toUpperCase()}`;
+      const ciphertext = result.parsed[environmentKey];
+      if (!ciphertext) {
+        const err = new Error(`NOT_FOUND_DOTENV_ENVIRONMENT: Cannot locate environment ${environmentKey} in your .env.vault file.`);
+        err.code = "NOT_FOUND_DOTENV_ENVIRONMENT";
+        throw err;
+      }
+      return { ciphertext, key };
+    }
+    function _vaultPath(options) {
+      let possibleVaultPath = null;
+      if (options && options.path && options.path.length > 0) {
+        if (Array.isArray(options.path)) {
+          for (const filepath of options.path) {
+            if (fs2.existsSync(filepath)) {
+              possibleVaultPath = filepath.endsWith(".vault") ? filepath : `${filepath}.vault`;
+            }
+          }
+        } else {
+          possibleVaultPath = options.path.endsWith(".vault") ? options.path : `${options.path}.vault`;
+        }
+      } else {
+        possibleVaultPath = path3.resolve(process.cwd(), ".env.vault");
+      }
+      if (fs2.existsSync(possibleVaultPath)) {
+        return possibleVaultPath;
+      }
+      return null;
+    }
+    function _resolveHome(envPath) {
+      return envPath[0] === "~" ? path3.join(os.homedir(), envPath.slice(1)) : envPath;
+    }
+    function _configVault(options) {
+      const debug = parseBoolean(process.env.DOTENV_CONFIG_DEBUG || options && options.debug);
+      const quiet = parseBoolean(process.env.DOTENV_CONFIG_QUIET || options && options.quiet);
+      if (debug || !quiet) {
+        _log("Loading env from encrypted .env.vault");
+      }
+      const parsed = DotenvModule._parseVault(options);
+      let processEnv = process.env;
+      if (options && options.processEnv != null) {
+        processEnv = options.processEnv;
+      }
+      DotenvModule.populate(processEnv, parsed, options);
+      return { parsed };
+    }
+    function configDotenv(options) {
+      const dotenvPath = path3.resolve(process.cwd(), ".env");
+      let encoding = "utf8";
+      let processEnv = process.env;
+      if (options && options.processEnv != null) {
+        processEnv = options.processEnv;
+      }
+      let debug = parseBoolean(processEnv.DOTENV_CONFIG_DEBUG || options && options.debug);
+      let quiet = parseBoolean(processEnv.DOTENV_CONFIG_QUIET || options && options.quiet);
+      if (options && options.encoding) {
+        encoding = options.encoding;
+      } else {
+        if (debug) {
+          _debug("No encoding is specified. UTF-8 is used by default");
+        }
+      }
+      let optionPaths = [dotenvPath];
+      if (options && options.path) {
+        if (!Array.isArray(options.path)) {
+          optionPaths = [_resolveHome(options.path)];
+        } else {
+          optionPaths = [];
+          for (const filepath of options.path) {
+            optionPaths.push(_resolveHome(filepath));
+          }
+        }
+      }
+      let lastError;
+      const parsedAll = {};
+      for (const path4 of optionPaths) {
+        try {
+          const parsed = DotenvModule.parse(fs2.readFileSync(path4, { encoding }));
+          DotenvModule.populate(parsedAll, parsed, options);
+        } catch (e) {
+          if (debug) {
+            _debug(`Failed to load ${path4} ${e.message}`);
+          }
+          lastError = e;
+        }
+      }
+      const populated = DotenvModule.populate(processEnv, parsedAll, options);
+      debug = parseBoolean(processEnv.DOTENV_CONFIG_DEBUG || debug);
+      quiet = parseBoolean(processEnv.DOTENV_CONFIG_QUIET || quiet);
+      if (debug || !quiet) {
+        const keysCount = Object.keys(populated).length;
+        const shortPaths = [];
+        for (const filePath of optionPaths) {
+          try {
+            const relative = path3.relative(process.cwd(), filePath);
+            shortPaths.push(relative);
+          } catch (e) {
+            if (debug) {
+              _debug(`Failed to load ${filePath} ${e.message}`);
+            }
+            lastError = e;
+          }
+        }
+        _log(`injecting env (${keysCount}) from ${shortPaths.join(",")} ${dim(`-- tip: ${_getRandomTip()}`)}`);
+      }
+      if (lastError) {
+        return { parsed: parsedAll, error: lastError };
+      } else {
+        return { parsed: parsedAll };
+      }
+    }
+    function config2(options) {
+      if (_dotenvKey(options).length === 0) {
+        return DotenvModule.configDotenv(options);
+      }
+      const vaultPath = _vaultPath(options);
+      if (!vaultPath) {
+        _warn(`You set DOTENV_KEY but you are missing a .env.vault file at ${vaultPath}. Did you forget to build it?`);
+        return DotenvModule.configDotenv(options);
+      }
+      return DotenvModule._configVault(options);
+    }
+    function decrypt(encrypted, keyStr) {
+      const key = Buffer.from(keyStr.slice(-64), "hex");
+      let ciphertext = Buffer.from(encrypted, "base64");
+      const nonce = ciphertext.subarray(0, 12);
+      const authTag = ciphertext.subarray(-16);
+      ciphertext = ciphertext.subarray(12, -16);
+      try {
+        const aesgcm = crypto3.createDecipheriv("aes-256-gcm", key, nonce);
+        aesgcm.setAuthTag(authTag);
+        return `${aesgcm.update(ciphertext)}${aesgcm.final()}`;
+      } catch (error48) {
+        const isRange = error48 instanceof RangeError;
+        const invalidKeyLength = error48.message === "Invalid key length";
+        const decryptionFailed = error48.message === "Unsupported state or unable to authenticate data";
+        if (isRange || invalidKeyLength) {
+          const err = new Error("INVALID_DOTENV_KEY: It must be 64 characters long (or more)");
+          err.code = "INVALID_DOTENV_KEY";
+          throw err;
+        } else if (decryptionFailed) {
+          const err = new Error("DECRYPTION_FAILED: Please check your DOTENV_KEY");
+          err.code = "DECRYPTION_FAILED";
+          throw err;
+        } else {
+          throw error48;
+        }
+      }
+    }
+    function populate(processEnv, parsed, options = {}) {
+      const debug = Boolean(options && options.debug);
+      const override = Boolean(options && options.override);
+      const populated = {};
+      if (typeof parsed !== "object") {
+        const err = new Error("OBJECT_REQUIRED: Please check the processEnv argument being passed to populate");
+        err.code = "OBJECT_REQUIRED";
+        throw err;
+      }
+      for (const key of Object.keys(parsed)) {
+        if (Object.prototype.hasOwnProperty.call(processEnv, key)) {
+          if (override === true) {
+            processEnv[key] = parsed[key];
+            populated[key] = parsed[key];
+          }
+          if (debug) {
+            if (override === true) {
+              _debug(`"${key}" is already defined and WAS overwritten`);
+            } else {
+              _debug(`"${key}" is already defined and was NOT overwritten`);
+            }
+          }
+        } else {
+          processEnv[key] = parsed[key];
+          populated[key] = parsed[key];
+        }
+      }
+      return populated;
+    }
+    var DotenvModule = {
+      configDotenv,
+      _configVault,
+      _parseVault,
+      config: config2,
+      decrypt,
+      parse: parse3,
+      populate
+    };
+    module2.exports.configDotenv = DotenvModule.configDotenv;
+    module2.exports._configVault = DotenvModule._configVault;
+    module2.exports._parseVault = DotenvModule._parseVault;
+    module2.exports.config = DotenvModule.config;
+    module2.exports.decrypt = DotenvModule.decrypt;
+    module2.exports.parse = DotenvModule.parse;
+    module2.exports.populate = DotenvModule.populate;
+    module2.exports = DotenvModule;
+  }
+});
+
+// node_modules/dotenv/lib/env-options.js
+var require_env_options = __commonJS({
+  "node_modules/dotenv/lib/env-options.js"(exports2, module2) {
+    var options = {};
+    if (process.env.DOTENV_CONFIG_ENCODING != null) {
+      options.encoding = process.env.DOTENV_CONFIG_ENCODING;
+    }
+    if (process.env.DOTENV_CONFIG_PATH != null) {
+      options.path = process.env.DOTENV_CONFIG_PATH;
+    }
+    if (process.env.DOTENV_CONFIG_QUIET != null) {
+      options.quiet = process.env.DOTENV_CONFIG_QUIET;
+    }
+    if (process.env.DOTENV_CONFIG_DEBUG != null) {
+      options.debug = process.env.DOTENV_CONFIG_DEBUG;
+    }
+    if (process.env.DOTENV_CONFIG_OVERRIDE != null) {
+      options.override = process.env.DOTENV_CONFIG_OVERRIDE;
+    }
+    if (process.env.DOTENV_CONFIG_DOTENV_KEY != null) {
+      options.DOTENV_KEY = process.env.DOTENV_CONFIG_DOTENV_KEY;
+    }
+    module2.exports = options;
+  }
+});
+
+// node_modules/dotenv/lib/cli-options.js
+var require_cli_options = __commonJS({
+  "node_modules/dotenv/lib/cli-options.js"(exports2, module2) {
+    var re = /^dotenv_config_(encoding|path|quiet|debug|override|DOTENV_KEY)=(.+)$/;
+    module2.exports = function optionMatcher(args) {
+      const options = args.reduce(function(acc, cur) {
+        const matches = cur.match(re);
+        if (matches) {
+          acc[matches[1]] = matches[2];
+        }
+        return acc;
+      }, {});
+      if (!("quiet" in options)) {
+        options.quiet = "true";
+      }
+      return options;
+    };
+  }
+});
 
 // src/lib/db.ts
 var db_exports = {};
@@ -677,10 +1123,10 @@ function $constructor(name, initializer3, params) {
   }
   Object.defineProperty(Definition, "name", { value: name });
   function _(def) {
-    var _a3;
+    var _a2;
     const inst = params?.Parent ? new Definition() : this;
     init(inst, def);
-    (_a3 = inst._zod).deferred ?? (_a3.deferred = []);
+    (_a2 = inst._zod).deferred ?? (_a2.deferred = []);
     for (const fn of inst._zod.deferred) {
       fn();
     }
@@ -842,9 +1288,9 @@ function floatSafeRemainder(val, step) {
   const stepString = step.toString();
   let stepDecCount = (stepString.split(".")[1] || "").length;
   if (stepDecCount === 0 && /\d?e-\d?/.test(stepString)) {
-    const match2 = stepString.match(/\d?e-(\d?)/);
-    if (match2?.[1]) {
-      stepDecCount = Number.parseInt(match2[1]);
+    const match = stepString.match(/\d?e-(\d?)/);
+    if (match?.[1]) {
+      stepDecCount = Number.parseInt(match[1]);
     }
   }
   const decCount = valDecCount > stepDecCount ? valDecCount : stepDecCount;
@@ -1213,8 +1659,8 @@ function aborted(x, startIndex = 0) {
 }
 function prefixIssues(path3, issues) {
   return issues.map((iss) => {
-    var _a3;
-    (_a3 = iss).path ?? (_a3.path = []);
+    var _a2;
+    (_a2 = iss).path ?? (_a2.path = []);
     iss.path.unshift(path3);
     return iss;
   });
@@ -1458,7 +1904,7 @@ function formatError(error48, mapper = (issue2) => issue2.message) {
 function treeifyError(error48, mapper = (issue2) => issue2.message) {
   const result = { errors: [] };
   const processError = (error49, path3 = []) => {
-    var _a3, _b;
+    var _a2, _b;
     for (const issue2 of error49.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
         issue2.errors.map((issues) => processError({ issues }, issue2.path));
@@ -1479,7 +1925,7 @@ function treeifyError(error48, mapper = (issue2) => issue2.message) {
           const terminal = i === fullpath.length - 1;
           if (typeof el === "string") {
             curr.properties ?? (curr.properties = {});
-            (_a3 = curr.properties)[el] ?? (_a3[el] = { errors: [] });
+            (_a2 = curr.properties)[el] ?? (_a2[el] = { errors: [] });
             curr = curr.properties[el];
           } else {
             curr.items ?? (curr.items = []);
@@ -1727,8 +2173,8 @@ function datetime(args) {
     opts.push("");
   if (args.offset)
     opts.push(`([+-](?:[01]\\d|2[0-3]):[0-5]\\d)`);
-  const timeRegex2 = `${time3}(?:${opts.join("|")})`;
-  return new RegExp(`^${dateSource}T(?:${timeRegex2})$`);
+  const timeRegex = `${time3}(?:${opts.join("|")})`;
+  return new RegExp(`^${dateSource}T(?:${timeRegex})$`);
 }
 function fixedBase64(bodyLength, padding) {
   return new RegExp(`^[A-Za-z0-9+/]{${bodyLength}}${padding}$`);
@@ -1823,10 +2269,10 @@ var init_checks = __esm({
     init_regexes();
     init_util();
     $ZodCheck = /* @__PURE__ */ $constructor("$ZodCheck", (inst, def) => {
-      var _a3;
+      var _a2;
       inst._zod ?? (inst._zod = {});
       inst._zod.def = def;
-      (_a3 = inst._zod).onattach ?? (_a3.onattach = []);
+      (_a2 = inst._zod).onattach ?? (_a2.onattach = []);
     });
     numericOriginMap = {
       number: "number",
@@ -1892,8 +2338,8 @@ var init_checks = __esm({
     $ZodCheckMultipleOf = /* @__PURE__ */ $constructor("$ZodCheckMultipleOf", (inst, def) => {
       $ZodCheck.init(inst, def);
       inst._zod.onattach.push((inst2) => {
-        var _a3;
-        (_a3 = inst2._zod.bag).multipleOf ?? (_a3.multipleOf = def.value);
+        var _a2;
+        (_a2 = inst2._zod.bag).multipleOf ?? (_a2.multipleOf = def.value);
       });
       inst._zod.check = (payload) => {
         if (typeof payload.value !== typeof def.value)
@@ -2026,9 +2472,9 @@ var init_checks = __esm({
       };
     });
     $ZodCheckMaxSize = /* @__PURE__ */ $constructor("$ZodCheckMaxSize", (inst, def) => {
-      var _a3;
+      var _a2;
       $ZodCheck.init(inst, def);
-      (_a3 = inst._zod.def).when ?? (_a3.when = (payload) => {
+      (_a2 = inst._zod.def).when ?? (_a2.when = (payload) => {
         const val = payload.value;
         return !nullish(val) && val.size !== void 0;
       });
@@ -2054,9 +2500,9 @@ var init_checks = __esm({
       };
     });
     $ZodCheckMinSize = /* @__PURE__ */ $constructor("$ZodCheckMinSize", (inst, def) => {
-      var _a3;
+      var _a2;
       $ZodCheck.init(inst, def);
-      (_a3 = inst._zod.def).when ?? (_a3.when = (payload) => {
+      (_a2 = inst._zod.def).when ?? (_a2.when = (payload) => {
         const val = payload.value;
         return !nullish(val) && val.size !== void 0;
       });
@@ -2082,9 +2528,9 @@ var init_checks = __esm({
       };
     });
     $ZodCheckSizeEquals = /* @__PURE__ */ $constructor("$ZodCheckSizeEquals", (inst, def) => {
-      var _a3;
+      var _a2;
       $ZodCheck.init(inst, def);
-      (_a3 = inst._zod.def).when ?? (_a3.when = (payload) => {
+      (_a2 = inst._zod.def).when ?? (_a2.when = (payload) => {
         const val = payload.value;
         return !nullish(val) && val.size !== void 0;
       });
@@ -2112,9 +2558,9 @@ var init_checks = __esm({
       };
     });
     $ZodCheckMaxLength = /* @__PURE__ */ $constructor("$ZodCheckMaxLength", (inst, def) => {
-      var _a3;
+      var _a2;
       $ZodCheck.init(inst, def);
-      (_a3 = inst._zod.def).when ?? (_a3.when = (payload) => {
+      (_a2 = inst._zod.def).when ?? (_a2.when = (payload) => {
         const val = payload.value;
         return !nullish(val) && val.length !== void 0;
       });
@@ -2141,9 +2587,9 @@ var init_checks = __esm({
       };
     });
     $ZodCheckMinLength = /* @__PURE__ */ $constructor("$ZodCheckMinLength", (inst, def) => {
-      var _a3;
+      var _a2;
       $ZodCheck.init(inst, def);
-      (_a3 = inst._zod.def).when ?? (_a3.when = (payload) => {
+      (_a2 = inst._zod.def).when ?? (_a2.when = (payload) => {
         const val = payload.value;
         return !nullish(val) && val.length !== void 0;
       });
@@ -2170,9 +2616,9 @@ var init_checks = __esm({
       };
     });
     $ZodCheckLengthEquals = /* @__PURE__ */ $constructor("$ZodCheckLengthEquals", (inst, def) => {
-      var _a3;
+      var _a2;
       $ZodCheck.init(inst, def);
-      (_a3 = inst._zod.def).when ?? (_a3.when = (payload) => {
+      (_a2 = inst._zod.def).when ?? (_a2.when = (payload) => {
         const val = payload.value;
         return !nullish(val) && val.length !== void 0;
       });
@@ -2201,7 +2647,7 @@ var init_checks = __esm({
       };
     });
     $ZodCheckStringFormat = /* @__PURE__ */ $constructor("$ZodCheckStringFormat", (inst, def) => {
-      var _a3, _b;
+      var _a2, _b;
       $ZodCheck.init(inst, def);
       inst._zod.onattach.push((inst2) => {
         const bag = inst2._zod.bag;
@@ -2212,7 +2658,7 @@ var init_checks = __esm({
         }
       });
       if (def.pattern)
-        (_a3 = inst._zod).check ?? (_a3.check = (payload) => {
+        (_a2 = inst._zod).check ?? (_a2.check = (payload) => {
           def.pattern.lastIndex = 0;
           if (def.pattern.test(payload.value))
             return;
@@ -2497,7 +2943,7 @@ function normalizeDef(def) {
   };
 }
 function handleCatchall(proms, input, payload, ctx, def, inst) {
-  const unrecognized2 = [];
+  const unrecognized = [];
   const keySet = def.keySet;
   const _catchall = def.catchall._zod;
   const t = _catchall.def.type;
@@ -2506,7 +2952,7 @@ function handleCatchall(proms, input, payload, ctx, def, inst) {
     if (keySet.has(key))
       continue;
     if (t === "never") {
-      unrecognized2.push(key);
+      unrecognized.push(key);
       continue;
     }
     const r = _catchall.run({ value: input[key], issues: [] }, ctx);
@@ -2516,10 +2962,10 @@ function handleCatchall(proms, input, payload, ctx, def, inst) {
       handlePropertyResult(r, payload, key, input, isOptionalOut);
     }
   }
-  if (unrecognized2.length) {
+  if (unrecognized.length) {
     payload.issues.push({
       code: "unrecognized_keys",
-      keys: unrecognized2,
+      keys: unrecognized,
       input,
       inst
     });
@@ -2789,7 +3235,7 @@ var init_schemas = __esm({
     init_versions();
     init_util();
     $ZodType = /* @__PURE__ */ $constructor("$ZodType", (inst, def) => {
-      var _a3;
+      var _a2;
       inst ?? (inst = {});
       inst._zod.def = def;
       inst._zod.bag = inst._zod.bag || {};
@@ -2804,20 +3250,20 @@ var init_schemas = __esm({
         }
       }
       if (checks.length === 0) {
-        (_a3 = inst._zod).deferred ?? (_a3.deferred = []);
+        (_a2 = inst._zod).deferred ?? (_a2.deferred = []);
         inst._zod.deferred?.push(() => {
           inst._zod.run = inst._zod.parse;
         });
       } else {
         const runChecks = (payload, checks2, ctx) => {
-          let isAborted2 = aborted(payload);
+          let isAborted = aborted(payload);
           let asyncResult;
           for (const ch of checks2) {
             if (ch._zod.def.when) {
               const shouldRun = ch._zod.def.when(payload);
               if (!shouldRun)
                 continue;
-            } else if (isAborted2) {
+            } else if (isAborted) {
               continue;
             }
             const currLen = payload.issues.length;
@@ -2831,15 +3277,15 @@ var init_schemas = __esm({
                 const nextLen = payload.issues.length;
                 if (nextLen === currLen)
                   return;
-                if (!isAborted2)
-                  isAborted2 = aborted(payload, currLen);
+                if (!isAborted)
+                  isAborted = aborted(payload, currLen);
               });
             } else {
               const nextLen = payload.issues.length;
               if (nextLen === currLen)
                 continue;
-              if (!isAborted2)
-                isAborted2 = aborted(payload, currLen);
+              if (!isAborted)
+                isAborted = aborted(payload, currLen);
             }
           }
           if (asyncResult) {
@@ -3808,19 +4254,19 @@ var init_schemas = __esm({
               }
             }
           }
-          let unrecognized2;
+          let unrecognized;
           for (const key in input) {
             if (!recordKeys.has(key)) {
-              unrecognized2 = unrecognized2 ?? [];
-              unrecognized2.push(key);
+              unrecognized = unrecognized ?? [];
+              unrecognized.push(key);
             }
           }
-          if (unrecognized2 && unrecognized2.length > 0) {
+          if (unrecognized && unrecognized.length > 0) {
             payload.issues.push({
               code: "unrecognized_keys",
               input,
               inst,
-              keys: unrecognized2
+              keys: unrecognized
             });
           }
         } else {
@@ -7539,8 +7985,8 @@ var capitalizeFirstCharacter, error26;
 var init_lt = __esm({
   "node_modules/zod/v4/locales/lt.js"() {
     init_util();
-    capitalizeFirstCharacter = (text2) => {
-      return text2.charAt(0).toUpperCase() + text2.slice(1);
+    capitalizeFirstCharacter = (text) => {
+      return text.charAt(0).toUpperCase() + text.slice(1);
     };
     error26 = () => {
       const Sizable = {
@@ -11450,7 +11896,7 @@ function initializeContext(params) {
   };
 }
 function process2(schema, ctx, _params = { path: [], schemaPath: [] }) {
-  var _a3;
+  var _a2;
   const def = schema._zod.def;
   const seen = ctx.seen.get(schema);
   if (seen) {
@@ -11498,7 +11944,7 @@ function process2(schema, ctx, _params = { path: [], schemaPath: [] }) {
     delete result.schema.default;
   }
   if (ctx.io === "input" && result.schema._prefault)
-    (_a3 = result.schema).default ?? (_a3.default = result.schema._prefault);
+    (_a2 = result.schema).default ?? (_a2.default = result.schema._prefault);
   delete result.schema._prefault;
   const _result = ctx.seen.get(schema);
   return _result.schema;
@@ -11834,29 +12280,29 @@ var init_json_schema_processors = __esm({
       // do not set
     };
     stringProcessor = (schema, ctx, _json, _params) => {
-      const json3 = _json;
-      json3.type = "string";
+      const json2 = _json;
+      json2.type = "string";
       const { minimum, maximum, format, patterns, contentEncoding } = schema._zod.bag;
       if (typeof minimum === "number")
-        json3.minLength = minimum;
+        json2.minLength = minimum;
       if (typeof maximum === "number")
-        json3.maxLength = maximum;
+        json2.maxLength = maximum;
       if (format) {
-        json3.format = formatMap[format] ?? format;
-        if (json3.format === "")
-          delete json3.format;
+        json2.format = formatMap[format] ?? format;
+        if (json2.format === "")
+          delete json2.format;
         if (format === "time") {
-          delete json3.format;
+          delete json2.format;
         }
       }
       if (contentEncoding)
-        json3.contentEncoding = contentEncoding;
+        json2.contentEncoding = contentEncoding;
       if (patterns && patterns.size > 0) {
         const regexes = [...patterns];
         if (regexes.length === 1)
-          json3.pattern = regexes[0].source;
+          json2.pattern = regexes[0].source;
         else if (regexes.length > 1) {
-          json3.allOf = [
+          json2.allOf = [
             ...regexes.map((regex) => ({
               ...ctx.target === "draft-07" || ctx.target === "draft-04" || ctx.target === "openapi-3.0" ? { type: "string" } : {},
               pattern: regex.source
@@ -11866,51 +12312,51 @@ var init_json_schema_processors = __esm({
       }
     };
     numberProcessor = (schema, ctx, _json, _params) => {
-      const json3 = _json;
+      const json2 = _json;
       const { minimum, maximum, format, multipleOf, exclusiveMaximum, exclusiveMinimum } = schema._zod.bag;
       if (typeof format === "string" && format.includes("int"))
-        json3.type = "integer";
+        json2.type = "integer";
       else
-        json3.type = "number";
+        json2.type = "number";
       if (typeof exclusiveMinimum === "number") {
         if (ctx.target === "draft-04" || ctx.target === "openapi-3.0") {
-          json3.minimum = exclusiveMinimum;
-          json3.exclusiveMinimum = true;
+          json2.minimum = exclusiveMinimum;
+          json2.exclusiveMinimum = true;
         } else {
-          json3.exclusiveMinimum = exclusiveMinimum;
+          json2.exclusiveMinimum = exclusiveMinimum;
         }
       }
       if (typeof minimum === "number") {
-        json3.minimum = minimum;
+        json2.minimum = minimum;
         if (typeof exclusiveMinimum === "number" && ctx.target !== "draft-04") {
           if (exclusiveMinimum >= minimum)
-            delete json3.minimum;
+            delete json2.minimum;
           else
-            delete json3.exclusiveMinimum;
+            delete json2.exclusiveMinimum;
         }
       }
       if (typeof exclusiveMaximum === "number") {
         if (ctx.target === "draft-04" || ctx.target === "openapi-3.0") {
-          json3.maximum = exclusiveMaximum;
-          json3.exclusiveMaximum = true;
+          json2.maximum = exclusiveMaximum;
+          json2.exclusiveMaximum = true;
         } else {
-          json3.exclusiveMaximum = exclusiveMaximum;
+          json2.exclusiveMaximum = exclusiveMaximum;
         }
       }
       if (typeof maximum === "number") {
-        json3.maximum = maximum;
+        json2.maximum = maximum;
         if (typeof exclusiveMaximum === "number" && ctx.target !== "draft-04") {
           if (exclusiveMaximum <= maximum)
-            delete json3.maximum;
+            delete json2.maximum;
           else
-            delete json3.exclusiveMaximum;
+            delete json2.exclusiveMaximum;
         }
       }
       if (typeof multipleOf === "number")
-        json3.multipleOf = multipleOf;
+        json2.multipleOf = multipleOf;
     };
-    booleanProcessor = (_schema, _ctx, json3, _params) => {
-      json3.type = "boolean";
+    booleanProcessor = (_schema, _ctx, json2, _params) => {
+      json2.type = "boolean";
     };
     bigintProcessor = (_schema, ctx, _json, _params) => {
       if (ctx.unrepresentable === "throw") {
@@ -11922,13 +12368,13 @@ var init_json_schema_processors = __esm({
         throw new Error("Symbols cannot be represented in JSON Schema");
       }
     };
-    nullProcessor = (_schema, ctx, json3, _params) => {
+    nullProcessor = (_schema, ctx, json2, _params) => {
       if (ctx.target === "openapi-3.0") {
-        json3.type = "string";
-        json3.nullable = true;
-        json3.enum = [null];
+        json2.type = "string";
+        json2.nullable = true;
+        json2.enum = [null];
       } else {
-        json3.type = "null";
+        json2.type = "null";
       }
     };
     undefinedProcessor = (_schema, ctx, _json, _params) => {
@@ -11941,8 +12387,8 @@ var init_json_schema_processors = __esm({
         throw new Error("Void cannot be represented in JSON Schema");
       }
     };
-    neverProcessor = (_schema, _ctx, json3, _params) => {
-      json3.not = {};
+    neverProcessor = (_schema, _ctx, json2, _params) => {
+      json2.not = {};
     };
     anyProcessor = (_schema, _ctx, _json, _params) => {
     };
@@ -11953,16 +12399,16 @@ var init_json_schema_processors = __esm({
         throw new Error("Date cannot be represented in JSON Schema");
       }
     };
-    enumProcessor = (schema, _ctx, json3, _params) => {
+    enumProcessor = (schema, _ctx, json2, _params) => {
       const def = schema._zod.def;
       const values = getEnumValues(def.entries);
       if (values.every((v) => typeof v === "number"))
-        json3.type = "number";
+        json2.type = "number";
       if (values.every((v) => typeof v === "string"))
-        json3.type = "string";
-      json3.enum = values;
+        json2.type = "string";
+      json2.enum = values;
     };
-    literalProcessor = (schema, ctx, json3, _params) => {
+    literalProcessor = (schema, ctx, json2, _params) => {
       const def = schema._zod.def;
       const vals = [];
       for (const val of def.values) {
@@ -11984,22 +12430,22 @@ var init_json_schema_processors = __esm({
       if (vals.length === 0) {
       } else if (vals.length === 1) {
         const val = vals[0];
-        json3.type = val === null ? "null" : typeof val;
+        json2.type = val === null ? "null" : typeof val;
         if (ctx.target === "draft-04" || ctx.target === "openapi-3.0") {
-          json3.enum = [val];
+          json2.enum = [val];
         } else {
-          json3.const = val;
+          json2.const = val;
         }
       } else {
         if (vals.every((v) => typeof v === "number"))
-          json3.type = "number";
+          json2.type = "number";
         if (vals.every((v) => typeof v === "string"))
-          json3.type = "string";
+          json2.type = "string";
         if (vals.every((v) => typeof v === "boolean"))
-          json3.type = "boolean";
+          json2.type = "boolean";
         if (vals.every((v) => v === null))
-          json3.type = "null";
-        json3.enum = vals;
+          json2.type = "null";
+        json2.enum = vals;
       }
     };
     nanProcessor = (_schema, ctx, _json, _params) => {
@@ -12007,16 +12453,16 @@ var init_json_schema_processors = __esm({
         throw new Error("NaN cannot be represented in JSON Schema");
       }
     };
-    templateLiteralProcessor = (schema, _ctx, json3, _params) => {
-      const _json = json3;
+    templateLiteralProcessor = (schema, _ctx, json2, _params) => {
+      const _json = json2;
       const pattern = schema._zod.pattern;
       if (!pattern)
         throw new Error("Pattern not found in template literal");
       _json.type = "string";
       _json.pattern = pattern.source;
     };
-    fileProcessor = (schema, _ctx, json3, _params) => {
-      const _json = json3;
+    fileProcessor = (schema, _ctx, json2, _params) => {
+      const _json = json2;
       const file2 = {
         type: "string",
         format: "binary",
@@ -12039,8 +12485,8 @@ var init_json_schema_processors = __esm({
         Object.assign(_json, file2);
       }
     };
-    successProcessor = (_schema, _ctx, json3, _params) => {
-      json3.type = "boolean";
+    successProcessor = (_schema, _ctx, json2, _params) => {
+      json2.type = "boolean";
     };
     customProcessor = (_schema, ctx, _json, _params) => {
       if (ctx.unrepresentable === "throw") {
@@ -12068,24 +12514,24 @@ var init_json_schema_processors = __esm({
       }
     };
     arrayProcessor = (schema, ctx, _json, params) => {
-      const json3 = _json;
+      const json2 = _json;
       const def = schema._zod.def;
       const { minimum, maximum } = schema._zod.bag;
       if (typeof minimum === "number")
-        json3.minItems = minimum;
+        json2.minItems = minimum;
       if (typeof maximum === "number")
-        json3.maxItems = maximum;
-      json3.type = "array";
-      json3.items = process2(def.element, ctx, { ...params, path: [...params.path, "items"] });
+        json2.maxItems = maximum;
+      json2.type = "array";
+      json2.items = process2(def.element, ctx, { ...params, path: [...params.path, "items"] });
     };
     objectProcessor = (schema, ctx, _json, params) => {
-      const json3 = _json;
+      const json2 = _json;
       const def = schema._zod.def;
-      json3.type = "object";
-      json3.properties = {};
+      json2.type = "object";
+      json2.properties = {};
       const shape = def.shape;
       for (const key in shape) {
-        json3.properties[key] = process2(shape[key], ctx, {
+        json2.properties[key] = process2(shape[key], ctx, {
           ...params,
           path: [...params.path, "properties", key]
         });
@@ -12100,21 +12546,21 @@ var init_json_schema_processors = __esm({
         }
       }));
       if (requiredKeys.size > 0) {
-        json3.required = Array.from(requiredKeys);
+        json2.required = Array.from(requiredKeys);
       }
       if (def.catchall?._zod.def.type === "never") {
-        json3.additionalProperties = false;
+        json2.additionalProperties = false;
       } else if (!def.catchall) {
         if (ctx.io === "output")
-          json3.additionalProperties = false;
+          json2.additionalProperties = false;
       } else if (def.catchall) {
-        json3.additionalProperties = process2(def.catchall, ctx, {
+        json2.additionalProperties = process2(def.catchall, ctx, {
           ...params,
           path: [...params.path, "additionalProperties"]
         });
       }
     };
-    unionProcessor = (schema, ctx, json3, params) => {
+    unionProcessor = (schema, ctx, json2, params) => {
       const def = schema._zod.def;
       const isExclusive = def.inclusive === false;
       const options = def.options.map((x, i) => process2(x, ctx, {
@@ -12122,12 +12568,12 @@ var init_json_schema_processors = __esm({
         path: [...params.path, isExclusive ? "oneOf" : "anyOf", i]
       }));
       if (isExclusive) {
-        json3.oneOf = options;
+        json2.oneOf = options;
       } else {
-        json3.anyOf = options;
+        json2.anyOf = options;
       }
     };
-    intersectionProcessor = (schema, ctx, json3, params) => {
+    intersectionProcessor = (schema, ctx, json2, params) => {
       const def = schema._zod.def;
       const a = process2(def.left, ctx, {
         ...params,
@@ -12142,12 +12588,12 @@ var init_json_schema_processors = __esm({
         ...isSimpleIntersection(a) ? a.allOf : [a],
         ...isSimpleIntersection(b) ? b.allOf : [b]
       ];
-      json3.allOf = allOf;
+      json2.allOf = allOf;
     };
     tupleProcessor = (schema, ctx, _json, params) => {
-      const json3 = _json;
+      const json2 = _json;
       const def = schema._zod.def;
-      json3.type = "array";
+      json2.type = "array";
       const prefixPath = ctx.target === "draft-2020-12" ? "prefixItems" : "items";
       const restPath = ctx.target === "draft-2020-12" ? "items" : ctx.target === "openapi-3.0" ? "items" : "additionalItems";
       const prefixItems = def.items.map((x, i) => process2(x, ctx, {
@@ -12159,37 +12605,37 @@ var init_json_schema_processors = __esm({
         path: [...params.path, restPath, ...ctx.target === "openapi-3.0" ? [def.items.length] : []]
       }) : null;
       if (ctx.target === "draft-2020-12") {
-        json3.prefixItems = prefixItems;
+        json2.prefixItems = prefixItems;
         if (rest) {
-          json3.items = rest;
+          json2.items = rest;
         }
       } else if (ctx.target === "openapi-3.0") {
-        json3.items = {
+        json2.items = {
           anyOf: prefixItems
         };
         if (rest) {
-          json3.items.anyOf.push(rest);
+          json2.items.anyOf.push(rest);
         }
-        json3.minItems = prefixItems.length;
+        json2.minItems = prefixItems.length;
         if (!rest) {
-          json3.maxItems = prefixItems.length;
+          json2.maxItems = prefixItems.length;
         }
       } else {
-        json3.items = prefixItems;
+        json2.items = prefixItems;
         if (rest) {
-          json3.additionalItems = rest;
+          json2.additionalItems = rest;
         }
       }
       const { minimum, maximum } = schema._zod.bag;
       if (typeof minimum === "number")
-        json3.minItems = minimum;
+        json2.minItems = minimum;
       if (typeof maximum === "number")
-        json3.maxItems = maximum;
+        json2.maxItems = maximum;
     };
     recordProcessor = (schema, ctx, _json, params) => {
-      const json3 = _json;
+      const json2 = _json;
       const def = schema._zod.def;
-      json3.type = "object";
+      json2.type = "object";
       const keyType = def.keyType;
       const keyBag = keyType._zod.bag;
       const patterns = keyBag?.patterns;
@@ -12198,18 +12644,18 @@ var init_json_schema_processors = __esm({
           ...params,
           path: [...params.path, "patternProperties", "*"]
         });
-        json3.patternProperties = {};
+        json2.patternProperties = {};
         for (const pattern of patterns) {
-          json3.patternProperties[pattern.source] = valueSchema;
+          json2.patternProperties[pattern.source] = valueSchema;
         }
       } else {
         if (ctx.target === "draft-07" || ctx.target === "draft-2020-12") {
-          json3.propertyNames = process2(def.keyType, ctx, {
+          json2.propertyNames = process2(def.keyType, ctx, {
             ...params,
             path: [...params.path, "propertyNames"]
           });
         }
-        json3.additionalProperties = process2(def.valueType, ctx, {
+        json2.additionalProperties = process2(def.valueType, ctx, {
           ...params,
           path: [...params.path, "additionalProperties"]
         });
@@ -12218,19 +12664,19 @@ var init_json_schema_processors = __esm({
       if (keyValues) {
         const validKeyValues = [...keyValues].filter((v) => typeof v === "string" || typeof v === "number");
         if (validKeyValues.length > 0) {
-          json3.required = validKeyValues;
+          json2.required = validKeyValues;
         }
       }
     };
-    nullableProcessor = (schema, ctx, json3, params) => {
+    nullableProcessor = (schema, ctx, json2, params) => {
       const def = schema._zod.def;
       const inner = process2(def.innerType, ctx, params);
       const seen = ctx.seen.get(schema);
       if (ctx.target === "openapi-3.0") {
         seen.ref = def.innerType;
-        json3.nullable = true;
+        json2.nullable = true;
       } else {
-        json3.anyOf = [inner, { type: "null" }];
+        json2.anyOf = [inner, { type: "null" }];
       }
     };
     nonoptionalProcessor = (schema, ctx, _json, params) => {
@@ -12239,22 +12685,22 @@ var init_json_schema_processors = __esm({
       const seen = ctx.seen.get(schema);
       seen.ref = def.innerType;
     };
-    defaultProcessor = (schema, ctx, json3, params) => {
+    defaultProcessor = (schema, ctx, json2, params) => {
       const def = schema._zod.def;
       process2(def.innerType, ctx, params);
       const seen = ctx.seen.get(schema);
       seen.ref = def.innerType;
-      json3.default = JSON.parse(JSON.stringify(def.defaultValue));
+      json2.default = JSON.parse(JSON.stringify(def.defaultValue));
     };
-    prefaultProcessor = (schema, ctx, json3, params) => {
+    prefaultProcessor = (schema, ctx, json2, params) => {
       const def = schema._zod.def;
       process2(def.innerType, ctx, params);
       const seen = ctx.seen.get(schema);
       seen.ref = def.innerType;
       if (ctx.io === "input")
-        json3._prefault = JSON.parse(JSON.stringify(def.defaultValue));
+        json2._prefault = JSON.parse(JSON.stringify(def.defaultValue));
     };
-    catchProcessor = (schema, ctx, json3, params) => {
+    catchProcessor = (schema, ctx, json2, params) => {
       const def = schema._zod.def;
       process2(def.innerType, ctx, params);
       const seen = ctx.seen.get(schema);
@@ -12265,7 +12711,7 @@ var init_json_schema_processors = __esm({
       } catch {
         throw new Error("Dynamic catch values are not supported in JSON Schema");
       }
-      json3.default = catchValue;
+      json2.default = catchValue;
     };
     pipeProcessor = (schema, ctx, _json, params) => {
       const def = schema._zod.def;
@@ -12274,12 +12720,12 @@ var init_json_schema_processors = __esm({
       const seen = ctx.seen.get(schema);
       seen.ref = innerType;
     };
-    readonlyProcessor = (schema, ctx, json3, params) => {
+    readonlyProcessor = (schema, ctx, json2, params) => {
       const def = schema._zod.def;
       process2(def.innerType, ctx, params);
       const seen = ctx.seen.get(schema);
       seen.ref = def.innerType;
-      json3.readOnly = true;
+      json2.readOnly = true;
     };
     promiseProcessor = (schema, ctx, _json, params) => {
       const def = schema._zod.def;
@@ -13604,7 +14050,7 @@ var init_schemas2 = __esm({
     _ZodString = /* @__PURE__ */ $constructor("_ZodString", (inst, def) => {
       $ZodString.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => stringProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => stringProcessor(inst, ctx, json2, params);
       const bag = inst._zod.bag;
       inst.format = bag.format ?? null;
       inst.minLength = bag.minimum ?? null;
@@ -13747,7 +14193,7 @@ var init_schemas2 = __esm({
     ZodNumber = /* @__PURE__ */ $constructor("ZodNumber", (inst, def) => {
       $ZodNumber.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => numberProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => numberProcessor(inst, ctx, json2, params);
       inst.gt = (value, params) => inst.check(_gt(value, params));
       inst.gte = (value, params) => inst.check(_gte(value, params));
       inst.min = (value, params) => inst.check(_gte(value, params));
@@ -13777,12 +14223,12 @@ var init_schemas2 = __esm({
     ZodBoolean = /* @__PURE__ */ $constructor("ZodBoolean", (inst, def) => {
       $ZodBoolean.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => booleanProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => booleanProcessor(inst, ctx, json2, params);
     });
     ZodBigInt = /* @__PURE__ */ $constructor("ZodBigInt", (inst, def) => {
       $ZodBigInt.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => bigintProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => bigintProcessor(inst, ctx, json2, params);
       inst.gte = (value, params) => inst.check(_gte(value, params));
       inst.min = (value, params) => inst.check(_gte(value, params));
       inst.gt = (value, params) => inst.check(_gt(value, params));
@@ -13808,42 +14254,42 @@ var init_schemas2 = __esm({
     ZodSymbol = /* @__PURE__ */ $constructor("ZodSymbol", (inst, def) => {
       $ZodSymbol.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => symbolProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => symbolProcessor(inst, ctx, json2, params);
     });
     ZodUndefined = /* @__PURE__ */ $constructor("ZodUndefined", (inst, def) => {
       $ZodUndefined.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => undefinedProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => undefinedProcessor(inst, ctx, json2, params);
     });
     ZodNull = /* @__PURE__ */ $constructor("ZodNull", (inst, def) => {
       $ZodNull.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => nullProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => nullProcessor(inst, ctx, json2, params);
     });
     ZodAny = /* @__PURE__ */ $constructor("ZodAny", (inst, def) => {
       $ZodAny.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => anyProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => anyProcessor(inst, ctx, json2, params);
     });
     ZodUnknown = /* @__PURE__ */ $constructor("ZodUnknown", (inst, def) => {
       $ZodUnknown.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => unknownProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => unknownProcessor(inst, ctx, json2, params);
     });
     ZodNever = /* @__PURE__ */ $constructor("ZodNever", (inst, def) => {
       $ZodNever.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => neverProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => neverProcessor(inst, ctx, json2, params);
     });
     ZodVoid = /* @__PURE__ */ $constructor("ZodVoid", (inst, def) => {
       $ZodVoid.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => voidProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => voidProcessor(inst, ctx, json2, params);
     });
     ZodDate = /* @__PURE__ */ $constructor("ZodDate", (inst, def) => {
       $ZodDate.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => dateProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => dateProcessor(inst, ctx, json2, params);
       inst.min = (value, params) => inst.check(_gte(value, params));
       inst.max = (value, params) => inst.check(_lte(value, params));
       const c = inst._zod.bag;
@@ -13853,7 +14299,7 @@ var init_schemas2 = __esm({
     ZodArray = /* @__PURE__ */ $constructor("ZodArray", (inst, def) => {
       $ZodArray.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => arrayProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => arrayProcessor(inst, ctx, json2, params);
       inst.element = def.element;
       inst.min = (minLength, params) => inst.check(_minLength(minLength, params));
       inst.nonempty = (params) => inst.check(_minLength(1, params));
@@ -13864,7 +14310,7 @@ var init_schemas2 = __esm({
     ZodObject = /* @__PURE__ */ $constructor("ZodObject", (inst, def) => {
       $ZodObjectJIT.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => objectProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => objectProcessor(inst, ctx, json2, params);
       util_exports.defineLazy(inst, "shape", () => {
         return def.shape;
       });
@@ -13889,13 +14335,13 @@ var init_schemas2 = __esm({
     ZodUnion = /* @__PURE__ */ $constructor("ZodUnion", (inst, def) => {
       $ZodUnion.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => unionProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => unionProcessor(inst, ctx, json2, params);
       inst.options = def.options;
     });
     ZodXor = /* @__PURE__ */ $constructor("ZodXor", (inst, def) => {
       ZodUnion.init(inst, def);
       $ZodXor.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => unionProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => unionProcessor(inst, ctx, json2, params);
       inst.options = def.options;
     });
     ZodDiscriminatedUnion = /* @__PURE__ */ $constructor("ZodDiscriminatedUnion", (inst, def) => {
@@ -13905,12 +14351,12 @@ var init_schemas2 = __esm({
     ZodIntersection = /* @__PURE__ */ $constructor("ZodIntersection", (inst, def) => {
       $ZodIntersection.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => intersectionProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => intersectionProcessor(inst, ctx, json2, params);
     });
     ZodTuple = /* @__PURE__ */ $constructor("ZodTuple", (inst, def) => {
       $ZodTuple.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => tupleProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => tupleProcessor(inst, ctx, json2, params);
       inst.rest = (rest) => inst.clone({
         ...inst._zod.def,
         rest
@@ -13919,14 +14365,14 @@ var init_schemas2 = __esm({
     ZodRecord = /* @__PURE__ */ $constructor("ZodRecord", (inst, def) => {
       $ZodRecord.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => recordProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => recordProcessor(inst, ctx, json2, params);
       inst.keyType = def.keyType;
       inst.valueType = def.valueType;
     });
     ZodMap = /* @__PURE__ */ $constructor("ZodMap", (inst, def) => {
       $ZodMap.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => mapProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => mapProcessor(inst, ctx, json2, params);
       inst.keyType = def.keyType;
       inst.valueType = def.valueType;
       inst.min = (...args) => inst.check(_minSize(...args));
@@ -13937,7 +14383,7 @@ var init_schemas2 = __esm({
     ZodSet = /* @__PURE__ */ $constructor("ZodSet", (inst, def) => {
       $ZodSet.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => setProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => setProcessor(inst, ctx, json2, params);
       inst.min = (...args) => inst.check(_minSize(...args));
       inst.nonempty = (params) => inst.check(_minSize(1, params));
       inst.max = (...args) => inst.check(_maxSize(...args));
@@ -13946,7 +14392,7 @@ var init_schemas2 = __esm({
     ZodEnum = /* @__PURE__ */ $constructor("ZodEnum", (inst, def) => {
       $ZodEnum.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => enumProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => enumProcessor(inst, ctx, json2, params);
       inst.enum = def.entries;
       inst.options = Object.values(def.entries);
       const keys = new Set(Object.keys(def.entries));
@@ -13984,7 +14430,7 @@ var init_schemas2 = __esm({
     ZodLiteral = /* @__PURE__ */ $constructor("ZodLiteral", (inst, def) => {
       $ZodLiteral.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => literalProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => literalProcessor(inst, ctx, json2, params);
       inst.values = new Set(def.values);
       Object.defineProperty(inst, "value", {
         get() {
@@ -13998,7 +14444,7 @@ var init_schemas2 = __esm({
     ZodFile = /* @__PURE__ */ $constructor("ZodFile", (inst, def) => {
       $ZodFile.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => fileProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => fileProcessor(inst, ctx, json2, params);
       inst.min = (size, params) => inst.check(_minSize(size, params));
       inst.max = (size, params) => inst.check(_maxSize(size, params));
       inst.mime = (types, params) => inst.check(_mime(Array.isArray(types) ? types : [types], params));
@@ -14006,7 +14452,7 @@ var init_schemas2 = __esm({
     ZodTransform = /* @__PURE__ */ $constructor("ZodTransform", (inst, def) => {
       $ZodTransform.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => transformProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => transformProcessor(inst, ctx, json2, params);
       inst._zod.parse = (payload, _ctx) => {
         if (_ctx.direction === "backward") {
           throw new $ZodEncodeError(inst.constructor.name);
@@ -14038,62 +14484,62 @@ var init_schemas2 = __esm({
     ZodOptional = /* @__PURE__ */ $constructor("ZodOptional", (inst, def) => {
       $ZodOptional.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => optionalProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => optionalProcessor(inst, ctx, json2, params);
       inst.unwrap = () => inst._zod.def.innerType;
     });
     ZodExactOptional = /* @__PURE__ */ $constructor("ZodExactOptional", (inst, def) => {
       $ZodExactOptional.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => optionalProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => optionalProcessor(inst, ctx, json2, params);
       inst.unwrap = () => inst._zod.def.innerType;
     });
     ZodNullable = /* @__PURE__ */ $constructor("ZodNullable", (inst, def) => {
       $ZodNullable.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => nullableProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => nullableProcessor(inst, ctx, json2, params);
       inst.unwrap = () => inst._zod.def.innerType;
     });
     ZodDefault = /* @__PURE__ */ $constructor("ZodDefault", (inst, def) => {
       $ZodDefault.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => defaultProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => defaultProcessor(inst, ctx, json2, params);
       inst.unwrap = () => inst._zod.def.innerType;
       inst.removeDefault = inst.unwrap;
     });
     ZodPrefault = /* @__PURE__ */ $constructor("ZodPrefault", (inst, def) => {
       $ZodPrefault.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => prefaultProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => prefaultProcessor(inst, ctx, json2, params);
       inst.unwrap = () => inst._zod.def.innerType;
     });
     ZodNonOptional = /* @__PURE__ */ $constructor("ZodNonOptional", (inst, def) => {
       $ZodNonOptional.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => nonoptionalProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => nonoptionalProcessor(inst, ctx, json2, params);
       inst.unwrap = () => inst._zod.def.innerType;
     });
     ZodSuccess = /* @__PURE__ */ $constructor("ZodSuccess", (inst, def) => {
       $ZodSuccess.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => successProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => successProcessor(inst, ctx, json2, params);
       inst.unwrap = () => inst._zod.def.innerType;
     });
     ZodCatch = /* @__PURE__ */ $constructor("ZodCatch", (inst, def) => {
       $ZodCatch.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => catchProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => catchProcessor(inst, ctx, json2, params);
       inst.unwrap = () => inst._zod.def.innerType;
       inst.removeCatch = inst.unwrap;
     });
     ZodNaN = /* @__PURE__ */ $constructor("ZodNaN", (inst, def) => {
       $ZodNaN.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => nanProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => nanProcessor(inst, ctx, json2, params);
     });
     ZodPipe = /* @__PURE__ */ $constructor("ZodPipe", (inst, def) => {
       $ZodPipe.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => pipeProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => pipeProcessor(inst, ctx, json2, params);
       inst.in = def.in;
       inst.out = def.out;
     });
@@ -14104,35 +14550,35 @@ var init_schemas2 = __esm({
     ZodReadonly = /* @__PURE__ */ $constructor("ZodReadonly", (inst, def) => {
       $ZodReadonly.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => readonlyProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => readonlyProcessor(inst, ctx, json2, params);
       inst.unwrap = () => inst._zod.def.innerType;
     });
     ZodTemplateLiteral = /* @__PURE__ */ $constructor("ZodTemplateLiteral", (inst, def) => {
       $ZodTemplateLiteral.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => templateLiteralProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => templateLiteralProcessor(inst, ctx, json2, params);
     });
     ZodLazy = /* @__PURE__ */ $constructor("ZodLazy", (inst, def) => {
       $ZodLazy.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => lazyProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => lazyProcessor(inst, ctx, json2, params);
       inst.unwrap = () => inst._zod.def.getter();
     });
     ZodPromise = /* @__PURE__ */ $constructor("ZodPromise", (inst, def) => {
       $ZodPromise.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => promiseProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => promiseProcessor(inst, ctx, json2, params);
       inst.unwrap = () => inst._zod.def.innerType;
     });
     ZodFunction = /* @__PURE__ */ $constructor("ZodFunction", (inst, def) => {
       $ZodFunction.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => functionProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => functionProcessor(inst, ctx, json2, params);
     });
     ZodCustom = /* @__PURE__ */ $constructor("ZodCustom", (inst, def) => {
       $ZodCustom.init(inst, def);
       ZodType.init(inst, def);
-      inst._zod.processJSONSchema = (ctx, json3, params) => customProcessor(inst, ctx, json3, params);
+      inst._zod.processJSONSchema = (ctx, json2, params) => customProcessor(inst, ctx, json2, params);
     });
     describe2 = describe;
     meta2 = meta;
@@ -14171,7 +14617,7 @@ var init_compat = __esm({
       invalid_value: "invalid_value",
       custom: "custom"
     };
-    /* @__PURE__ */ (function(ZodFirstPartyTypeKind3) {
+    /* @__PURE__ */ (function(ZodFirstPartyTypeKind2) {
     })(ZodFirstPartyTypeKind || (ZodFirstPartyTypeKind = {}));
   }
 });
@@ -14967,19562 +15413,6 @@ var init_v4 = __esm({
   }
 });
 
-// node_modules/@openrouter/sdk/esm/lib/primitives.js
-function remap(inp, mappings) {
-  let out = {};
-  if (!Object.keys(mappings).length) {
-    out = inp;
-    return out;
-  }
-  for (const [k, v] of Object.entries(inp)) {
-    const j = mappings[k];
-    if (j === null) {
-      continue;
-    }
-    out[j ?? k] = v;
-  }
-  return out;
-}
-function compactMap(values) {
-  const out = {};
-  for (const [k, v] of Object.entries(values)) {
-    if (typeof v !== "undefined") {
-      out[k] = v;
-    }
-  }
-  return out;
-}
-var init_primitives = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/primitives.js"() {
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/types/unrecognized.js
-function unrecognized(value) {
-  globalCount++;
-  return value;
-}
-var globalCount;
-var init_unrecognized = __esm({
-  "node_modules/@openrouter/sdk/esm/types/unrecognized.js"() {
-    globalCount = 0;
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/types/enums.js
-function inboundSchema(enumObj) {
-  const options = Object.values(enumObj);
-  return union([
-    ...options.map((x) => literal(x)),
-    string2().transform((x) => unrecognized(x))
-  ]);
-}
-function inboundSchemaInt(enumObj) {
-  const options = Object.values(enumObj).filter((v) => typeof v === "number");
-  return union([
-    ...options.map((x) => literal(x)),
-    int().transform((x) => unrecognized(x))
-  ]);
-}
-function outboundSchema(_) {
-  return string2();
-}
-function outboundSchemaInt(_) {
-  return int();
-}
-var init_enums = __esm({
-  "node_modules/@openrouter/sdk/esm/types/enums.js"() {
-    init_v4();
-    init_unrecognized();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/errors/sdkvalidationerror.js
-function formatZodError(err) {
-  return prettifyError(err);
-}
-var SDKValidationError;
-var init_sdkvalidationerror = __esm({
-  "node_modules/@openrouter/sdk/esm/models/errors/sdkvalidationerror.js"() {
-    init_core2();
-    SDKValidationError = class extends Error {
-      // Allows for backwards compatibility for `instanceof` checks of `ResponseValidationError`
-      static [Symbol.hasInstance](instance) {
-        if (!(instance instanceof Error))
-          return false;
-        if (!("rawValue" in instance))
-          return false;
-        if (!("rawMessage" in instance))
-          return false;
-        if (!("pretty" in instance))
-          return false;
-        if (typeof instance.pretty !== "function")
-          return false;
-        return true;
-      }
-      constructor(message, cause, rawValue) {
-        super(`${message}: ${cause}`);
-        this.name = "SDKValidationError";
-        this.cause = cause;
-        this.rawValue = rawValue;
-        this.rawMessage = message;
-      }
-      /**
-       * Return a pretty-formatted error message if the underlying validation error
-       * is a ZodError or some other recognized error type, otherwise return the
-       * default error message.
-       */
-      pretty() {
-        if (this.cause instanceof $ZodError) {
-          return `${this.rawMessage}
-${formatZodError(this.cause)}`;
-        } else {
-          return this.toString();
-        }
-      }
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/types/fp.js
-function OK(value) {
-  return { ok: true, value };
-}
-function ERR(error48) {
-  return { ok: false, error: error48 };
-}
-async function unwrapAsync(pr) {
-  const r = await pr;
-  if (!r.ok) {
-    throw r.error;
-  }
-  return r.value;
-}
-var init_fp = __esm({
-  "node_modules/@openrouter/sdk/esm/types/fp.js"() {
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/schemas.js
-function safeParse3(rawValue, fn, errorMessage) {
-  try {
-    return OK(fn(rawValue));
-  } catch (err) {
-    return ERR(new SDKValidationError(errorMessage, err, rawValue));
-  }
-}
-var init_schemas3 = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/schemas.js"() {
-    init_v4();
-    init_sdkvalidationerror();
-    init_fp();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/responseinputaudio.js
-var ResponseInputAudioFormat, ResponseInputAudioFormat$inboundSchema, ResponseInputAudioFormat$outboundSchema, ResponseInputAudioInputAudio$inboundSchema, ResponseInputAudioInputAudio$outboundSchema, ResponseInputAudio$inboundSchema, ResponseInputAudio$outboundSchema;
-var init_responseinputaudio = __esm({
-  "node_modules/@openrouter/sdk/esm/models/responseinputaudio.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    ResponseInputAudioFormat = {
-      Mp3: "mp3",
-      Wav: "wav"
-    };
-    ResponseInputAudioFormat$inboundSchema = inboundSchema(ResponseInputAudioFormat);
-    ResponseInputAudioFormat$outboundSchema = outboundSchema(ResponseInputAudioFormat);
-    ResponseInputAudioInputAudio$inboundSchema = object({
-      data: string2(),
-      format: ResponseInputAudioFormat$inboundSchema
-    });
-    ResponseInputAudioInputAudio$outboundSchema = object({
-      data: string2(),
-      format: ResponseInputAudioFormat$outboundSchema
-    });
-    ResponseInputAudio$inboundSchema = object({
-      type: literal("input_audio"),
-      input_audio: lazy(() => ResponseInputAudioInputAudio$inboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        "input_audio": "inputAudio"
-      });
-    });
-    ResponseInputAudio$outboundSchema = object({
-      type: literal("input_audio"),
-      inputAudio: lazy(() => ResponseInputAudioInputAudio$outboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        inputAudio: "input_audio"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/responseinputfile.js
-var ResponseInputFile$inboundSchema, ResponseInputFile$outboundSchema;
-var init_responseinputfile = __esm({
-  "node_modules/@openrouter/sdk/esm/models/responseinputfile.js"() {
-    init_v4();
-    init_primitives();
-    ResponseInputFile$inboundSchema = object({
-      type: literal("input_file"),
-      file_id: nullable(string2()).optional(),
-      file_data: string2().optional(),
-      filename: string2().optional(),
-      file_url: string2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        "file_id": "fileId",
-        "file_data": "fileData",
-        "file_url": "fileUrl"
-      });
-    });
-    ResponseInputFile$outboundSchema = object({
-      type: literal("input_file"),
-      fileId: nullable(string2()).optional(),
-      fileData: string2().optional(),
-      filename: string2().optional(),
-      fileUrl: string2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        fileId: "file_id",
-        fileData: "file_data",
-        fileUrl: "file_url"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/responseinputtext.js
-var ResponseInputText$inboundSchema, ResponseInputText$outboundSchema;
-var init_responseinputtext = __esm({
-  "node_modules/@openrouter/sdk/esm/models/responseinputtext.js"() {
-    init_v4();
-    ResponseInputText$inboundSchema = object({
-      type: literal("input_text"),
-      text: string2()
-    });
-    ResponseInputText$outboundSchema = object({
-      type: literal("input_text"),
-      text: string2()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/responseinputvideo.js
-var ResponseInputVideo$outboundSchema;
-var init_responseinputvideo = __esm({
-  "node_modules/@openrouter/sdk/esm/models/responseinputvideo.js"() {
-    init_v4();
-    init_primitives();
-    ResponseInputVideo$outboundSchema = object({
-      type: literal("input_video"),
-      videoUrl: string2()
-    }).transform((v) => {
-      return remap(v, {
-        videoUrl: "video_url"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponseseasyinputmessage.js
-var OpenResponsesEasyInputMessageTypeMessage, OpenResponsesEasyInputMessageRoleDeveloper, OpenResponsesEasyInputMessageRoleAssistant, OpenResponsesEasyInputMessageRoleSystem, OpenResponsesEasyInputMessageRoleUser, OpenResponsesEasyInputMessageDetail, OpenResponsesEasyInputMessageTypeMessage$outboundSchema, OpenResponsesEasyInputMessageRoleDeveloper$outboundSchema, OpenResponsesEasyInputMessageRoleAssistant$outboundSchema, OpenResponsesEasyInputMessageRoleSystem$outboundSchema, OpenResponsesEasyInputMessageRoleUser$outboundSchema, OpenResponsesEasyInputMessageRoleUnion$outboundSchema, OpenResponsesEasyInputMessageDetail$outboundSchema, OpenResponsesEasyInputMessageContentInputImage$outboundSchema, OpenResponsesEasyInputMessageContentUnion1$outboundSchema, OpenResponsesEasyInputMessageContentUnion2$outboundSchema, OpenResponsesEasyInputMessage$outboundSchema;
-var init_openresponseseasyinputmessage = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponseseasyinputmessage.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    init_responseinputaudio();
-    init_responseinputfile();
-    init_responseinputtext();
-    init_responseinputvideo();
-    OpenResponsesEasyInputMessageTypeMessage = {
-      Message: "message"
-    };
-    OpenResponsesEasyInputMessageRoleDeveloper = {
-      Developer: "developer"
-    };
-    OpenResponsesEasyInputMessageRoleAssistant = {
-      Assistant: "assistant"
-    };
-    OpenResponsesEasyInputMessageRoleSystem = {
-      System: "system"
-    };
-    OpenResponsesEasyInputMessageRoleUser = {
-      User: "user"
-    };
-    OpenResponsesEasyInputMessageDetail = {
-      Auto: "auto",
-      High: "high",
-      Low: "low"
-    };
-    OpenResponsesEasyInputMessageTypeMessage$outboundSchema = _enum2(OpenResponsesEasyInputMessageTypeMessage);
-    OpenResponsesEasyInputMessageRoleDeveloper$outboundSchema = _enum2(OpenResponsesEasyInputMessageRoleDeveloper);
-    OpenResponsesEasyInputMessageRoleAssistant$outboundSchema = _enum2(OpenResponsesEasyInputMessageRoleAssistant);
-    OpenResponsesEasyInputMessageRoleSystem$outboundSchema = _enum2(OpenResponsesEasyInputMessageRoleSystem);
-    OpenResponsesEasyInputMessageRoleUser$outboundSchema = _enum2(OpenResponsesEasyInputMessageRoleUser);
-    OpenResponsesEasyInputMessageRoleUnion$outboundSchema = union([
-      OpenResponsesEasyInputMessageRoleUser$outboundSchema,
-      OpenResponsesEasyInputMessageRoleSystem$outboundSchema,
-      OpenResponsesEasyInputMessageRoleAssistant$outboundSchema,
-      OpenResponsesEasyInputMessageRoleDeveloper$outboundSchema
-    ]);
-    OpenResponsesEasyInputMessageDetail$outboundSchema = outboundSchema(OpenResponsesEasyInputMessageDetail);
-    OpenResponsesEasyInputMessageContentInputImage$outboundSchema = object({
-      type: literal("input_image"),
-      detail: OpenResponsesEasyInputMessageDetail$outboundSchema,
-      imageUrl: nullable(string2()).optional()
-    }).transform((v) => {
-      return remap(v, {
-        imageUrl: "image_url"
-      });
-    });
-    OpenResponsesEasyInputMessageContentUnion1$outboundSchema = union([
-      ResponseInputText$outboundSchema,
-      lazy(() => OpenResponsesEasyInputMessageContentInputImage$outboundSchema),
-      ResponseInputFile$outboundSchema,
-      ResponseInputAudio$outboundSchema,
-      ResponseInputVideo$outboundSchema
-    ]);
-    OpenResponsesEasyInputMessageContentUnion2$outboundSchema = union([
-      array(union([
-        ResponseInputText$outboundSchema,
-        lazy(() => OpenResponsesEasyInputMessageContentInputImage$outboundSchema),
-        ResponseInputFile$outboundSchema,
-        ResponseInputAudio$outboundSchema,
-        ResponseInputVideo$outboundSchema
-      ])),
-      string2()
-    ]);
-    OpenResponsesEasyInputMessage$outboundSchema = object({
-      type: OpenResponsesEasyInputMessageTypeMessage$outboundSchema.optional(),
-      role: union([
-        OpenResponsesEasyInputMessageRoleUser$outboundSchema,
-        OpenResponsesEasyInputMessageRoleSystem$outboundSchema,
-        OpenResponsesEasyInputMessageRoleAssistant$outboundSchema,
-        OpenResponsesEasyInputMessageRoleDeveloper$outboundSchema
-      ]),
-      content: union([
-        array(union([
-          ResponseInputText$outboundSchema,
-          lazy(() => OpenResponsesEasyInputMessageContentInputImage$outboundSchema),
-          ResponseInputFile$outboundSchema,
-          ResponseInputAudio$outboundSchema,
-          ResponseInputVideo$outboundSchema
-        ])),
-        string2()
-      ])
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/toolcallstatus.js
-var ToolCallStatus, ToolCallStatus$inboundSchema, ToolCallStatus$outboundSchema;
-var init_toolcallstatus = __esm({
-  "node_modules/@openrouter/sdk/esm/models/toolcallstatus.js"() {
-    init_enums();
-    ToolCallStatus = {
-      InProgress: "in_progress",
-      Completed: "completed",
-      Incomplete: "incomplete"
-    };
-    ToolCallStatus$inboundSchema = inboundSchema(ToolCallStatus);
-    ToolCallStatus$outboundSchema = outboundSchema(ToolCallStatus);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponsesfunctioncalloutput.js
-var OpenResponsesFunctionCallOutputType, OpenResponsesFunctionCallOutputType$outboundSchema, OpenResponsesFunctionCallOutput$outboundSchema;
-var init_openresponsesfunctioncalloutput = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponsesfunctioncalloutput.js"() {
-    init_v4();
-    init_primitives();
-    init_toolcallstatus();
-    OpenResponsesFunctionCallOutputType = {
-      FunctionCallOutput: "function_call_output"
-    };
-    OpenResponsesFunctionCallOutputType$outboundSchema = _enum2(OpenResponsesFunctionCallOutputType);
-    OpenResponsesFunctionCallOutput$outboundSchema = object({
-      type: OpenResponsesFunctionCallOutputType$outboundSchema,
-      id: nullable(string2()).optional(),
-      callId: string2(),
-      output: string2(),
-      status: nullable(ToolCallStatus$outboundSchema).optional()
-    }).transform((v) => {
-      return remap(v, {
-        callId: "call_id"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponsesinputmessageitem.js
-var OpenResponsesInputMessageItemTypeMessage, OpenResponsesInputMessageItemRoleDeveloper, OpenResponsesInputMessageItemRoleSystem, OpenResponsesInputMessageItemRoleUser, OpenResponsesInputMessageItemDetail, OpenResponsesInputMessageItemTypeMessage$outboundSchema, OpenResponsesInputMessageItemRoleDeveloper$outboundSchema, OpenResponsesInputMessageItemRoleSystem$outboundSchema, OpenResponsesInputMessageItemRoleUser$outboundSchema, OpenResponsesInputMessageItemRoleUnion$outboundSchema, OpenResponsesInputMessageItemDetail$outboundSchema, OpenResponsesInputMessageItemContentInputImage$outboundSchema, OpenResponsesInputMessageItemContentUnion$outboundSchema, OpenResponsesInputMessageItem$outboundSchema;
-var init_openresponsesinputmessageitem = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponsesinputmessageitem.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    init_responseinputaudio();
-    init_responseinputfile();
-    init_responseinputtext();
-    init_responseinputvideo();
-    OpenResponsesInputMessageItemTypeMessage = {
-      Message: "message"
-    };
-    OpenResponsesInputMessageItemRoleDeveloper = {
-      Developer: "developer"
-    };
-    OpenResponsesInputMessageItemRoleSystem = {
-      System: "system"
-    };
-    OpenResponsesInputMessageItemRoleUser = {
-      User: "user"
-    };
-    OpenResponsesInputMessageItemDetail = {
-      Auto: "auto",
-      High: "high",
-      Low: "low"
-    };
-    OpenResponsesInputMessageItemTypeMessage$outboundSchema = _enum2(OpenResponsesInputMessageItemTypeMessage);
-    OpenResponsesInputMessageItemRoleDeveloper$outboundSchema = _enum2(OpenResponsesInputMessageItemRoleDeveloper);
-    OpenResponsesInputMessageItemRoleSystem$outboundSchema = _enum2(OpenResponsesInputMessageItemRoleSystem);
-    OpenResponsesInputMessageItemRoleUser$outboundSchema = _enum2(OpenResponsesInputMessageItemRoleUser);
-    OpenResponsesInputMessageItemRoleUnion$outboundSchema = union([
-      OpenResponsesInputMessageItemRoleUser$outboundSchema,
-      OpenResponsesInputMessageItemRoleSystem$outboundSchema,
-      OpenResponsesInputMessageItemRoleDeveloper$outboundSchema
-    ]);
-    OpenResponsesInputMessageItemDetail$outboundSchema = outboundSchema(OpenResponsesInputMessageItemDetail);
-    OpenResponsesInputMessageItemContentInputImage$outboundSchema = object({
-      type: literal("input_image"),
-      detail: OpenResponsesInputMessageItemDetail$outboundSchema,
-      imageUrl: nullable(string2()).optional()
-    }).transform((v) => {
-      return remap(v, {
-        imageUrl: "image_url"
-      });
-    });
-    OpenResponsesInputMessageItemContentUnion$outboundSchema = union([
-      ResponseInputText$outboundSchema,
-      lazy(() => OpenResponsesInputMessageItemContentInputImage$outboundSchema),
-      ResponseInputFile$outboundSchema,
-      ResponseInputAudio$outboundSchema,
-      ResponseInputVideo$outboundSchema
-    ]);
-    OpenResponsesInputMessageItem$outboundSchema = object({
-      id: string2().optional(),
-      type: OpenResponsesInputMessageItemTypeMessage$outboundSchema.optional(),
-      role: union([
-        OpenResponsesInputMessageItemRoleUser$outboundSchema,
-        OpenResponsesInputMessageItemRoleSystem$outboundSchema,
-        OpenResponsesInputMessageItemRoleDeveloper$outboundSchema
-      ]),
-      content: array(union([
-        ResponseInputText$outboundSchema,
-        lazy(() => OpenResponsesInputMessageItemContentInputImage$outboundSchema),
-        ResponseInputFile$outboundSchema,
-        ResponseInputAudio$outboundSchema,
-        ResponseInputVideo$outboundSchema
-      ]))
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/stream-type-guards.js
-function isOutputTextDeltaEvent(event) {
-  return "type" in event && event.type === "response.output_text.delta";
-}
-function isReasoningDeltaEvent(event) {
-  return "type" in event && event.type === "response.reasoning_text.delta";
-}
-function isFunctionCallArgumentsDeltaEvent(event) {
-  return "type" in event && event.type === "response.function_call_arguments.delta";
-}
-function isOutputItemAddedEvent(event) {
-  return "type" in event && event.type === "response.output_item.added";
-}
-function isOutputItemDoneEvent(event) {
-  return "type" in event && event.type === "response.output_item.done";
-}
-function isResponseCompletedEvent(event) {
-  return "type" in event && event.type === "response.completed";
-}
-function isResponseFailedEvent(event) {
-  return "type" in event && event.type === "response.failed";
-}
-function isResponseIncompleteEvent(event) {
-  return "type" in event && event.type === "response.incomplete";
-}
-function isFunctionCallArgumentsDoneEvent(event) {
-  return "type" in event && event.type === "response.function_call_arguments.done";
-}
-function isOutputMessage(item) {
-  return typeof item === "object" && item !== null && "type" in item && item.type === "message";
-}
-function isFunctionCallItem(item) {
-  return typeof item === "object" && item !== null && "type" in item && item.type === "function_call";
-}
-function isReasoningOutputItem(item) {
-  return typeof item === "object" && item !== null && "type" in item && item.type === "reasoning";
-}
-function isWebSearchCallOutputItem(item) {
-  return typeof item === "object" && item !== null && "type" in item && item.type === "web_search_call";
-}
-function isFileSearchCallOutputItem(item) {
-  return typeof item === "object" && item !== null && "type" in item && item.type === "file_search_call";
-}
-function isImageGenerationCallOutputItem(item) {
-  return typeof item === "object" && item !== null && "type" in item && item.type === "image_generation_call";
-}
-function hasTypeProperty(item) {
-  return typeof item === "object" && item !== null && "type" in item && typeof item.type === "string";
-}
-var init_stream_type_guards = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/stream-type-guards.js"() {
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/stream-transformers.js
-async function* extractTextDeltas(stream) {
-  const consumer = stream.createConsumer();
-  for await (const event of consumer) {
-    if (isOutputTextDeltaEvent(event)) {
-      if (event.delta) {
-        yield event.delta;
-      }
-    }
-  }
-}
-async function* extractReasoningDeltas(stream) {
-  const consumer = stream.createConsumer();
-  for await (const event of consumer) {
-    if (isReasoningDeltaEvent(event)) {
-      if (event.delta) {
-        yield event.delta;
-      }
-    }
-  }
-}
-async function* extractToolDeltas(stream) {
-  const consumer = stream.createConsumer();
-  for await (const event of consumer) {
-    if (isFunctionCallArgumentsDeltaEvent(event)) {
-      if (event.delta) {
-        yield event.delta;
-      }
-    }
-  }
-}
-async function* buildMessageStreamCore(stream) {
-  const consumer = stream.createConsumer();
-  let currentText = "";
-  let currentId = "";
-  let hasStarted = false;
-  for await (const event of consumer) {
-    if (!("type" in event)) {
-      continue;
-    }
-    switch (event.type) {
-      case "response.output_item.added": {
-        if (isOutputItemAddedEvent(event)) {
-          if (event.item && isOutputMessage(event.item)) {
-            hasStarted = true;
-            currentText = "";
-            currentId = event.item.id;
-          }
-        }
-        break;
-      }
-      case "response.output_text.delta": {
-        if (isOutputTextDeltaEvent(event)) {
-          if (hasStarted && event.delta) {
-            currentText += event.delta;
-            yield {
-              type: "delta",
-              text: currentText,
-              messageId: currentId
-            };
-          }
-        }
-        break;
-      }
-      case "response.output_item.done": {
-        if (isOutputItemDoneEvent(event)) {
-          if (event.item && isOutputMessage(event.item)) {
-            yield {
-              type: "complete",
-              completeMessage: event.item
-            };
-          }
-        }
-        break;
-      }
-      case "response.completed":
-      case "response.failed":
-      case "response.incomplete":
-        return;
-      default:
-        break;
-    }
-  }
-}
-async function* buildResponsesMessageStream(stream) {
-  for await (const update of buildMessageStreamCore(stream)) {
-    if (update.type === "delta" && update.text !== void 0 && update.messageId !== void 0) {
-      yield {
-        id: update.messageId,
-        type: "message",
-        role: "assistant",
-        status: "in_progress",
-        content: [
-          {
-            type: "output_text",
-            text: update.text,
-            annotations: []
-          }
-        ]
-      };
-    } else if (update.type === "complete" && update.completeMessage) {
-      yield update.completeMessage;
-    }
-  }
-}
-function handleOutputItemAdded(event, itemsInProgress) {
-  if (!isOutputItemAddedEvent(event) || !event.item) {
-    return void 0;
-  }
-  const item = event.item;
-  if (isOutputMessage(item)) {
-    itemsInProgress.set(item.id, {
-      type: "message",
-      id: item.id,
-      textContent: ""
-    });
-    return {
-      id: item.id,
-      type: "message",
-      role: "assistant",
-      status: "in_progress",
-      content: []
-    };
-  }
-  if (isFunctionCallItem(item)) {
-    const itemKey = item.id ?? item.callId;
-    itemsInProgress.set(itemKey, {
-      type: "function_call",
-      id: itemKey,
-      name: item.name,
-      callId: item.callId,
-      argumentsAccumulated: ""
-    });
-    return {
-      type: "function_call",
-      id: item.id,
-      callId: item.callId,
-      name: item.name,
-      arguments: "",
-      status: "in_progress"
-    };
-  }
-  if (isReasoningOutputItem(item)) {
-    itemsInProgress.set(item.id, {
-      type: "reasoning",
-      id: item.id,
-      reasoningContent: ""
-    });
-    return {
-      type: "reasoning",
-      id: item.id,
-      status: "in_progress",
-      summary: []
-    };
-  }
-  if (isWebSearchCallOutputItem(item)) {
-    return item;
-  }
-  if (isFileSearchCallOutputItem(item)) {
-    return item;
-  }
-  if (isImageGenerationCallOutputItem(item)) {
-    return item;
-  }
-  return void 0;
-}
-function handleTextDelta(event, itemsInProgress) {
-  if (!isOutputTextDeltaEvent(event) || !event.delta) {
-    return void 0;
-  }
-  const item = itemsInProgress.get(event.itemId);
-  if (item?.type === "message") {
-    item.textContent += event.delta;
-    return {
-      id: item.id,
-      type: "message",
-      role: "assistant",
-      status: "in_progress",
-      content: [
-        {
-          type: "output_text",
-          text: item.textContent,
-          annotations: []
-        }
-      ]
-    };
-  }
-  return void 0;
-}
-function handleFunctionCallDelta(event, itemsInProgress) {
-  if (!isFunctionCallArgumentsDeltaEvent(event) || !event.delta) {
-    return void 0;
-  }
-  const item = itemsInProgress.get(event.itemId);
-  if (item?.type === "function_call") {
-    item.argumentsAccumulated += event.delta;
-    return {
-      type: "function_call",
-      // Include id if it differs from callId (means API provided an id)
-      id: item.id !== item.callId ? item.id : void 0,
-      callId: item.callId,
-      name: item.name,
-      arguments: item.argumentsAccumulated,
-      status: "in_progress"
-    };
-  }
-  return void 0;
-}
-function handleReasoningDelta(event, itemsInProgress) {
-  if (!isReasoningDeltaEvent(event) || !event.delta) {
-    return void 0;
-  }
-  const item = itemsInProgress.get(event.itemId);
-  if (item?.type === "reasoning") {
-    item.reasoningContent += event.delta;
-    return {
-      type: "reasoning",
-      id: item.id,
-      status: "in_progress",
-      summary: [
-        {
-          type: "summary_text",
-          text: item.reasoningContent
-        }
-      ]
-    };
-  }
-  return void 0;
-}
-function handleOutputItemDone(event, itemsInProgress) {
-  if (!isOutputItemDoneEvent(event) || !event.item) {
-    return void 0;
-  }
-  const item = event.item;
-  if (isOutputMessage(item)) {
-    itemsInProgress.delete(item.id);
-    return item;
-  }
-  if (isFunctionCallItem(item)) {
-    itemsInProgress.delete(item.id ?? item.callId);
-    return item;
-  }
-  if (isReasoningOutputItem(item)) {
-    itemsInProgress.delete(item.id);
-    return item;
-  }
-  if (isWebSearchCallOutputItem(item)) {
-    return item;
-  }
-  if (isFileSearchCallOutputItem(item)) {
-    return item;
-  }
-  if (isImageGenerationCallOutputItem(item)) {
-    return item;
-  }
-  return void 0;
-}
-async function* buildItemsStream(stream) {
-  const consumer = stream.createConsumer();
-  const itemsInProgress = /* @__PURE__ */ new Map();
-  for await (const event of consumer) {
-    if (!("type" in event)) {
-      continue;
-    }
-    if (streamTerminationEvents.has(event.type)) {
-      return;
-    }
-    const handler = itemsStreamHandlers[event.type];
-    if (handler) {
-      const result = handler(event, itemsInProgress);
-      if (result) {
-        yield result;
-      }
-    }
-  }
-}
-async function consumeStreamForCompletion(stream) {
-  const consumer = stream.createConsumer();
-  for await (const event of consumer) {
-    if (!("type" in event)) {
-      continue;
-    }
-    if (isResponseCompletedEvent(event)) {
-      return event.response;
-    }
-    if (isResponseFailedEvent(event)) {
-      throw new Error(`Response failed: ${JSON.stringify(event.response.error)}`);
-    }
-    if (isResponseIncompleteEvent(event)) {
-      return event.response;
-    }
-  }
-  throw new Error("Stream ended without completion event");
-}
-function convertToAssistantMessage(outputMessage) {
-  const textContent = outputMessage.content.filter((part) => "type" in part && part.type === "output_text").map((part) => part.text).join("");
-  return {
-    role: "assistant",
-    content: textContent || null
-  };
-}
-function extractMessageFromResponse(response) {
-  const messageItem = response.output.find((item) => "type" in item && item.type === "message");
-  if (!messageItem) {
-    throw new Error("No message found in response output");
-  }
-  return convertToAssistantMessage(messageItem);
-}
-function extractResponsesMessageFromResponse(response) {
-  const messageItem = response.output.find((item) => "type" in item && item.type === "message");
-  if (!messageItem) {
-    throw new Error("No message found in response output");
-  }
-  return messageItem;
-}
-function extractTextFromResponse(response) {
-  if (response.outputText) {
-    return response.outputText;
-  }
-  const hasMessage = response.output.some((item) => "type" in item && item.type === "message");
-  if (!hasMessage) {
-    return "";
-  }
-  const message = extractMessageFromResponse(response);
-  if (typeof message.content === "string") {
-    return message.content;
-  }
-  return "";
-}
-function extractToolCallsFromResponse(response) {
-  const toolCalls = [];
-  for (const item of response.output) {
-    if (isFunctionCallItem(item)) {
-      try {
-        const parsedArguments = JSON.parse(item.arguments);
-        toolCalls.push({
-          id: item.callId,
-          name: item.name,
-          arguments: parsedArguments
-        });
-      } catch (error48) {
-        console.warn(`Failed to parse tool call arguments for ${item.name}:`, error48 instanceof Error ? error48.message : String(error48), `
-Arguments: ${item.arguments.substring(0, 100)}${item.arguments.length > 100 ? "..." : ""}`);
-        toolCalls.push({
-          id: item.callId,
-          name: item.name,
-          arguments: item.arguments
-          // Keep as string if parsing fails
-        });
-      }
-    }
-  }
-  return toolCalls;
-}
-async function* buildToolCallStream(stream) {
-  const consumer = stream.createConsumer();
-  const toolCallsInProgress = /* @__PURE__ */ new Map();
-  for await (const event of consumer) {
-    if (!("type" in event)) {
-      continue;
-    }
-    switch (event.type) {
-      case "response.output_item.added": {
-        if (isOutputItemAddedEvent(event) && event.item && isFunctionCallItem(event.item)) {
-          toolCallsInProgress.set(event.item.callId, {
-            id: event.item.callId,
-            name: event.item.name,
-            argumentsAccumulated: ""
-          });
-        }
-        break;
-      }
-      case "response.function_call_arguments.delta": {
-        if (isFunctionCallArgumentsDeltaEvent(event)) {
-          const toolCall = toolCallsInProgress.get(event.itemId);
-          if (toolCall && event.delta) {
-            toolCall.argumentsAccumulated += event.delta;
-          }
-        }
-        break;
-      }
-      case "response.function_call_arguments.done": {
-        if (isFunctionCallArgumentsDoneEvent(event)) {
-          const toolCall = toolCallsInProgress.get(event.itemId);
-          if (toolCall) {
-            try {
-              const parsedArguments = JSON.parse(event.arguments);
-              yield {
-                id: toolCall.id,
-                name: event.name,
-                arguments: parsedArguments
-              };
-            } catch (error48) {
-              console.warn(`Failed to parse tool call arguments for ${event.name}:`, error48 instanceof Error ? error48.message : String(error48), `
-Arguments: ${event.arguments.substring(0, 100)}${event.arguments.length > 100 ? "..." : ""}`);
-              yield {
-                id: toolCall.id,
-                name: event.name,
-                arguments: event.arguments
-              };
-            }
-            toolCallsInProgress.delete(event.itemId);
-          }
-        }
-        break;
-      }
-      case "response.output_item.done": {
-        if (isOutputItemDoneEvent(event) && event.item && isFunctionCallItem(event.item)) {
-          if (toolCallsInProgress.has(event.item.callId)) {
-            try {
-              const parsedArguments = JSON.parse(event.item.arguments);
-              yield {
-                id: event.item.callId,
-                name: event.item.name,
-                arguments: parsedArguments
-              };
-            } catch (_error) {
-              yield {
-                id: event.item.callId,
-                name: event.item.name,
-                arguments: event.item.arguments
-              };
-            }
-            toolCallsInProgress.delete(event.item.callId);
-          }
-        }
-        break;
-      }
-    }
-  }
-}
-var itemsStreamHandlers, streamTerminationEvents;
-var init_stream_transformers = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/stream-transformers.js"() {
-    init_stream_type_guards();
-    itemsStreamHandlers = {
-      "response.output_item.added": handleOutputItemAdded,
-      "response.output_text.delta": handleTextDelta,
-      "response.function_call_arguments.delta": handleFunctionCallDelta,
-      "response.reasoning_text.delta": handleReasoningDelta,
-      "response.output_item.done": handleOutputItemDone
-    };
-    streamTerminationEvents = /* @__PURE__ */ new Set([
-      "response.completed",
-      "response.failed",
-      "response.incomplete"
-    ]);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/async-params.js
-function isParameterFunction(value) {
-  return typeof value === "function";
-}
-function buildResolvedRequest(entries) {
-  const obj = Object.fromEntries(entries);
-  return obj;
-}
-async function resolveAsyncFunctions(input, context) {
-  const resolvedEntries = [];
-  const clientOnlyFields = /* @__PURE__ */ new Set([
-    "stopWhen",
-    // Handled separately in ModelResult
-    "state",
-    // Client-side state management
-    "requireApproval",
-    // Client-side approval check function
-    "approveToolCalls",
-    // Client-side approval decisions
-    "rejectToolCalls"
-    // Client-side rejection decisions
-  ]);
-  for (const [key, value] of Object.entries(input)) {
-    if (clientOnlyFields.has(key)) {
-      continue;
-    }
-    if (isParameterFunction(value)) {
-      try {
-        const result = await Promise.resolve(value(context));
-        resolvedEntries.push([key, result]);
-      } catch (error48) {
-        throw new Error(`Failed to resolve async function for field "${key}": ${error48 instanceof Error ? error48.message : String(error48)}`);
-      }
-    } else {
-      resolvedEntries.push([key, value]);
-    }
-  }
-  return buildResolvedRequest(resolvedEntries);
-}
-function hasAsyncFunctions(input) {
-  if (!input || typeof input !== "object") {
-    return false;
-  }
-  return Object.values(input).some((value) => typeof value === "function");
-}
-var init_async_params = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/async-params.js"() {
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/url.js
-function pathToFunc(pathPattern, options) {
-  const paramRE = /\{([a-zA-Z0-9_][a-zA-Z0-9_-]*?)\}/g;
-  return function buildURLPath(params = {}) {
-    return pathPattern.replace(paramRE, function(_, placeholder) {
-      if (!hasOwn.call(params, placeholder)) {
-        throw new Error(`Parameter '${placeholder}' is required`);
-      }
-      const value = params[placeholder];
-      if (typeof value !== "string" && typeof value !== "number") {
-        throw new Error(`Parameter '${placeholder}' must be a string or number`);
-      }
-      return options?.charEncoding === "percent" ? encodeURIComponent(`${value}`) : `${value}`;
-    });
-  };
-}
-var hasOwn;
-var init_url = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/url.js"() {
-    hasOwn = Object.prototype.hasOwnProperty;
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/config.js
-function serverURLFromOptions(options) {
-  let serverURL = options.serverURL;
-  const params = {};
-  if (!serverURL) {
-    const server = options.server ?? ServerProduction;
-    serverURL = ServerList[server] || "";
-  }
-  const u = pathToFunc(serverURL)(params);
-  return new URL(u);
-}
-var ServerProduction, ServerList, SDK_METADATA;
-var init_config = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/config.js"() {
-    init_url();
-    ServerProduction = "production";
-    ServerList = {
-      [ServerProduction]: "https://openrouter.ai/api/v1"
-    };
-    SDK_METADATA = {
-      language: "typescript",
-      openapiDocVersion: "1.0.0",
-      sdkVersion: "0.8.0",
-      genVersion: "2.788.4",
-      userAgent: "speakeasy-sdk/typescript 0.8.0 2.788.4 1.0.0 @openrouter/sdk"
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/files.js
-var init_files = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/files.js"() {
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/http.js
-function matchContentType(response, pattern) {
-  if (pattern === "*") {
-    return true;
-  }
-  let contentType = response.headers.get("content-type")?.trim() || "application/octet-stream";
-  contentType = contentType.toLowerCase();
-  const wantParts = pattern.toLowerCase().trim().split(mediaParamSeparator);
-  const [wantType = "", ...wantParams] = wantParts;
-  if (wantType.split("/").length !== 2) {
-    return false;
-  }
-  const gotParts = contentType.split(mediaParamSeparator);
-  const [gotType = "", ...gotParams] = gotParts;
-  const [type = "", subtype = ""] = gotType.split("/");
-  if (!type || !subtype) {
-    return false;
-  }
-  if (wantType !== "*/*" && gotType !== wantType && `${type}/*` !== wantType && `*/${subtype}` !== wantType) {
-    return false;
-  }
-  if (gotParams.length < wantParams.length) {
-    return false;
-  }
-  const params = new Set(gotParams);
-  for (const wantParam of wantParams) {
-    if (!params.has(wantParam)) {
-      return false;
-    }
-  }
-  return true;
-}
-function matchStatusCode(response, codes) {
-  const actual = `${response.status}`;
-  const expectedCodes = Array.isArray(codes) ? codes : [codes];
-  if (!expectedCodes.length) {
-    return false;
-  }
-  return expectedCodes.some((ec) => {
-    const code = `${ec}`;
-    if (code === "default") {
-      return true;
-    }
-    if (!codeRangeRE.test(`${code}`)) {
-      return code === actual;
-    }
-    const expectFamily = code.charAt(0);
-    if (!expectFamily) {
-      throw new Error("Invalid status code range");
-    }
-    const actualFamily = actual.charAt(0);
-    if (!actualFamily) {
-      throw new Error(`Invalid response status code: ${actual}`);
-    }
-    return actualFamily === expectFamily;
-  });
-}
-function matchResponse(response, code, contentTypePattern) {
-  return matchStatusCode(response, code) && matchContentType(response, contentTypePattern);
-}
-function isConnectionError(err) {
-  if (typeof err !== "object" || err == null) {
-    return false;
-  }
-  const isBrowserErr = err instanceof TypeError && err.message.toLowerCase().startsWith("failed to fetch");
-  const isNodeErr = err instanceof TypeError && err.message.toLowerCase().startsWith("fetch failed");
-  const isBunErr = "name" in err && err.name === "ConnectionError";
-  const isGenericErr = "code" in err && typeof err.code === "string" && err.code.toLowerCase() === "econnreset";
-  return isBrowserErr || isNodeErr || isGenericErr || isBunErr;
-}
-function isTimeoutError(err) {
-  if (typeof err !== "object" || err == null) {
-    return false;
-  }
-  const isNative = "name" in err && err.name === "TimeoutError";
-  const isLegacyNative = "code" in err && err.code === 23;
-  const isGenericErr = "code" in err && typeof err.code === "string" && err.code.toLowerCase() === "econnaborted";
-  return isNative || isLegacyNative || isGenericErr;
-}
-function isAbortError(err) {
-  if (typeof err !== "object" || err == null) {
-    return false;
-  }
-  const isNative = "name" in err && err.name === "AbortError";
-  const isLegacyNative = "code" in err && err.code === 20;
-  const isGenericErr = "code" in err && typeof err.code === "string" && err.code.toLowerCase() === "econnaborted";
-  return isNative || isLegacyNative || isGenericErr;
-}
-var DEFAULT_FETCHER, HTTPClient, mediaParamSeparator, codeRangeRE;
-var init_http = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/http.js"() {
-    DEFAULT_FETCHER = (input, init) => {
-      if (init == null) {
-        return fetch(input);
-      } else {
-        return fetch(input, init);
-      }
-    };
-    HTTPClient = class _HTTPClient {
-      constructor(options = {}) {
-        this.options = options;
-        this.requestHooks = [];
-        this.requestErrorHooks = [];
-        this.responseHooks = [];
-        this.fetcher = options.fetcher || DEFAULT_FETCHER;
-      }
-      async request(request) {
-        let req = request;
-        for (const hook of this.requestHooks) {
-          const nextRequest = await hook(req);
-          if (nextRequest) {
-            req = nextRequest;
-          }
-        }
-        try {
-          const res = await this.fetcher(req);
-          for (const hook of this.responseHooks) {
-            await hook(res, req);
-          }
-          return res;
-        } catch (err) {
-          for (const hook of this.requestErrorHooks) {
-            await hook(err, req);
-          }
-          throw err;
-        }
-      }
-      addHook(...args) {
-        if (args[0] === "beforeRequest") {
-          this.requestHooks.push(args[1]);
-        } else if (args[0] === "requestError") {
-          this.requestErrorHooks.push(args[1]);
-        } else if (args[0] === "response") {
-          this.responseHooks.push(args[1]);
-        } else {
-          throw new Error(`Invalid hook type: ${args[0]}`);
-        }
-        return this;
-      }
-      removeHook(...args) {
-        let target;
-        if (args[0] === "beforeRequest") {
-          target = this.requestHooks;
-        } else if (args[0] === "requestError") {
-          target = this.requestErrorHooks;
-        } else if (args[0] === "response") {
-          target = this.responseHooks;
-        } else {
-          throw new Error(`Invalid hook type: ${args[0]}`);
-        }
-        const index = target.findIndex((v) => v === args[1]);
-        if (index >= 0) {
-          target.splice(index, 1);
-        }
-        return this;
-      }
-      clone() {
-        const child = new _HTTPClient(this.options);
-        child.requestHooks = this.requestHooks.slice();
-        child.requestErrorHooks = this.requestErrorHooks.slice();
-        child.responseHooks = this.responseHooks.slice();
-        return child;
-      }
-    };
-    mediaParamSeparator = /\s*;\s*/g;
-    codeRangeRE = new RegExp("^[0-9]xx$", "i");
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/next-turn-params.js
-function isRecord(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function buildNextTurnParamsContext(request) {
-  return {
-    input: request.input ?? [],
-    model: request.model ?? "",
-    models: request.models ?? [],
-    temperature: request.temperature ?? null,
-    maxOutputTokens: request.maxOutputTokens ?? null,
-    topP: request.topP ?? null,
-    topK: request.topK,
-    instructions: request.instructions ?? null
-  };
-}
-async function executeNextTurnParamsFunctions(toolCalls, tools, currentRequest) {
-  const context = buildNextTurnParamsContext(currentRequest);
-  const result = {};
-  const workingContext = { ...context };
-  for (const tool of tools) {
-    if (!tool.function.nextTurnParams) {
-      continue;
-    }
-    const callsForTool = toolCalls.filter((tc) => tc.name === tool.function.name);
-    for (const call of callsForTool) {
-      const nextParams = tool.function.nextTurnParams;
-      if (!isRecord(call.arguments)) {
-        const typeStr = Array.isArray(call.arguments) ? "array" : typeof call.arguments;
-        throw new Error(`Tool call arguments for ${tool.function.name} must be an object, got ${typeStr}`);
-      }
-      await processNextTurnParamsForCall(nextParams, call.arguments, workingContext, result, tool.function.name);
-    }
-  }
-  return result;
-}
-async function processNextTurnParamsForCall(nextParams, params, workingContext, result, toolName) {
-  for (const paramKey of Object.keys(nextParams)) {
-    const fn = nextParams[paramKey];
-    if (typeof fn !== "function") {
-      continue;
-    }
-    if (!isValidNextTurnParamKey(paramKey)) {
-      if (process.env["NODE_ENV"] !== "production") {
-        console.warn(`Invalid nextTurnParams key "${paramKey}" in tool "${toolName}". Valid keys: input, model, models, temperature, maxOutputTokens, topP, topK, instructions`);
-      }
-      continue;
-    }
-    const newValue = await Promise.resolve(fn(params, workingContext));
-    setNextTurnParam(result, paramKey, newValue);
-    setNextTurnParam(workingContext, paramKey, newValue);
-  }
-}
-function isValidNextTurnParamKey(key) {
-  const validKeys = /* @__PURE__ */ new Set([
-    "input",
-    "model",
-    "models",
-    "temperature",
-    "maxOutputTokens",
-    "topP",
-    "topK",
-    "instructions"
-  ]);
-  return validKeys.has(key);
-}
-function setNextTurnParam(target, key, value) {
-  target[key] = value;
-}
-function applyNextTurnParamsToRequest(request, computedParams) {
-  return {
-    ...request,
-    ...computedParams
-  };
-}
-var init_next_turn_params = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/next-turn-params.js"() {
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/stop-conditions.js
-function stepCountIs(stepCount) {
-  return ({ steps }) => steps.length >= stepCount;
-}
-async function isStopConditionMet(options) {
-  const { stopConditions, steps } = options;
-  const results = await Promise.all(stopConditions.map((condition) => Promise.resolve(condition({
-    steps
-  }))));
-  return results.some((result) => result === true);
-}
-var init_stop_conditions = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/stop-conditions.js"() {
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/tool-types.js
-function hasExecuteFunction(tool) {
-  return "execute" in tool.function && typeof tool.function.execute === "function";
-}
-function isGeneratorTool(tool) {
-  return "eventSchema" in tool.function;
-}
-function isRegularExecuteTool(tool) {
-  return hasExecuteFunction(tool) && !isGeneratorTool(tool);
-}
-var ToolType;
-var init_tool_types = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/tool-types.js"() {
-    (function(ToolType2) {
-      ToolType2["Function"] = "function";
-    })(ToolType || (ToolType = {}));
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/activityitem.js
-var ActivityItem$inboundSchema;
-var init_activityitem = __esm({
-  "node_modules/@openrouter/sdk/esm/models/activityitem.js"() {
-    init_v4();
-    init_primitives();
-    ActivityItem$inboundSchema = object({
-      date: string2(),
-      model: string2(),
-      model_permaslug: string2(),
-      endpoint_id: string2(),
-      provider_name: string2(),
-      usage: number2(),
-      byok_usage_inference: number2(),
-      requests: number2(),
-      prompt_tokens: number2(),
-      completion_tokens: number2(),
-      reasoning_tokens: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "model_permaslug": "modelPermaslug",
-        "endpoint_id": "endpointId",
-        "provider_name": "providerName",
-        "byok_usage_inference": "byokUsageInference",
-        "prompt_tokens": "promptTokens",
-        "completion_tokens": "completionTokens",
-        "reasoning_tokens": "reasoningTokens"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/chatmessagecontentitemaudio.js
-var ChatMessageContentItemAudioInputAudio$inboundSchema, ChatMessageContentItemAudioInputAudio$outboundSchema, ChatMessageContentItemAudio$inboundSchema, ChatMessageContentItemAudio$outboundSchema;
-var init_chatmessagecontentitemaudio = __esm({
-  "node_modules/@openrouter/sdk/esm/models/chatmessagecontentitemaudio.js"() {
-    init_v4();
-    init_primitives();
-    ChatMessageContentItemAudioInputAudio$inboundSchema = object({
-      data: string2(),
-      format: string2()
-    });
-    ChatMessageContentItemAudioInputAudio$outboundSchema = object({
-      data: string2(),
-      format: string2()
-    });
-    ChatMessageContentItemAudio$inboundSchema = object({
-      type: literal("input_audio"),
-      input_audio: lazy(() => ChatMessageContentItemAudioInputAudio$inboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        "input_audio": "inputAudio"
-      });
-    });
-    ChatMessageContentItemAudio$outboundSchema = object({
-      type: literal("input_audio"),
-      inputAudio: lazy(() => ChatMessageContentItemAudioInputAudio$outboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        inputAudio: "input_audio"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/chatmessagecontentitemimage.js
-var ChatMessageContentItemImageDetail, ChatMessageContentItemImageDetail$inboundSchema, ChatMessageContentItemImageDetail$outboundSchema, ChatMessageContentItemImageImageUrl$inboundSchema, ChatMessageContentItemImageImageUrl$outboundSchema, ChatMessageContentItemImage$inboundSchema, ChatMessageContentItemImage$outboundSchema;
-var init_chatmessagecontentitemimage = __esm({
-  "node_modules/@openrouter/sdk/esm/models/chatmessagecontentitemimage.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    ChatMessageContentItemImageDetail = {
-      Auto: "auto",
-      Low: "low",
-      High: "high"
-    };
-    ChatMessageContentItemImageDetail$inboundSchema = inboundSchema(ChatMessageContentItemImageDetail);
-    ChatMessageContentItemImageDetail$outboundSchema = outboundSchema(ChatMessageContentItemImageDetail);
-    ChatMessageContentItemImageImageUrl$inboundSchema = object({
-      url: string2(),
-      detail: ChatMessageContentItemImageDetail$inboundSchema.optional()
-    });
-    ChatMessageContentItemImageImageUrl$outboundSchema = object({
-      url: string2(),
-      detail: ChatMessageContentItemImageDetail$outboundSchema.optional()
-    });
-    ChatMessageContentItemImage$inboundSchema = object({
-      type: literal("image_url"),
-      image_url: lazy(() => ChatMessageContentItemImageImageUrl$inboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        "image_url": "imageUrl"
-      });
-    });
-    ChatMessageContentItemImage$outboundSchema = object({
-      type: literal("image_url"),
-      imageUrl: lazy(() => ChatMessageContentItemImageImageUrl$outboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        imageUrl: "image_url"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/chatmessagecontentitemcachecontrol.js
-var Ttl, Ttl$inboundSchema, Ttl$outboundSchema, ChatMessageContentItemCacheControl$inboundSchema, ChatMessageContentItemCacheControl$outboundSchema;
-var init_chatmessagecontentitemcachecontrol = __esm({
-  "node_modules/@openrouter/sdk/esm/models/chatmessagecontentitemcachecontrol.js"() {
-    init_v4();
-    init_enums();
-    Ttl = {
-      Fivem: "5m",
-      Oneh: "1h"
-    };
-    Ttl$inboundSchema = inboundSchema(Ttl);
-    Ttl$outboundSchema = outboundSchema(Ttl);
-    ChatMessageContentItemCacheControl$inboundSchema = object({
-      type: literal("ephemeral"),
-      ttl: Ttl$inboundSchema.optional()
-    });
-    ChatMessageContentItemCacheControl$outboundSchema = object({
-      type: literal("ephemeral"),
-      ttl: Ttl$outboundSchema.optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/chatmessagecontentitemtext.js
-var ChatMessageContentItemText$inboundSchema, ChatMessageContentItemText$outboundSchema;
-var init_chatmessagecontentitemtext = __esm({
-  "node_modules/@openrouter/sdk/esm/models/chatmessagecontentitemtext.js"() {
-    init_v4();
-    init_primitives();
-    init_chatmessagecontentitemcachecontrol();
-    ChatMessageContentItemText$inboundSchema = object({
-      type: literal("text"),
-      text: string2(),
-      cache_control: ChatMessageContentItemCacheControl$inboundSchema.optional()
-    }).transform((v) => {
-      return remap(v, {
-        "cache_control": "cacheControl"
-      });
-    });
-    ChatMessageContentItemText$outboundSchema = object({
-      type: literal("text"),
-      text: string2(),
-      cacheControl: ChatMessageContentItemCacheControl$outboundSchema.optional()
-    }).transform((v) => {
-      return remap(v, {
-        cacheControl: "cache_control"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/chatmessagecontentitemvideo.js
-var VideoUrl2$inboundSchema, VideoUrl2$outboundSchema, ChatMessageContentItemVideoVideoURL$inboundSchema, ChatMessageContentItemVideoVideoURL$outboundSchema, VideoUrl1$inboundSchema, VideoUrl1$outboundSchema, ChatMessageContentItemVideoInputVideo$inboundSchema, ChatMessageContentItemVideoInputVideo$outboundSchema, ChatMessageContentItemVideo$inboundSchema, ChatMessageContentItemVideo$outboundSchema;
-var init_chatmessagecontentitemvideo = __esm({
-  "node_modules/@openrouter/sdk/esm/models/chatmessagecontentitemvideo.js"() {
-    init_v4();
-    init_primitives();
-    VideoUrl2$inboundSchema = object({
-      url: string2()
-    });
-    VideoUrl2$outboundSchema = object({
-      url: string2()
-    });
-    ChatMessageContentItemVideoVideoURL$inboundSchema = object({
-      type: literal("video_url"),
-      video_url: lazy(() => VideoUrl2$inboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        "video_url": "videoUrl"
-      });
-    });
-    ChatMessageContentItemVideoVideoURL$outboundSchema = object({
-      type: literal("video_url"),
-      videoUrl: lazy(() => VideoUrl2$outboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        videoUrl: "video_url"
-      });
-    });
-    VideoUrl1$inboundSchema = object({
-      url: string2()
-    });
-    VideoUrl1$outboundSchema = object({
-      url: string2()
-    });
-    ChatMessageContentItemVideoInputVideo$inboundSchema = object({
-      type: literal("input_video"),
-      video_url: lazy(() => VideoUrl1$inboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        "video_url": "videoUrl"
-      });
-    });
-    ChatMessageContentItemVideoInputVideo$outboundSchema = object({
-      type: literal("input_video"),
-      videoUrl: lazy(() => VideoUrl1$outboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        videoUrl: "video_url"
-      });
-    });
-    ChatMessageContentItemVideo$inboundSchema = union([
-      lazy(() => ChatMessageContentItemVideoInputVideo$inboundSchema),
-      lazy(() => ChatMessageContentItemVideoVideoURL$inboundSchema)
-    ]);
-    ChatMessageContentItemVideo$outboundSchema = union([
-      lazy(() => ChatMessageContentItemVideoInputVideo$outboundSchema),
-      lazy(() => ChatMessageContentItemVideoVideoURL$outboundSchema)
-    ]);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/chatmessagecontentitem.js
-var ChatMessageContentItem$inboundSchema, ChatMessageContentItem$outboundSchema;
-var init_chatmessagecontentitem = __esm({
-  "node_modules/@openrouter/sdk/esm/models/chatmessagecontentitem.js"() {
-    init_v4();
-    init_chatmessagecontentitemaudio();
-    init_chatmessagecontentitemimage();
-    init_chatmessagecontentitemtext();
-    init_chatmessagecontentitemvideo();
-    ChatMessageContentItem$inboundSchema = union([
-      ChatMessageContentItemText$inboundSchema,
-      ChatMessageContentItemImage$inboundSchema,
-      ChatMessageContentItemAudio$inboundSchema,
-      ChatMessageContentItemVideo$inboundSchema.and(object({ type: literal("input_video") })),
-      lazy(() => ChatMessageContentItemVideo$inboundSchema).and(object({ type: literal("video_url") }))
-    ]);
-    ChatMessageContentItem$outboundSchema = union([
-      ChatMessageContentItemText$outboundSchema,
-      ChatMessageContentItemImage$outboundSchema,
-      ChatMessageContentItemAudio$outboundSchema,
-      ChatMessageContentItemVideo$outboundSchema.and(object({ type: literal("input_video") })),
-      lazy(() => ChatMessageContentItemVideo$outboundSchema).and(object({ type: literal("video_url") }))
-    ]);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/chatmessagetoolcall.js
-var ChatMessageToolCallFunction$inboundSchema, ChatMessageToolCallFunction$outboundSchema, ChatMessageToolCall$inboundSchema, ChatMessageToolCall$outboundSchema;
-var init_chatmessagetoolcall = __esm({
-  "node_modules/@openrouter/sdk/esm/models/chatmessagetoolcall.js"() {
-    init_v4();
-    ChatMessageToolCallFunction$inboundSchema = object({
-      name: string2(),
-      arguments: string2()
-    });
-    ChatMessageToolCallFunction$outboundSchema = object({
-      name: string2(),
-      arguments: string2()
-    });
-    ChatMessageToolCall$inboundSchema = object({
-      id: string2(),
-      type: literal("function"),
-      function: lazy(() => ChatMessageToolCallFunction$inboundSchema)
-    });
-    ChatMessageToolCall$outboundSchema = object({
-      id: string2(),
-      type: literal("function"),
-      function: lazy(() => ChatMessageToolCallFunction$outboundSchema)
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/schema19.js
-var Schema21, Schema21$inboundSchema, Schema21$outboundSchema, Schema19ReasoningText$inboundSchema, Schema19ReasoningText$outboundSchema, Schema19ReasoningEncrypted$inboundSchema, Schema19ReasoningEncrypted$outboundSchema, Schema19ReasoningSummary$inboundSchema, Schema19ReasoningSummary$outboundSchema, Schema19$inboundSchema, Schema19$outboundSchema;
-var init_schema19 = __esm({
-  "node_modules/@openrouter/sdk/esm/models/schema19.js"() {
-    init_v4();
-    init_enums();
-    Schema21 = {
-      Unknown: "unknown",
-      OpenaiResponsesV1: "openai-responses-v1",
-      AzureOpenaiResponsesV1: "azure-openai-responses-v1",
-      XaiResponsesV1: "xai-responses-v1",
-      AnthropicClaudeV1: "anthropic-claude-v1",
-      GoogleGeminiV1: "google-gemini-v1"
-    };
-    Schema21$inboundSchema = inboundSchema(Schema21);
-    Schema21$outboundSchema = outboundSchema(Schema21);
-    Schema19ReasoningText$inboundSchema = object({
-      type: literal("reasoning.text"),
-      text: nullable(string2()).optional(),
-      signature: nullable(string2()).optional(),
-      id: nullable(string2()).optional(),
-      format: nullable(Schema21$inboundSchema).optional(),
-      index: number2().optional()
-    });
-    Schema19ReasoningText$outboundSchema = object({
-      type: literal("reasoning.text"),
-      text: nullable(string2()).optional(),
-      signature: nullable(string2()).optional(),
-      id: nullable(string2()).optional(),
-      format: nullable(Schema21$outboundSchema).optional(),
-      index: number2().optional()
-    });
-    Schema19ReasoningEncrypted$inboundSchema = object({
-      type: literal("reasoning.encrypted"),
-      data: string2(),
-      id: nullable(string2()).optional(),
-      format: nullable(Schema21$inboundSchema).optional(),
-      index: number2().optional()
-    });
-    Schema19ReasoningEncrypted$outboundSchema = object({
-      type: literal("reasoning.encrypted"),
-      data: string2(),
-      id: nullable(string2()).optional(),
-      format: nullable(Schema21$outboundSchema).optional(),
-      index: number2().optional()
-    });
-    Schema19ReasoningSummary$inboundSchema = object({
-      type: literal("reasoning.summary"),
-      summary: string2(),
-      id: nullable(string2()).optional(),
-      format: nullable(Schema21$inboundSchema).optional(),
-      index: number2().optional()
-    });
-    Schema19ReasoningSummary$outboundSchema = object({
-      type: literal("reasoning.summary"),
-      summary: string2(),
-      id: nullable(string2()).optional(),
-      format: nullable(Schema21$outboundSchema).optional(),
-      index: number2().optional()
-    });
-    Schema19$inboundSchema = union([
-      lazy(() => Schema19ReasoningSummary$inboundSchema),
-      lazy(() => Schema19ReasoningEncrypted$inboundSchema),
-      lazy(() => Schema19ReasoningText$inboundSchema)
-    ]);
-    Schema19$outboundSchema = union([
-      lazy(() => Schema19ReasoningSummary$outboundSchema),
-      lazy(() => Schema19ReasoningEncrypted$outboundSchema),
-      lazy(() => Schema19ReasoningText$outboundSchema)
-    ]);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/assistantmessage.js
-var AssistantMessageContent$inboundSchema, AssistantMessageContent$outboundSchema, AssistantMessageImageUrl$inboundSchema, AssistantMessageImageUrl$outboundSchema, Image$inboundSchema, Image$outboundSchema, AssistantMessage$inboundSchema, AssistantMessage$outboundSchema;
-var init_assistantmessage = __esm({
-  "node_modules/@openrouter/sdk/esm/models/assistantmessage.js"() {
-    init_v4();
-    init_primitives();
-    init_chatmessagecontentitem();
-    init_chatmessagetoolcall();
-    init_schema19();
-    AssistantMessageContent$inboundSchema = union([string2(), array(ChatMessageContentItem$inboundSchema)]);
-    AssistantMessageContent$outboundSchema = union([string2(), array(ChatMessageContentItem$outboundSchema)]);
-    AssistantMessageImageUrl$inboundSchema = object({
-      url: string2()
-    });
-    AssistantMessageImageUrl$outboundSchema = object({
-      url: string2()
-    });
-    Image$inboundSchema = object({
-      image_url: lazy(() => AssistantMessageImageUrl$inboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        "image_url": "imageUrl"
-      });
-    });
-    Image$outboundSchema = object({
-      imageUrl: lazy(() => AssistantMessageImageUrl$outboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        imageUrl: "image_url"
-      });
-    });
-    AssistantMessage$inboundSchema = object({
-      role: literal("assistant"),
-      content: nullable(union([string2(), array(ChatMessageContentItem$inboundSchema)])).optional(),
-      name: string2().optional(),
-      tool_calls: array(ChatMessageToolCall$inboundSchema).optional(),
-      refusal: nullable(string2()).optional(),
-      reasoning: nullable(string2()).optional(),
-      reasoning_details: array(Schema19$inboundSchema).optional(),
-      images: array(lazy(() => Image$inboundSchema)).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "tool_calls": "toolCalls",
-        "reasoning_details": "reasoningDetails"
-      });
-    });
-    AssistantMessage$outboundSchema = object({
-      role: literal("assistant"),
-      content: nullable(union([string2(), array(ChatMessageContentItem$outboundSchema)])).optional(),
-      name: string2().optional(),
-      toolCalls: array(ChatMessageToolCall$outboundSchema).optional(),
-      refusal: nullable(string2()).optional(),
-      reasoning: nullable(string2()).optional(),
-      reasoningDetails: array(Schema19$outboundSchema).optional(),
-      images: array(lazy(() => Image$outboundSchema)).optional()
-    }).transform((v) => {
-      return remap(v, {
-        toolCalls: "tool_calls",
-        reasoningDetails: "reasoning_details"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/badgatewayresponseerrordata.js
-var BadGatewayResponseErrorData$inboundSchema;
-var init_badgatewayresponseerrordata = __esm({
-  "node_modules/@openrouter/sdk/esm/models/badgatewayresponseerrordata.js"() {
-    init_v4();
-    BadGatewayResponseErrorData$inboundSchema = object({
-      code: int(),
-      message: string2(),
-      metadata: nullable(record(string2(), nullable(any()))).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/badrequestresponseerrordata.js
-var BadRequestResponseErrorData$inboundSchema;
-var init_badrequestresponseerrordata = __esm({
-  "node_modules/@openrouter/sdk/esm/models/badrequestresponseerrordata.js"() {
-    init_v4();
-    BadRequestResponseErrorData$inboundSchema = object({
-      code: int(),
-      message: string2(),
-      metadata: nullable(record(string2(), nullable(any()))).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/chatcompletionfinishreason.js
-var ChatCompletionFinishReason, ChatCompletionFinishReason$inboundSchema;
-var init_chatcompletionfinishreason = __esm({
-  "node_modules/@openrouter/sdk/esm/models/chatcompletionfinishreason.js"() {
-    init_enums();
-    ChatCompletionFinishReason = {
-      ToolCalls: "tool_calls",
-      Stop: "stop",
-      Length: "length",
-      ContentFilter: "content_filter",
-      Error: "error"
-    };
-    ChatCompletionFinishReason$inboundSchema = inboundSchema(ChatCompletionFinishReason);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/chaterror.js
-var Code$inboundSchema, ChatErrorError$inboundSchema;
-var init_chaterror = __esm({
-  "node_modules/@openrouter/sdk/esm/models/chaterror.js"() {
-    init_v4();
-    Code$inboundSchema = union([
-      string2(),
-      number2()
-    ]);
-    ChatErrorError$inboundSchema = object({
-      code: nullable(union([string2(), number2()])),
-      message: string2(),
-      param: nullable(string2()).optional(),
-      type: nullable(string2()).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/chatstreamoptions.js
-var ChatStreamOptions$outboundSchema;
-var init_chatstreamoptions = __esm({
-  "node_modules/@openrouter/sdk/esm/models/chatstreamoptions.js"() {
-    init_v4();
-    init_primitives();
-    ChatStreamOptions$outboundSchema = object({
-      includeUsage: boolean2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        includeUsage: "include_usage"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/developermessage.js
-var DeveloperMessageContent$outboundSchema, DeveloperMessage$outboundSchema;
-var init_developermessage = __esm({
-  "node_modules/@openrouter/sdk/esm/models/developermessage.js"() {
-    init_v4();
-    init_chatmessagecontentitemtext();
-    DeveloperMessageContent$outboundSchema = union([string2(), array(ChatMessageContentItemText$outboundSchema)]);
-    DeveloperMessage$outboundSchema = object({
-      role: literal("developer"),
-      content: union([
-        string2(),
-        array(ChatMessageContentItemText$outboundSchema)
-      ]),
-      name: string2().optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/systemmessage.js
-var SystemMessageContent$outboundSchema, SystemMessage$outboundSchema;
-var init_systemmessage = __esm({
-  "node_modules/@openrouter/sdk/esm/models/systemmessage.js"() {
-    init_v4();
-    init_chatmessagecontentitemtext();
-    SystemMessageContent$outboundSchema = union([string2(), array(ChatMessageContentItemText$outboundSchema)]);
-    SystemMessage$outboundSchema = object({
-      role: literal("system"),
-      content: union([
-        string2(),
-        array(ChatMessageContentItemText$outboundSchema)
-      ]),
-      name: string2().optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/toolresponsemessage.js
-var ToolResponseMessageContent$outboundSchema, ToolResponseMessage$outboundSchema;
-var init_toolresponsemessage = __esm({
-  "node_modules/@openrouter/sdk/esm/models/toolresponsemessage.js"() {
-    init_v4();
-    init_primitives();
-    init_chatmessagecontentitem();
-    ToolResponseMessageContent$outboundSchema = union([string2(), array(ChatMessageContentItem$outboundSchema)]);
-    ToolResponseMessage$outboundSchema = object({
-      role: literal("tool"),
-      content: union([
-        string2(),
-        array(ChatMessageContentItem$outboundSchema)
-      ]),
-      toolCallId: string2()
-    }).transform((v) => {
-      return remap(v, {
-        toolCallId: "tool_call_id"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/usermessage.js
-var UserMessageContent$outboundSchema, UserMessage$outboundSchema;
-var init_usermessage = __esm({
-  "node_modules/@openrouter/sdk/esm/models/usermessage.js"() {
-    init_v4();
-    init_chatmessagecontentitem();
-    UserMessageContent$outboundSchema = union([string2(), array(ChatMessageContentItem$outboundSchema)]);
-    UserMessage$outboundSchema = object({
-      role: literal("user"),
-      content: union([
-        string2(),
-        array(ChatMessageContentItem$outboundSchema)
-      ]),
-      name: string2().optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/message.js
-var Message$outboundSchema;
-var init_message = __esm({
-  "node_modules/@openrouter/sdk/esm/models/message.js"() {
-    init_v4();
-    init_assistantmessage();
-    init_developermessage();
-    init_systemmessage();
-    init_toolresponsemessage();
-    init_usermessage();
-    Message$outboundSchema = union([
-      SystemMessage$outboundSchema,
-      UserMessage$outboundSchema,
-      DeveloperMessage$outboundSchema,
-      AssistantMessage$outboundSchema,
-      ToolResponseMessage$outboundSchema
-    ]);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/providersort.js
-var ProviderSort, ProviderSort$outboundSchema;
-var init_providersort = __esm({
-  "node_modules/@openrouter/sdk/esm/models/providersort.js"() {
-    init_enums();
-    ProviderSort = {
-      Price: "price",
-      Throughput: "throughput",
-      Latency: "latency"
-    };
-    ProviderSort$outboundSchema = outboundSchema(ProviderSort);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/providersortconfig.js
-var Partition, Partition$outboundSchema, ProviderSortConfig$outboundSchema;
-var init_providersortconfig = __esm({
-  "node_modules/@openrouter/sdk/esm/models/providersortconfig.js"() {
-    init_v4();
-    init_enums();
-    init_providersort();
-    Partition = {
-      Model: "model",
-      None: "none"
-    };
-    Partition$outboundSchema = outboundSchema(Partition);
-    ProviderSortConfig$outboundSchema = object({
-      by: nullable(ProviderSort$outboundSchema).optional(),
-      partition: nullable(Partition$outboundSchema).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/providersortunion.js
-var ProviderSortUnion$outboundSchema;
-var init_providersortunion = __esm({
-  "node_modules/@openrouter/sdk/esm/models/providersortunion.js"() {
-    init_v4();
-    init_providersort();
-    init_providersortconfig();
-    ProviderSortUnion$outboundSchema = union([ProviderSort$outboundSchema, ProviderSortConfig$outboundSchema]);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/reasoningsummaryverbosity.js
-var ReasoningSummaryVerbosity, ReasoningSummaryVerbosity$inboundSchema, ReasoningSummaryVerbosity$outboundSchema;
-var init_reasoningsummaryverbosity = __esm({
-  "node_modules/@openrouter/sdk/esm/models/reasoningsummaryverbosity.js"() {
-    init_enums();
-    ReasoningSummaryVerbosity = {
-      Auto: "auto",
-      Concise: "concise",
-      Detailed: "detailed"
-    };
-    ReasoningSummaryVerbosity$inboundSchema = inboundSchema(ReasoningSummaryVerbosity);
-    ReasoningSummaryVerbosity$outboundSchema = outboundSchema(ReasoningSummaryVerbosity);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/jsonschemaconfig.js
-var JSONSchemaConfig$outboundSchema;
-var init_jsonschemaconfig = __esm({
-  "node_modules/@openrouter/sdk/esm/models/jsonschemaconfig.js"() {
-    init_v4();
-    JSONSchemaConfig$outboundSchema = object({
-      name: string2(),
-      description: string2().optional(),
-      schema: record(string2(), any()).optional(),
-      strict: nullable(boolean2()).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/responseformatjsonschema.js
-var ResponseFormatJSONSchema$outboundSchema;
-var init_responseformatjsonschema = __esm({
-  "node_modules/@openrouter/sdk/esm/models/responseformatjsonschema.js"() {
-    init_v4();
-    init_primitives();
-    init_jsonschemaconfig();
-    ResponseFormatJSONSchema$outboundSchema = object({
-      type: literal("json_schema"),
-      jsonSchema: JSONSchemaConfig$outboundSchema
-    }).transform((v) => {
-      return remap(v, {
-        jsonSchema: "json_schema"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/responseformattextgrammar.js
-var ResponseFormatTextGrammar$outboundSchema;
-var init_responseformattextgrammar = __esm({
-  "node_modules/@openrouter/sdk/esm/models/responseformattextgrammar.js"() {
-    init_v4();
-    ResponseFormatTextGrammar$outboundSchema = object({
-      type: literal("grammar"),
-      grammar: string2()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/schema14.js
-var Schema14$outboundSchema;
-var init_schema14 = __esm({
-  "node_modules/@openrouter/sdk/esm/models/schema14.js"() {
-    init_v4();
-    Schema14$outboundSchema = union([number2(), string2(), any()]);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/schema10.js
-var Prompt$outboundSchema, Completion$outboundSchema, Schema10$outboundSchema;
-var init_schema10 = __esm({
-  "node_modules/@openrouter/sdk/esm/models/schema10.js"() {
-    init_v4();
-    init_schema14();
-    Prompt$outboundSchema = union([number2(), string2(), any()]);
-    Completion$outboundSchema = union([number2(), string2(), any()]);
-    Schema10$outboundSchema = object({
-      prompt: union([number2(), string2(), any()]).optional(),
-      completion: union([number2(), string2(), any()]).optional(),
-      image: Schema14$outboundSchema.optional(),
-      audio: Schema14$outboundSchema.optional(),
-      request: Schema14$outboundSchema.optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/schema17.js
-var PdfEngine, Engine, Schema17ResponseHealing$outboundSchema, PdfEngine$outboundSchema, Pdf$outboundSchema, Schema17FileParser$outboundSchema, Engine$outboundSchema, Schema17Web$outboundSchema, Schema17Moderation$outboundSchema, Schema17AutoRouter$outboundSchema, Schema17$outboundSchema;
-var init_schema17 = __esm({
-  "node_modules/@openrouter/sdk/esm/models/schema17.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    PdfEngine = {
-      MistralOcr: "mistral-ocr",
-      PdfText: "pdf-text",
-      Native: "native"
-    };
-    Engine = {
-      Native: "native",
-      Exa: "exa"
-    };
-    Schema17ResponseHealing$outboundSchema = object({
-      id: literal("response-healing"),
-      enabled: boolean2().optional()
-    });
-    PdfEngine$outboundSchema = outboundSchema(PdfEngine);
-    Pdf$outboundSchema = object({
-      engine: PdfEngine$outboundSchema.optional()
-    });
-    Schema17FileParser$outboundSchema = object({
-      id: literal("file-parser"),
-      enabled: boolean2().optional(),
-      pdf: lazy(() => Pdf$outboundSchema).optional()
-    });
-    Engine$outboundSchema = outboundSchema(Engine);
-    Schema17Web$outboundSchema = object({
-      id: literal("web"),
-      enabled: boolean2().optional(),
-      maxResults: number2().optional(),
-      searchPrompt: string2().optional(),
-      engine: Engine$outboundSchema.optional()
-    }).transform((v) => {
-      return remap(v, {
-        maxResults: "max_results",
-        searchPrompt: "search_prompt"
-      });
-    });
-    Schema17Moderation$outboundSchema = object({
-      id: literal("moderation")
-    });
-    Schema17AutoRouter$outboundSchema = object({
-      id: literal("auto-router"),
-      enabled: boolean2().optional(),
-      allowedModels: array(string2()).optional()
-    }).transform((v) => {
-      return remap(v, {
-        allowedModels: "allowed_models"
-      });
-    });
-    Schema17$outboundSchema = union([
-      lazy(() => Schema17AutoRouter$outboundSchema),
-      lazy(() => Schema17Moderation$outboundSchema),
-      lazy(() => Schema17Web$outboundSchema),
-      lazy(() => Schema17FileParser$outboundSchema),
-      lazy(() => Schema17ResponseHealing$outboundSchema)
-    ]);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/schema5.js
-var Schema5Enum, Schema5Enum$outboundSchema, Schema5$outboundSchema;
-var init_schema5 = __esm({
-  "node_modules/@openrouter/sdk/esm/models/schema5.js"() {
-    init_v4();
-    init_enums();
-    Schema5Enum = {
-      Ai21: "AI21",
-      AionLabs: "AionLabs",
-      Alibaba: "Alibaba",
-      Ambient: "Ambient",
-      AmazonBedrock: "Amazon Bedrock",
-      AmazonNova: "Amazon Nova",
-      Anthropic: "Anthropic",
-      ArceeAI: "Arcee AI",
-      AtlasCloud: "AtlasCloud",
-      Avian: "Avian",
-      Azure: "Azure",
-      BaseTen: "BaseTen",
-      BytePlus: "BytePlus",
-      BlackForestLabs: "Black Forest Labs",
-      Cerebras: "Cerebras",
-      Chutes: "Chutes",
-      Cirrascale: "Cirrascale",
-      Clarifai: "Clarifai",
-      Cloudflare: "Cloudflare",
-      Cohere: "Cohere",
-      Crusoe: "Crusoe",
-      DeepInfra: "DeepInfra",
-      DeepSeek: "DeepSeek",
-      Featherless: "Featherless",
-      Fireworks: "Fireworks",
-      Friendli: "Friendli",
-      GMICloud: "GMICloud",
-      Google: "Google",
-      GoogleAIStudio: "Google AI Studio",
-      Groq: "Groq",
-      Hyperbolic: "Hyperbolic",
-      Inception: "Inception",
-      Inceptron: "Inceptron",
-      InferenceNet: "InferenceNet",
-      Infermatic: "Infermatic",
-      Inflection: "Inflection",
-      Liquid: "Liquid",
-      Mara: "Mara",
-      Mancer2: "Mancer 2",
-      Minimax: "Minimax",
-      ModelRun: "ModelRun",
-      Mistral: "Mistral",
-      Modular: "Modular",
-      MoonshotAI: "Moonshot AI",
-      Morph: "Morph",
-      NCompass: "NCompass",
-      Nebius: "Nebius",
-      NextBit: "NextBit",
-      Novita: "Novita",
-      Nvidia: "Nvidia",
-      OpenAI: "OpenAI",
-      OpenInference: "OpenInference",
-      Parasail: "Parasail",
-      Perplexity: "Perplexity",
-      Phala: "Phala",
-      Relace: "Relace",
-      SambaNova: "SambaNova",
-      Seed: "Seed",
-      SiliconFlow: "SiliconFlow",
-      Sourceful: "Sourceful",
-      StepFun: "StepFun",
-      Stealth: "Stealth",
-      StreamLake: "StreamLake",
-      Switchpoint: "Switchpoint",
-      Together: "Together",
-      Upstage: "Upstage",
-      Venice: "Venice",
-      WandB: "WandB",
-      Xiaomi: "Xiaomi",
-      XAI: "xAI",
-      ZAi: "Z.AI",
-      FakeProvider: "FakeProvider"
-    };
-    Schema5Enum$outboundSchema = outboundSchema(Schema5Enum);
-    Schema5$outboundSchema = union([Schema5Enum$outboundSchema, string2()]);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/tooldefinitionjson.js
-var ToolDefinitionJsonFunction$outboundSchema, ToolDefinitionJson$outboundSchema;
-var init_tooldefinitionjson = __esm({
-  "node_modules/@openrouter/sdk/esm/models/tooldefinitionjson.js"() {
-    init_v4();
-    ToolDefinitionJsonFunction$outboundSchema = object({
-      name: string2(),
-      description: string2().optional(),
-      parameters: record(string2(), any()).optional(),
-      strict: nullable(boolean2()).optional()
-    });
-    ToolDefinitionJson$outboundSchema = object({
-      type: literal("function"),
-      function: lazy(() => ToolDefinitionJsonFunction$outboundSchema)
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/chatgenerationparams.js
-var Schema3, Schema8, Route, Effort, Modality, Schema3$outboundSchema, Schema8$outboundSchema, Schema15$outboundSchema, Schema15Union$outboundSchema, Schema0$outboundSchema, Route$outboundSchema, Effort$outboundSchema, Reasoning$outboundSchema, ResponseFormatPython$outboundSchema, ResponseFormatJSONObject$outboundSchema, ResponseFormatText$outboundSchema, ResponseFormat$outboundSchema, Stop$outboundSchema, Debug$outboundSchema, ChatGenerationParamsImageConfig$outboundSchema, Modality$outboundSchema, ChatGenerationParams$outboundSchema;
-var init_chatgenerationparams = __esm({
-  "node_modules/@openrouter/sdk/esm/models/chatgenerationparams.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    init_chatstreamoptions();
-    init_message();
-    init_providersortunion();
-    init_reasoningsummaryverbosity();
-    init_responseformatjsonschema();
-    init_responseformattextgrammar();
-    init_schema10();
-    init_schema17();
-    init_schema5();
-    init_tooldefinitionjson();
-    Schema3 = {
-      Deny: "deny",
-      Allow: "allow"
-    };
-    Schema8 = {
-      Int4: "int4",
-      Int8: "int8",
-      Fp4: "fp4",
-      Fp6: "fp6",
-      Fp8: "fp8",
-      Fp16: "fp16",
-      Bf16: "bf16",
-      Fp32: "fp32",
-      Unknown: "unknown"
-    };
-    Route = {
-      Fallback: "fallback",
-      Sort: "sort"
-    };
-    Effort = {
-      Xhigh: "xhigh",
-      High: "high",
-      Medium: "medium",
-      Low: "low",
-      Minimal: "minimal",
-      None: "none"
-    };
-    Modality = {
-      Text: "text",
-      Image: "image"
-    };
-    Schema3$outboundSchema = outboundSchema(Schema3);
-    Schema8$outboundSchema = outboundSchema(Schema8);
-    Schema15$outboundSchema = object({
-      p50: nullable(number2()).optional(),
-      p75: nullable(number2()).optional(),
-      p90: nullable(number2()).optional(),
-      p99: nullable(number2()).optional()
-    });
-    Schema15Union$outboundSchema = union([number2(), lazy(() => Schema15$outboundSchema)]);
-    Schema0$outboundSchema = object({
-      allowFallbacks: nullable(boolean2()).optional(),
-      requireParameters: nullable(boolean2()).optional(),
-      dataCollection: nullable(Schema3$outboundSchema).optional(),
-      zdr: nullable(boolean2()).optional(),
-      enforceDistillableText: nullable(boolean2()).optional(),
-      order: nullable(array(Schema5$outboundSchema)).optional(),
-      only: nullable(array(Schema5$outboundSchema)).optional(),
-      ignore: nullable(array(Schema5$outboundSchema)).optional(),
-      quantizations: nullable(array(Schema8$outboundSchema)).optional(),
-      sort: nullable(ProviderSortUnion$outboundSchema).optional(),
-      maxPrice: Schema10$outboundSchema.optional(),
-      preferredMinThroughput: nullable(union([number2(), lazy(() => Schema15$outboundSchema)])).optional(),
-      preferredMaxLatency: nullable(union([number2(), lazy(() => Schema15$outboundSchema)])).optional()
-    }).transform((v) => {
-      return remap(v, {
-        allowFallbacks: "allow_fallbacks",
-        requireParameters: "require_parameters",
-        dataCollection: "data_collection",
-        enforceDistillableText: "enforce_distillable_text",
-        maxPrice: "max_price",
-        preferredMinThroughput: "preferred_min_throughput",
-        preferredMaxLatency: "preferred_max_latency"
-      });
-    });
-    Route$outboundSchema = outboundSchema(Route);
-    Effort$outboundSchema = outboundSchema(Effort);
-    Reasoning$outboundSchema = object({
-      effort: nullable(Effort$outboundSchema).optional(),
-      summary: nullable(ReasoningSummaryVerbosity$outboundSchema).optional()
-    });
-    ResponseFormatPython$outboundSchema = object({
-      type: literal("python")
-    });
-    ResponseFormatJSONObject$outboundSchema = object({
-      type: literal("json_object")
-    });
-    ResponseFormatText$outboundSchema = object({
-      type: literal("text")
-    });
-    ResponseFormat$outboundSchema = union([
-      lazy(() => ResponseFormatText$outboundSchema),
-      lazy(() => ResponseFormatJSONObject$outboundSchema),
-      ResponseFormatJSONSchema$outboundSchema,
-      ResponseFormatTextGrammar$outboundSchema,
-      lazy(() => ResponseFormatPython$outboundSchema)
-    ]);
-    Stop$outboundSchema = union([
-      string2(),
-      array(string2())
-    ]);
-    Debug$outboundSchema = object({
-      echoUpstreamBody: boolean2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        echoUpstreamBody: "echo_upstream_body"
-      });
-    });
-    ChatGenerationParamsImageConfig$outboundSchema = union([string2(), number2(), array(any())]);
-    Modality$outboundSchema = outboundSchema(Modality);
-    ChatGenerationParams$outboundSchema = object({
-      provider: nullable(lazy(() => Schema0$outboundSchema)).optional(),
-      plugins: array(Schema17$outboundSchema).optional(),
-      route: nullable(Route$outboundSchema).optional(),
-      user: string2().optional(),
-      sessionId: string2().optional(),
-      messages: array(Message$outboundSchema),
-      model: string2().optional(),
-      models: array(string2()).optional(),
-      frequencyPenalty: nullable(number2()).optional(),
-      logitBias: nullable(record(string2(), number2())).optional(),
-      logprobs: nullable(boolean2()).optional(),
-      topLogprobs: nullable(number2()).optional(),
-      maxCompletionTokens: nullable(number2()).optional(),
-      maxTokens: nullable(number2()).optional(),
-      metadata: record(string2(), string2()).optional(),
-      presencePenalty: nullable(number2()).optional(),
-      reasoning: lazy(() => Reasoning$outboundSchema).optional(),
-      responseFormat: union([
-        lazy(() => ResponseFormatText$outboundSchema),
-        lazy(() => ResponseFormatJSONObject$outboundSchema),
-        ResponseFormatJSONSchema$outboundSchema,
-        ResponseFormatTextGrammar$outboundSchema,
-        lazy(() => ResponseFormatPython$outboundSchema)
-      ]).optional(),
-      seed: nullable(int()).optional(),
-      stop: nullable(union([string2(), array(string2())])).optional(),
-      stream: boolean2().default(false),
-      streamOptions: nullable(ChatStreamOptions$outboundSchema).optional(),
-      temperature: nullable(number2()).optional(),
-      toolChoice: any().optional(),
-      tools: array(ToolDefinitionJson$outboundSchema).optional(),
-      topP: nullable(number2()).optional(),
-      debug: lazy(() => Debug$outboundSchema).optional(),
-      imageConfig: record(string2(), union([string2(), number2(), array(any())])).optional(),
-      modalities: array(Modality$outboundSchema).optional()
-    }).transform((v) => {
-      return remap(v, {
-        sessionId: "session_id",
-        frequencyPenalty: "frequency_penalty",
-        logitBias: "logit_bias",
-        topLogprobs: "top_logprobs",
-        maxCompletionTokens: "max_completion_tokens",
-        maxTokens: "max_tokens",
-        presencePenalty: "presence_penalty",
-        responseFormat: "response_format",
-        streamOptions: "stream_options",
-        toolChoice: "tool_choice",
-        topP: "top_p",
-        imageConfig: "image_config"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/chatgenerationtokenusage.js
-var CompletionTokensDetails$inboundSchema, PromptTokensDetails$inboundSchema, ChatGenerationTokenUsage$inboundSchema;
-var init_chatgenerationtokenusage = __esm({
-  "node_modules/@openrouter/sdk/esm/models/chatgenerationtokenusage.js"() {
-    init_v4();
-    init_primitives();
-    CompletionTokensDetails$inboundSchema = object({
-      reasoning_tokens: nullable(number2()).optional(),
-      audio_tokens: nullable(number2()).optional(),
-      accepted_prediction_tokens: nullable(number2()).optional(),
-      rejected_prediction_tokens: nullable(number2()).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "reasoning_tokens": "reasoningTokens",
-        "audio_tokens": "audioTokens",
-        "accepted_prediction_tokens": "acceptedPredictionTokens",
-        "rejected_prediction_tokens": "rejectedPredictionTokens"
-      });
-    });
-    PromptTokensDetails$inboundSchema = object({
-      cached_tokens: number2().optional(),
-      cache_write_tokens: number2().optional(),
-      audio_tokens: number2().optional(),
-      video_tokens: number2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        "cached_tokens": "cachedTokens",
-        "cache_write_tokens": "cacheWriteTokens",
-        "audio_tokens": "audioTokens",
-        "video_tokens": "videoTokens"
-      });
-    });
-    ChatGenerationTokenUsage$inboundSchema = object({
-      completion_tokens: number2(),
-      prompt_tokens: number2(),
-      total_tokens: number2(),
-      completion_tokens_details: nullable(lazy(() => CompletionTokensDetails$inboundSchema)).optional(),
-      prompt_tokens_details: nullable(lazy(() => PromptTokensDetails$inboundSchema)).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "completion_tokens": "completionTokens",
-        "prompt_tokens": "promptTokens",
-        "total_tokens": "totalTokens",
-        "completion_tokens_details": "completionTokensDetails",
-        "prompt_tokens_details": "promptTokensDetails"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/chatmessagetokenlogprob.js
-var ChatMessageTokenLogprobTopLogprob$inboundSchema, ChatMessageTokenLogprob$inboundSchema;
-var init_chatmessagetokenlogprob = __esm({
-  "node_modules/@openrouter/sdk/esm/models/chatmessagetokenlogprob.js"() {
-    init_v4();
-    init_primitives();
-    ChatMessageTokenLogprobTopLogprob$inboundSchema = object({
-      token: string2(),
-      logprob: number2(),
-      bytes: nullable(array(number2()))
-    });
-    ChatMessageTokenLogprob$inboundSchema = object({
-      token: string2(),
-      logprob: number2(),
-      bytes: nullable(array(number2())),
-      top_logprobs: array(lazy(() => ChatMessageTokenLogprobTopLogprob$inboundSchema))
-    }).transform((v) => {
-      return remap(v, {
-        "top_logprobs": "topLogprobs"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/chatmessagetokenlogprobs.js
-var ChatMessageTokenLogprobs$inboundSchema;
-var init_chatmessagetokenlogprobs = __esm({
-  "node_modules/@openrouter/sdk/esm/models/chatmessagetokenlogprobs.js"() {
-    init_v4();
-    init_chatmessagetokenlogprob();
-    ChatMessageTokenLogprobs$inboundSchema = object({
-      content: nullable(array(ChatMessageTokenLogprob$inboundSchema)),
-      refusal: nullable(array(ChatMessageTokenLogprob$inboundSchema))
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/chatresponsechoice.js
-var ChatResponseChoice$inboundSchema;
-var init_chatresponsechoice = __esm({
-  "node_modules/@openrouter/sdk/esm/models/chatresponsechoice.js"() {
-    init_v4();
-    init_primitives();
-    init_assistantmessage();
-    init_chatcompletionfinishreason();
-    init_chatmessagetokenlogprobs();
-    ChatResponseChoice$inboundSchema = object({
-      finish_reason: nullable(ChatCompletionFinishReason$inboundSchema),
-      index: number2(),
-      message: AssistantMessage$inboundSchema,
-      logprobs: nullable(ChatMessageTokenLogprobs$inboundSchema).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "finish_reason": "finishReason"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/chatresponse.js
-var ChatResponse$inboundSchema;
-var init_chatresponse = __esm({
-  "node_modules/@openrouter/sdk/esm/models/chatresponse.js"() {
-    init_v4();
-    init_primitives();
-    init_chatgenerationtokenusage();
-    init_chatresponsechoice();
-    ChatResponse$inboundSchema = object({
-      id: string2(),
-      choices: array(ChatResponseChoice$inboundSchema),
-      created: number2(),
-      model: string2(),
-      object: literal("chat.completion"),
-      system_fingerprint: nullable(string2()).optional(),
-      usage: ChatGenerationTokenUsage$inboundSchema.optional()
-    }).transform((v) => {
-      return remap(v, {
-        "system_fingerprint": "systemFingerprint"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/chatstreamingmessagetoolcall.js
-var ChatStreamingMessageToolCallFunction$inboundSchema, ChatStreamingMessageToolCall$inboundSchema;
-var init_chatstreamingmessagetoolcall = __esm({
-  "node_modules/@openrouter/sdk/esm/models/chatstreamingmessagetoolcall.js"() {
-    init_v4();
-    ChatStreamingMessageToolCallFunction$inboundSchema = object({
-      name: string2().optional(),
-      arguments: string2().optional()
-    });
-    ChatStreamingMessageToolCall$inboundSchema = object({
-      index: number2(),
-      id: string2().optional(),
-      type: literal("function").optional(),
-      function: lazy(() => ChatStreamingMessageToolCallFunction$inboundSchema).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/chatstreamingmessagechunk.js
-var ChatStreamingMessageChunkRole, ChatStreamingMessageChunkRole$inboundSchema, ChatStreamingMessageChunk$inboundSchema;
-var init_chatstreamingmessagechunk = __esm({
-  "node_modules/@openrouter/sdk/esm/models/chatstreamingmessagechunk.js"() {
-    init_v4();
-    init_primitives();
-    init_chatstreamingmessagetoolcall();
-    init_schema19();
-    ChatStreamingMessageChunkRole = {
-      Assistant: "assistant"
-    };
-    ChatStreamingMessageChunkRole$inboundSchema = _enum2(ChatStreamingMessageChunkRole);
-    ChatStreamingMessageChunk$inboundSchema = object({
-      role: ChatStreamingMessageChunkRole$inboundSchema.optional(),
-      content: nullable(string2()).optional(),
-      reasoning: nullable(string2()).optional(),
-      refusal: nullable(string2()).optional(),
-      tool_calls: array(ChatStreamingMessageToolCall$inboundSchema).optional(),
-      reasoning_details: array(Schema19$inboundSchema).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "tool_calls": "toolCalls",
-        "reasoning_details": "reasoningDetails"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/chatstreamingchoice.js
-var ChatStreamingChoice$inboundSchema;
-var init_chatstreamingchoice = __esm({
-  "node_modules/@openrouter/sdk/esm/models/chatstreamingchoice.js"() {
-    init_v4();
-    init_primitives();
-    init_chatcompletionfinishreason();
-    init_chatmessagetokenlogprobs();
-    init_chatstreamingmessagechunk();
-    ChatStreamingChoice$inboundSchema = object({
-      delta: ChatStreamingMessageChunk$inboundSchema,
-      finish_reason: nullable(ChatCompletionFinishReason$inboundSchema),
-      index: number2(),
-      logprobs: nullable(ChatMessageTokenLogprobs$inboundSchema).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "finish_reason": "finishReason"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/chatstreamingresponsechunk.js
-var ChatStreamingResponseChunkError$inboundSchema, ChatStreamingResponseChunkData$inboundSchema, ChatStreamingResponseChunk$inboundSchema;
-var init_chatstreamingresponsechunk = __esm({
-  "node_modules/@openrouter/sdk/esm/models/chatstreamingresponsechunk.js"() {
-    init_v4();
-    init_primitives();
-    init_chatgenerationtokenusage();
-    init_chatstreamingchoice();
-    ChatStreamingResponseChunkError$inboundSchema = object({
-      message: string2(),
-      code: number2()
-    });
-    ChatStreamingResponseChunkData$inboundSchema = object({
-      id: string2(),
-      choices: array(ChatStreamingChoice$inboundSchema),
-      created: number2(),
-      model: string2(),
-      object: literal("chat.completion.chunk"),
-      system_fingerprint: nullable(string2()).optional(),
-      error: lazy(() => ChatStreamingResponseChunkError$inboundSchema).optional(),
-      usage: ChatGenerationTokenUsage$inboundSchema.optional()
-    }).transform((v) => {
-      return remap(v, {
-        "system_fingerprint": "systemFingerprint"
-      });
-    });
-    ChatStreamingResponseChunk$inboundSchema = object({
-      data: string2().transform((v, ctx) => {
-        try {
-          return JSON.parse(v);
-        } catch (err) {
-          ctx.addIssue({
-            input: v,
-            code: "custom",
-            message: `malformed json: ${err}`
-          });
-          return NEVER;
-        }
-      }).pipe(lazy(() => ChatStreamingResponseChunkData$inboundSchema))
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/createchargerequest.js
-var ChainId, ChainId$outboundSchema, CreateChargeRequest$outboundSchema;
-var init_createchargerequest = __esm({
-  "node_modules/@openrouter/sdk/esm/models/createchargerequest.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    ChainId = {
-      One: 1,
-      OneHundredAndThirtySeven: 137,
-      EightThousandFourHundredAndFiftyThree: 8453
-    };
-    ChainId$outboundSchema = outboundSchemaInt(ChainId);
-    CreateChargeRequest$outboundSchema = object({
-      amount: number2(),
-      sender: string2(),
-      chainId: ChainId$outboundSchema
-    }).transform((v) => {
-      return remap(v, {
-        chainId: "chain_id"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/datacollection.js
-var DataCollection, DataCollection$outboundSchema;
-var init_datacollection = __esm({
-  "node_modules/@openrouter/sdk/esm/models/datacollection.js"() {
-    init_enums();
-    DataCollection = {
-      Deny: "deny",
-      Allow: "allow"
-    };
-    DataCollection$outboundSchema = outboundSchema(DataCollection);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/defaultparameters.js
-var DefaultParameters$inboundSchema;
-var init_defaultparameters = __esm({
-  "node_modules/@openrouter/sdk/esm/models/defaultparameters.js"() {
-    init_v4();
-    init_primitives();
-    DefaultParameters$inboundSchema = object({
-      temperature: nullable(number2()).optional(),
-      top_p: nullable(number2()).optional(),
-      frequency_penalty: nullable(number2()).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "top_p": "topP",
-        "frequency_penalty": "frequencyPenalty"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/edgenetworktimeoutresponseerrordata.js
-var EdgeNetworkTimeoutResponseErrorData$inboundSchema;
-var init_edgenetworktimeoutresponseerrordata = __esm({
-  "node_modules/@openrouter/sdk/esm/models/edgenetworktimeoutresponseerrordata.js"() {
-    init_v4();
-    EdgeNetworkTimeoutResponseErrorData$inboundSchema = object({
-      code: int(),
-      message: string2(),
-      metadata: nullable(record(string2(), nullable(any()))).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/endpointstatus.js
-var EndpointStatus, EndpointStatus$inboundSchema;
-var init_endpointstatus = __esm({
-  "node_modules/@openrouter/sdk/esm/models/endpointstatus.js"() {
-    init_enums();
-    EndpointStatus = {
-      Zero: 0,
-      Minus1: -1,
-      Minus2: -2,
-      Minus3: -3,
-      Minus5: -5,
-      Minus10: -10
-    };
-    EndpointStatus$inboundSchema = inboundSchemaInt(EndpointStatus);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/filecitation.js
-var FileCitation$inboundSchema, FileCitation$outboundSchema;
-var init_filecitation = __esm({
-  "node_modules/@openrouter/sdk/esm/models/filecitation.js"() {
-    init_v4();
-    init_primitives();
-    FileCitation$inboundSchema = object({
-      type: literal("file_citation"),
-      file_id: string2(),
-      filename: string2(),
-      index: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "file_id": "fileId"
-      });
-    });
-    FileCitation$outboundSchema = object({
-      type: literal("file_citation"),
-      fileId: string2(),
-      filename: string2(),
-      index: number2()
-    }).transform((v) => {
-      return remap(v, {
-        fileId: "file_id"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/filepath.js
-var FilePath$inboundSchema, FilePath$outboundSchema;
-var init_filepath = __esm({
-  "node_modules/@openrouter/sdk/esm/models/filepath.js"() {
-    init_v4();
-    init_primitives();
-    FilePath$inboundSchema = object({
-      type: literal("file_path"),
-      file_id: string2(),
-      index: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "file_id": "fileId"
-      });
-    });
-    FilePath$outboundSchema = object({
-      type: literal("file_path"),
-      fileId: string2(),
-      index: number2()
-    }).transform((v) => {
-      return remap(v, {
-        fileId: "file_id"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/forbiddenresponseerrordata.js
-var ForbiddenResponseErrorData$inboundSchema;
-var init_forbiddenresponseerrordata = __esm({
-  "node_modules/@openrouter/sdk/esm/models/forbiddenresponseerrordata.js"() {
-    init_v4();
-    ForbiddenResponseErrorData$inboundSchema = object({
-      code: int(),
-      message: string2(),
-      metadata: nullable(record(string2(), nullable(any()))).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/imagegenerationstatus.js
-var ImageGenerationStatus, ImageGenerationStatus$inboundSchema, ImageGenerationStatus$outboundSchema;
-var init_imagegenerationstatus = __esm({
-  "node_modules/@openrouter/sdk/esm/models/imagegenerationstatus.js"() {
-    init_enums();
-    ImageGenerationStatus = {
-      InProgress: "in_progress",
-      Completed: "completed",
-      Generating: "generating",
-      Failed: "failed"
-    };
-    ImageGenerationStatus$inboundSchema = inboundSchema(ImageGenerationStatus);
-    ImageGenerationStatus$outboundSchema = outboundSchema(ImageGenerationStatus);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/inputmodality.js
-var InputModality, InputModality$inboundSchema;
-var init_inputmodality = __esm({
-  "node_modules/@openrouter/sdk/esm/models/inputmodality.js"() {
-    init_enums();
-    InputModality = {
-      Text: "text",
-      Image: "image",
-      File: "file",
-      Audio: "audio",
-      Video: "video"
-    };
-    InputModality$inboundSchema = inboundSchema(InputModality);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/instructtype.js
-var InstructType, InstructType$inboundSchema;
-var init_instructtype = __esm({
-  "node_modules/@openrouter/sdk/esm/models/instructtype.js"() {
-    init_enums();
-    InstructType = {
-      None: "none",
-      Airoboros: "airoboros",
-      Alpaca: "alpaca",
-      AlpacaModif: "alpaca-modif",
-      Chatml: "chatml",
-      Claude: "claude",
-      CodeLlama: "code-llama",
-      Gemma: "gemma",
-      Llama2: "llama2",
-      Llama3: "llama3",
-      Mistral: "mistral",
-      Nemotron: "nemotron",
-      Neural: "neural",
-      Openchat: "openchat",
-      Phi3: "phi3",
-      Rwkv: "rwkv",
-      Vicuna: "vicuna",
-      Zephyr: "zephyr",
-      DeepseekR1: "deepseek-r1",
-      DeepseekV31: "deepseek-v3.1",
-      Qwq: "qwq",
-      Qwen3: "qwen3"
-    };
-    InstructType$inboundSchema = inboundSchema(InstructType);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/internalserverresponseerrordata.js
-var InternalServerResponseErrorData$inboundSchema;
-var init_internalserverresponseerrordata = __esm({
-  "node_modules/@openrouter/sdk/esm/models/internalserverresponseerrordata.js"() {
-    init_v4();
-    InternalServerResponseErrorData$inboundSchema = object({
-      code: int(),
-      message: string2(),
-      metadata: nullable(record(string2(), nullable(any()))).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/outputmodality.js
-var OutputModality, OutputModality$inboundSchema;
-var init_outputmodality = __esm({
-  "node_modules/@openrouter/sdk/esm/models/outputmodality.js"() {
-    init_enums();
-    OutputModality = {
-      Text: "text",
-      Image: "image",
-      Embeddings: "embeddings",
-      Audio: "audio"
-    };
-    OutputModality$inboundSchema = inboundSchema(OutputModality);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/parameter.js
-var Parameter, Parameter$inboundSchema;
-var init_parameter = __esm({
-  "node_modules/@openrouter/sdk/esm/models/parameter.js"() {
-    init_enums();
-    Parameter = {
-      Temperature: "temperature",
-      TopP: "top_p",
-      TopK: "top_k",
-      MinP: "min_p",
-      TopA: "top_a",
-      FrequencyPenalty: "frequency_penalty",
-      PresencePenalty: "presence_penalty",
-      RepetitionPenalty: "repetition_penalty",
-      MaxTokens: "max_tokens",
-      LogitBias: "logit_bias",
-      Logprobs: "logprobs",
-      TopLogprobs: "top_logprobs",
-      Seed: "seed",
-      ResponseFormat: "response_format",
-      StructuredOutputs: "structured_outputs",
-      Stop: "stop",
-      Tools: "tools",
-      ToolChoice: "tool_choice",
-      ParallelToolCalls: "parallel_tool_calls",
-      IncludeReasoning: "include_reasoning",
-      Reasoning: "reasoning",
-      ReasoningEffort: "reasoning_effort",
-      WebSearchOptions: "web_search_options",
-      Verbosity: "verbosity"
-    };
-    Parameter$inboundSchema = inboundSchema(Parameter);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/percentilestats.js
-var PercentileStats$inboundSchema;
-var init_percentilestats = __esm({
-  "node_modules/@openrouter/sdk/esm/models/percentilestats.js"() {
-    init_v4();
-    PercentileStats$inboundSchema = object({
-      p50: number2(),
-      p75: number2(),
-      p90: number2(),
-      p99: number2()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/providername.js
-var ProviderName, ProviderName$inboundSchema, ProviderName$outboundSchema;
-var init_providername = __esm({
-  "node_modules/@openrouter/sdk/esm/models/providername.js"() {
-    init_enums();
-    ProviderName = {
-      Ai21: "AI21",
-      AionLabs: "AionLabs",
-      Alibaba: "Alibaba",
-      Ambient: "Ambient",
-      AmazonBedrock: "Amazon Bedrock",
-      AmazonNova: "Amazon Nova",
-      Anthropic: "Anthropic",
-      ArceeAI: "Arcee AI",
-      AtlasCloud: "AtlasCloud",
-      Avian: "Avian",
-      Azure: "Azure",
-      BaseTen: "BaseTen",
-      BytePlus: "BytePlus",
-      BlackForestLabs: "Black Forest Labs",
-      Cerebras: "Cerebras",
-      Chutes: "Chutes",
-      Cirrascale: "Cirrascale",
-      Clarifai: "Clarifai",
-      Cloudflare: "Cloudflare",
-      Cohere: "Cohere",
-      Crusoe: "Crusoe",
-      DeepInfra: "DeepInfra",
-      DeepSeek: "DeepSeek",
-      Featherless: "Featherless",
-      Fireworks: "Fireworks",
-      Friendli: "Friendli",
-      GMICloud: "GMICloud",
-      Google: "Google",
-      GoogleAIStudio: "Google AI Studio",
-      Groq: "Groq",
-      Hyperbolic: "Hyperbolic",
-      Inception: "Inception",
-      Inceptron: "Inceptron",
-      InferenceNet: "InferenceNet",
-      Infermatic: "Infermatic",
-      Inflection: "Inflection",
-      Liquid: "Liquid",
-      Mara: "Mara",
-      Mancer2: "Mancer 2",
-      Minimax: "Minimax",
-      ModelRun: "ModelRun",
-      Mistral: "Mistral",
-      Modular: "Modular",
-      MoonshotAI: "Moonshot AI",
-      Morph: "Morph",
-      NCompass: "NCompass",
-      Nebius: "Nebius",
-      NextBit: "NextBit",
-      Novita: "Novita",
-      Nvidia: "Nvidia",
-      OpenAI: "OpenAI",
-      OpenInference: "OpenInference",
-      Parasail: "Parasail",
-      Perplexity: "Perplexity",
-      Phala: "Phala",
-      Relace: "Relace",
-      SambaNova: "SambaNova",
-      Seed: "Seed",
-      SiliconFlow: "SiliconFlow",
-      Sourceful: "Sourceful",
-      StepFun: "StepFun",
-      Stealth: "Stealth",
-      StreamLake: "StreamLake",
-      Switchpoint: "Switchpoint",
-      Together: "Together",
-      Upstage: "Upstage",
-      Venice: "Venice",
-      WandB: "WandB",
-      Xiaomi: "Xiaomi",
-      XAI: "xAI",
-      ZAi: "Z.AI",
-      FakeProvider: "FakeProvider"
-    };
-    ProviderName$inboundSchema = inboundSchema(ProviderName);
-    ProviderName$outboundSchema = outboundSchema(ProviderName);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/publicendpoint.js
-var PublicEndpointQuantization, Pricing$inboundSchema, PublicEndpointQuantization$inboundSchema, PublicEndpoint$inboundSchema;
-var init_publicendpoint = __esm({
-  "node_modules/@openrouter/sdk/esm/models/publicendpoint.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    init_endpointstatus();
-    init_parameter();
-    init_percentilestats();
-    init_providername();
-    PublicEndpointQuantization = {
-      Int4: "int4",
-      Int8: "int8",
-      Fp4: "fp4",
-      Fp6: "fp6",
-      Fp8: "fp8",
-      Fp16: "fp16",
-      Bf16: "bf16",
-      Fp32: "fp32",
-      Unknown: "unknown"
-    };
-    Pricing$inboundSchema = object({
-      prompt: string2(),
-      completion: string2(),
-      request: string2().optional(),
-      image: string2().optional(),
-      image_token: string2().optional(),
-      image_output: string2().optional(),
-      audio: string2().optional(),
-      audio_output: string2().optional(),
-      input_audio_cache: string2().optional(),
-      web_search: string2().optional(),
-      internal_reasoning: string2().optional(),
-      input_cache_read: string2().optional(),
-      input_cache_write: string2().optional(),
-      discount: number2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        "image_token": "imageToken",
-        "image_output": "imageOutput",
-        "audio_output": "audioOutput",
-        "input_audio_cache": "inputAudioCache",
-        "web_search": "webSearch",
-        "internal_reasoning": "internalReasoning",
-        "input_cache_read": "inputCacheRead",
-        "input_cache_write": "inputCacheWrite"
-      });
-    });
-    PublicEndpointQuantization$inboundSchema = inboundSchema(PublicEndpointQuantization);
-    PublicEndpoint$inboundSchema = object({
-      name: string2(),
-      model_id: string2(),
-      model_name: string2(),
-      context_length: number2(),
-      pricing: lazy(() => Pricing$inboundSchema),
-      provider_name: ProviderName$inboundSchema,
-      tag: string2(),
-      quantization: nullable(PublicEndpointQuantization$inboundSchema),
-      max_completion_tokens: nullable(number2()),
-      max_prompt_tokens: nullable(number2()),
-      supported_parameters: array(Parameter$inboundSchema),
-      status: EndpointStatus$inboundSchema.optional(),
-      uptime_last_30m: nullable(number2()),
-      supports_implicit_caching: boolean2(),
-      latency_last_30m: nullable(PercentileStats$inboundSchema),
-      throughput_last_30m: nullable(PercentileStats$inboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        "model_id": "modelId",
-        "model_name": "modelName",
-        "context_length": "contextLength",
-        "provider_name": "providerName",
-        "max_completion_tokens": "maxCompletionTokens",
-        "max_prompt_tokens": "maxPromptTokens",
-        "supported_parameters": "supportedParameters",
-        "uptime_last_30m": "uptimeLast30m",
-        "supports_implicit_caching": "supportsImplicitCaching",
-        "latency_last_30m": "latencyLast30m",
-        "throughput_last_30m": "throughputLast30m"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/listendpointsresponse.js
-var Tokenizer, Tokenizer$inboundSchema, Architecture$inboundSchema, ListEndpointsResponse$inboundSchema;
-var init_listendpointsresponse = __esm({
-  "node_modules/@openrouter/sdk/esm/models/listendpointsresponse.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    init_inputmodality();
-    init_instructtype();
-    init_outputmodality();
-    init_publicendpoint();
-    Tokenizer = {
-      Router: "Router",
-      Media: "Media",
-      Other: "Other",
-      Gpt: "GPT",
-      Claude: "Claude",
-      Gemini: "Gemini",
-      Grok: "Grok",
-      Cohere: "Cohere",
-      Nova: "Nova",
-      Qwen: "Qwen",
-      Yi: "Yi",
-      DeepSeek: "DeepSeek",
-      Mistral: "Mistral",
-      Llama2: "Llama2",
-      Llama3: "Llama3",
-      Llama4: "Llama4",
-      PaLM: "PaLM",
-      Rwkv: "RWKV",
-      Qwen3: "Qwen3"
-    };
-    Tokenizer$inboundSchema = inboundSchema(Tokenizer);
-    Architecture$inboundSchema = object({
-      tokenizer: nullable(Tokenizer$inboundSchema),
-      instruct_type: nullable(InstructType$inboundSchema),
-      modality: nullable(string2()),
-      input_modalities: array(InputModality$inboundSchema),
-      output_modalities: array(OutputModality$inboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        "instruct_type": "instructType",
-        "input_modalities": "inputModalities",
-        "output_modalities": "outputModalities"
-      });
-    });
-    ListEndpointsResponse$inboundSchema = object({
-      id: string2(),
-      name: string2(),
-      created: number2(),
-      description: string2(),
-      architecture: lazy(() => Architecture$inboundSchema),
-      endpoints: array(PublicEndpoint$inboundSchema)
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/modelgroup.js
-var ModelGroup, ModelGroup$inboundSchema;
-var init_modelgroup = __esm({
-  "node_modules/@openrouter/sdk/esm/models/modelgroup.js"() {
-    init_enums();
-    ModelGroup = {
-      Router: "Router",
-      Media: "Media",
-      Other: "Other",
-      Gpt: "GPT",
-      Claude: "Claude",
-      Gemini: "Gemini",
-      Grok: "Grok",
-      Cohere: "Cohere",
-      Nova: "Nova",
-      Qwen: "Qwen",
-      Yi: "Yi",
-      DeepSeek: "DeepSeek",
-      Mistral: "Mistral",
-      Llama2: "Llama2",
-      Llama3: "Llama3",
-      Llama4: "Llama4",
-      PaLM: "PaLM",
-      Rwkv: "RWKV",
-      Qwen3: "Qwen3"
-    };
-    ModelGroup$inboundSchema = inboundSchema(ModelGroup);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/modelarchitecture.js
-var ModelArchitectureInstructType, ModelArchitectureInstructType$inboundSchema, ModelArchitecture$inboundSchema;
-var init_modelarchitecture = __esm({
-  "node_modules/@openrouter/sdk/esm/models/modelarchitecture.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    init_inputmodality();
-    init_modelgroup();
-    init_outputmodality();
-    ModelArchitectureInstructType = {
-      None: "none",
-      Airoboros: "airoboros",
-      Alpaca: "alpaca",
-      AlpacaModif: "alpaca-modif",
-      Chatml: "chatml",
-      Claude: "claude",
-      CodeLlama: "code-llama",
-      Gemma: "gemma",
-      Llama2: "llama2",
-      Llama3: "llama3",
-      Mistral: "mistral",
-      Nemotron: "nemotron",
-      Neural: "neural",
-      Openchat: "openchat",
-      Phi3: "phi3",
-      Rwkv: "rwkv",
-      Vicuna: "vicuna",
-      Zephyr: "zephyr",
-      DeepseekR1: "deepseek-r1",
-      DeepseekV31: "deepseek-v3.1",
-      Qwq: "qwq",
-      Qwen3: "qwen3"
-    };
-    ModelArchitectureInstructType$inboundSchema = inboundSchema(ModelArchitectureInstructType);
-    ModelArchitecture$inboundSchema = object({
-      tokenizer: ModelGroup$inboundSchema.optional(),
-      instruct_type: nullable(ModelArchitectureInstructType$inboundSchema).optional(),
-      modality: nullable(string2()),
-      input_modalities: array(InputModality$inboundSchema),
-      output_modalities: array(OutputModality$inboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        "instruct_type": "instructType",
-        "input_modalities": "inputModalities",
-        "output_modalities": "outputModalities"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/perrequestlimits.js
-var PerRequestLimits$inboundSchema;
-var init_perrequestlimits = __esm({
-  "node_modules/@openrouter/sdk/esm/models/perrequestlimits.js"() {
-    init_v4();
-    init_primitives();
-    PerRequestLimits$inboundSchema = object({
-      prompt_tokens: number2(),
-      completion_tokens: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "prompt_tokens": "promptTokens",
-        "completion_tokens": "completionTokens"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/publicpricing.js
-var PublicPricing$inboundSchema;
-var init_publicpricing = __esm({
-  "node_modules/@openrouter/sdk/esm/models/publicpricing.js"() {
-    init_v4();
-    init_primitives();
-    PublicPricing$inboundSchema = object({
-      prompt: string2(),
-      completion: string2(),
-      request: string2().optional(),
-      image: string2().optional(),
-      image_token: string2().optional(),
-      image_output: string2().optional(),
-      audio: string2().optional(),
-      audio_output: string2().optional(),
-      input_audio_cache: string2().optional(),
-      web_search: string2().optional(),
-      internal_reasoning: string2().optional(),
-      input_cache_read: string2().optional(),
-      input_cache_write: string2().optional(),
-      discount: number2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        "image_token": "imageToken",
-        "image_output": "imageOutput",
-        "audio_output": "audioOutput",
-        "input_audio_cache": "inputAudioCache",
-        "web_search": "webSearch",
-        "internal_reasoning": "internalReasoning",
-        "input_cache_read": "inputCacheRead",
-        "input_cache_write": "inputCacheWrite"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/topproviderinfo.js
-var TopProviderInfo$inboundSchema;
-var init_topproviderinfo = __esm({
-  "node_modules/@openrouter/sdk/esm/models/topproviderinfo.js"() {
-    init_v4();
-    init_primitives();
-    TopProviderInfo$inboundSchema = object({
-      context_length: nullable(number2()).optional(),
-      max_completion_tokens: nullable(number2()).optional(),
-      is_moderated: boolean2()
-    }).transform((v) => {
-      return remap(v, {
-        "context_length": "contextLength",
-        "max_completion_tokens": "maxCompletionTokens",
-        "is_moderated": "isModerated"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/model.js
-var Model$inboundSchema;
-var init_model = __esm({
-  "node_modules/@openrouter/sdk/esm/models/model.js"() {
-    init_v4();
-    init_primitives();
-    init_defaultparameters();
-    init_modelarchitecture();
-    init_parameter();
-    init_perrequestlimits();
-    init_publicpricing();
-    init_topproviderinfo();
-    Model$inboundSchema = object({
-      id: string2(),
-      canonical_slug: string2(),
-      hugging_face_id: nullable(string2()).optional(),
-      name: string2(),
-      created: number2(),
-      description: string2().optional(),
-      pricing: PublicPricing$inboundSchema,
-      context_length: nullable(number2()),
-      architecture: ModelArchitecture$inboundSchema,
-      top_provider: TopProviderInfo$inboundSchema,
-      per_request_limits: nullable(PerRequestLimits$inboundSchema),
-      supported_parameters: array(Parameter$inboundSchema),
-      default_parameters: nullable(DefaultParameters$inboundSchema),
-      expiration_date: nullable(string2()).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "canonical_slug": "canonicalSlug",
-        "hugging_face_id": "huggingFaceId",
-        "context_length": "contextLength",
-        "top_provider": "topProvider",
-        "per_request_limits": "perRequestLimits",
-        "supported_parameters": "supportedParameters",
-        "default_parameters": "defaultParameters",
-        "expiration_date": "expirationDate"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/modelscountresponse.js
-var ModelsCountResponseData$inboundSchema, ModelsCountResponse$inboundSchema;
-var init_modelscountresponse = __esm({
-  "node_modules/@openrouter/sdk/esm/models/modelscountresponse.js"() {
-    init_v4();
-    ModelsCountResponseData$inboundSchema = object({
-      count: number2()
-    });
-    ModelsCountResponse$inboundSchema = object({
-      data: lazy(() => ModelsCountResponseData$inboundSchema)
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/modelslistresponse.js
-var ModelsListResponse$inboundSchema;
-var init_modelslistresponse = __esm({
-  "node_modules/@openrouter/sdk/esm/models/modelslistresponse.js"() {
-    init_v4();
-    init_model();
-    ModelsListResponse$inboundSchema = object({
-      data: array(Model$inboundSchema)
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/namedtoolchoice.js
-var NamedToolChoiceFunction$outboundSchema, NamedToolChoice$outboundSchema;
-var init_namedtoolchoice = __esm({
-  "node_modules/@openrouter/sdk/esm/models/namedtoolchoice.js"() {
-    init_v4();
-    NamedToolChoiceFunction$outboundSchema = object({
-      name: string2()
-    });
-    NamedToolChoice$outboundSchema = object({
-      type: literal("function"),
-      function: lazy(() => NamedToolChoiceFunction$outboundSchema)
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/notfoundresponseerrordata.js
-var NotFoundResponseErrorData$inboundSchema;
-var init_notfoundresponseerrordata = __esm({
-  "node_modules/@openrouter/sdk/esm/models/notfoundresponseerrordata.js"() {
-    init_v4();
-    NotFoundResponseErrorData$inboundSchema = object({
-      code: int(),
-      message: string2(),
-      metadata: nullable(record(string2(), nullable(any()))).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/urlcitation.js
-var URLCitation$inboundSchema, URLCitation$outboundSchema;
-var init_urlcitation = __esm({
-  "node_modules/@openrouter/sdk/esm/models/urlcitation.js"() {
-    init_v4();
-    init_primitives();
-    URLCitation$inboundSchema = object({
-      type: literal("url_citation"),
-      url: string2(),
-      title: string2(),
-      start_index: number2(),
-      end_index: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "start_index": "startIndex",
-        "end_index": "endIndex"
-      });
-    });
-    URLCitation$outboundSchema = object({
-      type: literal("url_citation"),
-      url: string2(),
-      title: string2(),
-      startIndex: number2(),
-      endIndex: number2()
-    }).transform((v) => {
-      return remap(v, {
-        startIndex: "start_index",
-        endIndex: "end_index"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openairesponsesannotation.js
-var OpenAIResponsesAnnotation$inboundSchema, OpenAIResponsesAnnotation$outboundSchema;
-var init_openairesponsesannotation = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openairesponsesannotation.js"() {
-    init_v4();
-    init_filecitation();
-    init_filepath();
-    init_urlcitation();
-    OpenAIResponsesAnnotation$inboundSchema = union([
-      FileCitation$inboundSchema,
-      URLCitation$inboundSchema,
-      FilePath$inboundSchema
-    ]);
-    OpenAIResponsesAnnotation$outboundSchema = union([
-      FileCitation$outboundSchema,
-      URLCitation$outboundSchema,
-      FilePath$outboundSchema
-    ]);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openairesponsesincludable.js
-var OpenAIResponsesIncludable, OpenAIResponsesIncludable$outboundSchema;
-var init_openairesponsesincludable = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openairesponsesincludable.js"() {
-    init_enums();
-    OpenAIResponsesIncludable = {
-      FileSearchCallResults: "file_search_call.results",
-      MessageInputImageImageUrl: "message.input_image.image_url",
-      ComputerCallOutputOutputImageUrl: "computer_call_output.output.image_url",
-      ReasoningEncryptedContent: "reasoning.encrypted_content",
-      CodeInterpreterCallOutputs: "code_interpreter_call.outputs"
-    };
-    OpenAIResponsesIncludable$outboundSchema = outboundSchema(OpenAIResponsesIncludable);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openairesponsesincompletedetails.js
-var Reason, Reason$inboundSchema, OpenAIResponsesIncompleteDetails$inboundSchema;
-var init_openairesponsesincompletedetails = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openairesponsesincompletedetails.js"() {
-    init_v4();
-    init_enums();
-    Reason = {
-      MaxOutputTokens: "max_output_tokens",
-      ContentFilter: "content_filter"
-    };
-    Reason$inboundSchema = inboundSchema(Reason);
-    OpenAIResponsesIncompleteDetails$inboundSchema = object({
-      reason: Reason$inboundSchema.optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/outputitemimagegenerationcall.js
-var OutputItemImageGenerationCallType, OutputItemImageGenerationCallType$inboundSchema, OutputItemImageGenerationCall$inboundSchema;
-var init_outputitemimagegenerationcall = __esm({
-  "node_modules/@openrouter/sdk/esm/models/outputitemimagegenerationcall.js"() {
-    init_v4();
-    init_imagegenerationstatus();
-    OutputItemImageGenerationCallType = {
-      ImageGenerationCall: "image_generation_call"
-    };
-    OutputItemImageGenerationCallType$inboundSchema = _enum2(OutputItemImageGenerationCallType);
-    OutputItemImageGenerationCall$inboundSchema = object({
-      type: OutputItemImageGenerationCallType$inboundSchema,
-      id: string2(),
-      result: nullable(string2()).default(null),
-      status: ImageGenerationStatus$inboundSchema
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openairesponsesrefusalcontent.js
-var OpenAIResponsesRefusalContent$inboundSchema, OpenAIResponsesRefusalContent$outboundSchema;
-var init_openairesponsesrefusalcontent = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openairesponsesrefusalcontent.js"() {
-    init_v4();
-    OpenAIResponsesRefusalContent$inboundSchema = object({
-      type: literal("refusal"),
-      refusal: string2()
-    });
-    OpenAIResponsesRefusalContent$outboundSchema = object({
-      type: literal("refusal"),
-      refusal: string2()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/responseoutputtext.js
-var ResponseOutputTextTopLogprob$inboundSchema, ResponseOutputTextTopLogprob$outboundSchema, Logprob$inboundSchema, Logprob$outboundSchema, ResponseOutputText$inboundSchema, ResponseOutputText$outboundSchema;
-var init_responseoutputtext = __esm({
-  "node_modules/@openrouter/sdk/esm/models/responseoutputtext.js"() {
-    init_v4();
-    init_primitives();
-    init_openairesponsesannotation();
-    ResponseOutputTextTopLogprob$inboundSchema = object({
-      token: string2(),
-      bytes: array(number2()),
-      logprob: number2()
-    });
-    ResponseOutputTextTopLogprob$outboundSchema = object({
-      token: string2(),
-      bytes: array(number2()),
-      logprob: number2()
-    });
-    Logprob$inboundSchema = object({
-      token: string2(),
-      bytes: array(number2()),
-      logprob: number2(),
-      top_logprobs: array(lazy(() => ResponseOutputTextTopLogprob$inboundSchema))
-    }).transform((v) => {
-      return remap(v, {
-        "top_logprobs": "topLogprobs"
-      });
-    });
-    Logprob$outboundSchema = object({
-      token: string2(),
-      bytes: array(number2()),
-      logprob: number2(),
-      topLogprobs: array(lazy(() => ResponseOutputTextTopLogprob$outboundSchema))
-    }).transform((v) => {
-      return remap(v, {
-        topLogprobs: "top_logprobs"
-      });
-    });
-    ResponseOutputText$inboundSchema = object({
-      type: literal("output_text"),
-      text: string2(),
-      annotations: array(OpenAIResponsesAnnotation$inboundSchema).optional(),
-      logprobs: array(lazy(() => Logprob$inboundSchema)).optional()
-    });
-    ResponseOutputText$outboundSchema = object({
-      type: literal("output_text"),
-      text: string2(),
-      annotations: array(OpenAIResponsesAnnotation$outboundSchema).optional(),
-      logprobs: array(lazy(() => Logprob$outboundSchema)).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/outputmessage.js
-var OutputMessageRole, OutputMessageType, OutputMessageStatusInProgress, OutputMessageStatusIncomplete, OutputMessageStatusCompleted, OutputMessageRole$inboundSchema, OutputMessageType$inboundSchema, OutputMessageStatusInProgress$inboundSchema, OutputMessageStatusIncomplete$inboundSchema, OutputMessageStatusCompleted$inboundSchema, OutputMessageStatusUnion$inboundSchema, OutputMessageContent$inboundSchema, OutputMessage$inboundSchema;
-var init_outputmessage = __esm({
-  "node_modules/@openrouter/sdk/esm/models/outputmessage.js"() {
-    init_v4();
-    init_openairesponsesrefusalcontent();
-    init_responseoutputtext();
-    OutputMessageRole = {
-      Assistant: "assistant"
-    };
-    OutputMessageType = {
-      Message: "message"
-    };
-    OutputMessageStatusInProgress = {
-      InProgress: "in_progress"
-    };
-    OutputMessageStatusIncomplete = {
-      Incomplete: "incomplete"
-    };
-    OutputMessageStatusCompleted = {
-      Completed: "completed"
-    };
-    OutputMessageRole$inboundSchema = _enum2(OutputMessageRole);
-    OutputMessageType$inboundSchema = _enum2(OutputMessageType);
-    OutputMessageStatusInProgress$inboundSchema = _enum2(OutputMessageStatusInProgress);
-    OutputMessageStatusIncomplete$inboundSchema = _enum2(OutputMessageStatusIncomplete);
-    OutputMessageStatusCompleted$inboundSchema = _enum2(OutputMessageStatusCompleted);
-    OutputMessageStatusUnion$inboundSchema = union([
-      OutputMessageStatusCompleted$inboundSchema,
-      OutputMessageStatusIncomplete$inboundSchema,
-      OutputMessageStatusInProgress$inboundSchema
-    ]);
-    OutputMessageContent$inboundSchema = union([
-      ResponseOutputText$inboundSchema,
-      OpenAIResponsesRefusalContent$inboundSchema
-    ]);
-    OutputMessage$inboundSchema = object({
-      id: string2(),
-      role: OutputMessageRole$inboundSchema,
-      type: OutputMessageType$inboundSchema,
-      status: union([
-        OutputMessageStatusCompleted$inboundSchema,
-        OutputMessageStatusIncomplete$inboundSchema,
-        OutputMessageStatusInProgress$inboundSchema
-      ]).optional(),
-      content: array(union([
-        ResponseOutputText$inboundSchema,
-        OpenAIResponsesRefusalContent$inboundSchema
-      ]))
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/responseinputimage.js
-var ResponseInputImageType, ResponseInputImageDetail, ResponseInputImageType$inboundSchema, ResponseInputImageType$outboundSchema, ResponseInputImageDetail$inboundSchema, ResponseInputImageDetail$outboundSchema, ResponseInputImage$inboundSchema, ResponseInputImage$outboundSchema;
-var init_responseinputimage = __esm({
-  "node_modules/@openrouter/sdk/esm/models/responseinputimage.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    ResponseInputImageType = {
-      InputImage: "input_image"
-    };
-    ResponseInputImageDetail = {
-      Auto: "auto",
-      High: "high",
-      Low: "low"
-    };
-    ResponseInputImageType$inboundSchema = _enum2(ResponseInputImageType);
-    ResponseInputImageType$outboundSchema = ResponseInputImageType$inboundSchema;
-    ResponseInputImageDetail$inboundSchema = inboundSchema(ResponseInputImageDetail);
-    ResponseInputImageDetail$outboundSchema = outboundSchema(ResponseInputImageDetail);
-    ResponseInputImage$inboundSchema = object({
-      type: ResponseInputImageType$inboundSchema,
-      detail: ResponseInputImageDetail$inboundSchema,
-      image_url: nullable(string2()).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "image_url": "imageUrl"
-      });
-    });
-    ResponseInputImage$outboundSchema = object({
-      type: ResponseInputImageType$outboundSchema,
-      detail: ResponseInputImageDetail$outboundSchema,
-      imageUrl: nullable(string2()).optional()
-    }).transform((v) => {
-      return remap(v, {
-        imageUrl: "image_url"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openairesponsesinputunion.js
-var OpenAIResponsesInputTypeFunctionCall, OpenAIResponsesInputTypeFunctionCallOutput, OpenAIResponsesInputTypeMessage2, OpenAIResponsesInputRoleDeveloper2, OpenAIResponsesInputRoleSystem2, OpenAIResponsesInputRoleUser2, OpenAIResponsesInputTypeMessage1, OpenAIResponsesInputRoleDeveloper1, OpenAIResponsesInputRoleAssistant, OpenAIResponsesInputRoleSystem1, OpenAIResponsesInputRoleUser1, OpenAIResponsesInputTypeFunctionCall$inboundSchema, OpenAIResponsesInputFunctionCall$inboundSchema, OpenAIResponsesInputTypeFunctionCallOutput$inboundSchema, OpenAIResponsesInputFunctionCallOutput$inboundSchema, OpenAIResponsesInputTypeMessage2$inboundSchema, OpenAIResponsesInputRoleDeveloper2$inboundSchema, OpenAIResponsesInputRoleSystem2$inboundSchema, OpenAIResponsesInputRoleUser2$inboundSchema, OpenAIResponsesInputRoleUnion2$inboundSchema, OpenAIResponsesInputContent3$inboundSchema, OpenAIResponsesInputMessage2$inboundSchema, OpenAIResponsesInputTypeMessage1$inboundSchema, OpenAIResponsesInputRoleDeveloper1$inboundSchema, OpenAIResponsesInputRoleAssistant$inboundSchema, OpenAIResponsesInputRoleSystem1$inboundSchema, OpenAIResponsesInputRoleUser1$inboundSchema, OpenAIResponsesInputRoleUnion1$inboundSchema, OpenAIResponsesInputContent1$inboundSchema, OpenAIResponsesInputContent2$inboundSchema, OpenAIResponsesInputMessage1$inboundSchema, OpenAIResponsesInputUnion1$inboundSchema, OpenAIResponsesInputUnion$inboundSchema;
-var init_openairesponsesinputunion = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openairesponsesinputunion.js"() {
-    init_v4();
-    init_primitives();
-    init_outputitemimagegenerationcall();
-    init_outputmessage();
-    init_responseinputaudio();
-    init_responseinputfile();
-    init_responseinputimage();
-    init_responseinputtext();
-    init_toolcallstatus();
-    OpenAIResponsesInputTypeFunctionCall = {
-      FunctionCall: "function_call"
-    };
-    OpenAIResponsesInputTypeFunctionCallOutput = {
-      FunctionCallOutput: "function_call_output"
-    };
-    OpenAIResponsesInputTypeMessage2 = {
-      Message: "message"
-    };
-    OpenAIResponsesInputRoleDeveloper2 = {
-      Developer: "developer"
-    };
-    OpenAIResponsesInputRoleSystem2 = {
-      System: "system"
-    };
-    OpenAIResponsesInputRoleUser2 = {
-      User: "user"
-    };
-    OpenAIResponsesInputTypeMessage1 = {
-      Message: "message"
-    };
-    OpenAIResponsesInputRoleDeveloper1 = {
-      Developer: "developer"
-    };
-    OpenAIResponsesInputRoleAssistant = {
-      Assistant: "assistant"
-    };
-    OpenAIResponsesInputRoleSystem1 = {
-      System: "system"
-    };
-    OpenAIResponsesInputRoleUser1 = {
-      User: "user"
-    };
-    OpenAIResponsesInputTypeFunctionCall$inboundSchema = _enum2(OpenAIResponsesInputTypeFunctionCall);
-    OpenAIResponsesInputFunctionCall$inboundSchema = object({
-      type: OpenAIResponsesInputTypeFunctionCall$inboundSchema,
-      call_id: string2(),
-      name: string2(),
-      arguments: string2(),
-      id: string2().optional(),
-      status: nullable(ToolCallStatus$inboundSchema).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "call_id": "callId"
-      });
-    });
-    OpenAIResponsesInputTypeFunctionCallOutput$inboundSchema = _enum2(OpenAIResponsesInputTypeFunctionCallOutput);
-    OpenAIResponsesInputFunctionCallOutput$inboundSchema = object({
-      type: OpenAIResponsesInputTypeFunctionCallOutput$inboundSchema,
-      id: nullable(string2()).optional(),
-      call_id: string2(),
-      output: string2(),
-      status: nullable(ToolCallStatus$inboundSchema).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "call_id": "callId"
-      });
-    });
-    OpenAIResponsesInputTypeMessage2$inboundSchema = _enum2(OpenAIResponsesInputTypeMessage2);
-    OpenAIResponsesInputRoleDeveloper2$inboundSchema = _enum2(OpenAIResponsesInputRoleDeveloper2);
-    OpenAIResponsesInputRoleSystem2$inboundSchema = _enum2(OpenAIResponsesInputRoleSystem2);
-    OpenAIResponsesInputRoleUser2$inboundSchema = _enum2(OpenAIResponsesInputRoleUser2);
-    OpenAIResponsesInputRoleUnion2$inboundSchema = union([
-      OpenAIResponsesInputRoleUser2$inboundSchema,
-      OpenAIResponsesInputRoleSystem2$inboundSchema,
-      OpenAIResponsesInputRoleDeveloper2$inboundSchema
-    ]);
-    OpenAIResponsesInputContent3$inboundSchema = union([
-      ResponseInputText$inboundSchema,
-      ResponseInputImage$inboundSchema.and(object({ type: literal("input_image") })),
-      ResponseInputFile$inboundSchema,
-      ResponseInputAudio$inboundSchema
-    ]);
-    OpenAIResponsesInputMessage2$inboundSchema = object({
-      id: string2(),
-      type: OpenAIResponsesInputTypeMessage2$inboundSchema.optional(),
-      role: union([
-        OpenAIResponsesInputRoleUser2$inboundSchema,
-        OpenAIResponsesInputRoleSystem2$inboundSchema,
-        OpenAIResponsesInputRoleDeveloper2$inboundSchema
-      ]),
-      content: array(union([
-        ResponseInputText$inboundSchema,
-        ResponseInputImage$inboundSchema.and(object({ type: literal("input_image") })),
-        ResponseInputFile$inboundSchema,
-        ResponseInputAudio$inboundSchema
-      ]))
-    });
-    OpenAIResponsesInputTypeMessage1$inboundSchema = _enum2(OpenAIResponsesInputTypeMessage1);
-    OpenAIResponsesInputRoleDeveloper1$inboundSchema = _enum2(OpenAIResponsesInputRoleDeveloper1);
-    OpenAIResponsesInputRoleAssistant$inboundSchema = _enum2(OpenAIResponsesInputRoleAssistant);
-    OpenAIResponsesInputRoleSystem1$inboundSchema = _enum2(OpenAIResponsesInputRoleSystem1);
-    OpenAIResponsesInputRoleUser1$inboundSchema = _enum2(OpenAIResponsesInputRoleUser1);
-    OpenAIResponsesInputRoleUnion1$inboundSchema = union([
-      OpenAIResponsesInputRoleUser1$inboundSchema,
-      OpenAIResponsesInputRoleSystem1$inboundSchema,
-      OpenAIResponsesInputRoleAssistant$inboundSchema,
-      OpenAIResponsesInputRoleDeveloper1$inboundSchema
-    ]);
-    OpenAIResponsesInputContent1$inboundSchema = union([
-      ResponseInputText$inboundSchema,
-      ResponseInputImage$inboundSchema.and(object({ type: literal("input_image") })),
-      ResponseInputFile$inboundSchema,
-      ResponseInputAudio$inboundSchema
-    ]);
-    OpenAIResponsesInputContent2$inboundSchema = union([
-      array(union([
-        ResponseInputText$inboundSchema,
-        ResponseInputImage$inboundSchema.and(object({ type: literal("input_image") })),
-        ResponseInputFile$inboundSchema,
-        ResponseInputAudio$inboundSchema
-      ])),
-      string2()
-    ]);
-    OpenAIResponsesInputMessage1$inboundSchema = object({
-      type: OpenAIResponsesInputTypeMessage1$inboundSchema.optional(),
-      role: union([
-        OpenAIResponsesInputRoleUser1$inboundSchema,
-        OpenAIResponsesInputRoleSystem1$inboundSchema,
-        OpenAIResponsesInputRoleAssistant$inboundSchema,
-        OpenAIResponsesInputRoleDeveloper1$inboundSchema
-      ]),
-      content: union([
-        array(union([
-          ResponseInputText$inboundSchema,
-          ResponseInputImage$inboundSchema.and(object({ type: literal("input_image") })),
-          ResponseInputFile$inboundSchema,
-          ResponseInputAudio$inboundSchema
-        ])),
-        string2()
-      ])
-    });
-    OpenAIResponsesInputUnion1$inboundSchema = union([
-      lazy(() => OpenAIResponsesInputFunctionCall$inboundSchema),
-      OutputMessage$inboundSchema,
-      lazy(() => OpenAIResponsesInputMessage2$inboundSchema),
-      lazy(() => OpenAIResponsesInputFunctionCallOutput$inboundSchema),
-      OutputItemImageGenerationCall$inboundSchema,
-      lazy(() => OpenAIResponsesInputMessage1$inboundSchema)
-    ]);
-    OpenAIResponsesInputUnion$inboundSchema = union([
-      string2(),
-      array(union([
-        lazy(() => OpenAIResponsesInputFunctionCall$inboundSchema),
-        OutputMessage$inboundSchema,
-        lazy(() => OpenAIResponsesInputMessage2$inboundSchema),
-        lazy(() => OpenAIResponsesInputFunctionCallOutput$inboundSchema),
-        OutputItemImageGenerationCall$inboundSchema,
-        lazy(() => OpenAIResponsesInputMessage1$inboundSchema)
-      ])),
-      any()
-    ]);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openairesponsesprompt.js
-var Variables$inboundSchema, Variables$outboundSchema, OpenAIResponsesPrompt$inboundSchema, OpenAIResponsesPrompt$outboundSchema;
-var init_openairesponsesprompt = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openairesponsesprompt.js"() {
-    init_v4();
-    init_responseinputfile();
-    init_responseinputimage();
-    init_responseinputtext();
-    Variables$inboundSchema = union([
-      ResponseInputText$inboundSchema,
-      ResponseInputImage$inboundSchema,
-      ResponseInputFile$inboundSchema,
-      string2()
-    ]);
-    Variables$outboundSchema = union([
-      ResponseInputText$outboundSchema,
-      ResponseInputImage$outboundSchema,
-      ResponseInputFile$outboundSchema,
-      string2()
-    ]);
-    OpenAIResponsesPrompt$inboundSchema = object({
-      id: string2(),
-      variables: nullable(record(string2(), union([
-        ResponseInputText$inboundSchema,
-        ResponseInputImage$inboundSchema,
-        ResponseInputFile$inboundSchema,
-        string2()
-      ]))).optional()
-    });
-    OpenAIResponsesPrompt$outboundSchema = object({
-      id: string2(),
-      variables: nullable(record(string2(), union([
-        ResponseInputText$outboundSchema,
-        ResponseInputImage$outboundSchema,
-        ResponseInputFile$outboundSchema,
-        string2()
-      ]))).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openairesponsesreasoningeffort.js
-var OpenAIResponsesReasoningEffort, OpenAIResponsesReasoningEffort$inboundSchema, OpenAIResponsesReasoningEffort$outboundSchema;
-var init_openairesponsesreasoningeffort = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openairesponsesreasoningeffort.js"() {
-    init_enums();
-    OpenAIResponsesReasoningEffort = {
-      Xhigh: "xhigh",
-      High: "high",
-      Medium: "medium",
-      Low: "low",
-      Minimal: "minimal",
-      None: "none"
-    };
-    OpenAIResponsesReasoningEffort$inboundSchema = inboundSchema(OpenAIResponsesReasoningEffort);
-    OpenAIResponsesReasoningEffort$outboundSchema = outboundSchema(OpenAIResponsesReasoningEffort);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openairesponsesreasoningconfig.js
-var OpenAIResponsesReasoningConfig$inboundSchema;
-var init_openairesponsesreasoningconfig = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openairesponsesreasoningconfig.js"() {
-    init_v4();
-    init_openairesponsesreasoningeffort();
-    init_reasoningsummaryverbosity();
-    OpenAIResponsesReasoningConfig$inboundSchema = object({
-      effort: nullable(OpenAIResponsesReasoningEffort$inboundSchema).optional(),
-      summary: ReasoningSummaryVerbosity$inboundSchema.optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openairesponsesresponsestatus.js
-var OpenAIResponsesResponseStatus, OpenAIResponsesResponseStatus$inboundSchema;
-var init_openairesponsesresponsestatus = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openairesponsesresponsestatus.js"() {
-    init_enums();
-    OpenAIResponsesResponseStatus = {
-      Completed: "completed",
-      Incomplete: "incomplete",
-      InProgress: "in_progress",
-      Failed: "failed",
-      Cancelled: "cancelled",
-      Queued: "queued"
-    };
-    OpenAIResponsesResponseStatus$inboundSchema = inboundSchema(OpenAIResponsesResponseStatus);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openairesponsesservicetier.js
-var OpenAIResponsesServiceTier, OpenAIResponsesServiceTier$inboundSchema;
-var init_openairesponsesservicetier = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openairesponsesservicetier.js"() {
-    init_enums();
-    OpenAIResponsesServiceTier = {
-      Auto: "auto",
-      Default: "default",
-      Flex: "flex",
-      Priority: "priority",
-      Scale: "scale"
-    };
-    OpenAIResponsesServiceTier$inboundSchema = inboundSchema(OpenAIResponsesServiceTier);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openairesponsestoolchoiceunion.js
-var OpenAIResponsesToolChoiceTypeWebSearchPreview, OpenAIResponsesToolChoiceTypeWebSearchPreview20250311, OpenAIResponsesToolChoiceTypeFunction, OpenAIResponsesToolChoiceRequired, OpenAIResponsesToolChoiceNone, OpenAIResponsesToolChoiceAuto, OpenAIResponsesToolChoiceTypeWebSearchPreview$inboundSchema, OpenAIResponsesToolChoiceTypeWebSearchPreview$outboundSchema, OpenAIResponsesToolChoiceTypeWebSearchPreview20250311$inboundSchema, OpenAIResponsesToolChoiceTypeWebSearchPreview20250311$outboundSchema, Type$inboundSchema, Type$outboundSchema, OpenAIResponsesToolChoice$inboundSchema, OpenAIResponsesToolChoice$outboundSchema, OpenAIResponsesToolChoiceTypeFunction$inboundSchema, OpenAIResponsesToolChoiceTypeFunction$outboundSchema, OpenAIResponsesToolChoiceFunction$inboundSchema, OpenAIResponsesToolChoiceFunction$outboundSchema, OpenAIResponsesToolChoiceRequired$inboundSchema, OpenAIResponsesToolChoiceRequired$outboundSchema, OpenAIResponsesToolChoiceNone$inboundSchema, OpenAIResponsesToolChoiceNone$outboundSchema, OpenAIResponsesToolChoiceAuto$inboundSchema, OpenAIResponsesToolChoiceAuto$outboundSchema, OpenAIResponsesToolChoiceUnion$inboundSchema, OpenAIResponsesToolChoiceUnion$outboundSchema;
-var init_openairesponsestoolchoiceunion = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openairesponsestoolchoiceunion.js"() {
-    init_v4();
-    OpenAIResponsesToolChoiceTypeWebSearchPreview = {
-      WebSearchPreview: "web_search_preview"
-    };
-    OpenAIResponsesToolChoiceTypeWebSearchPreview20250311 = {
-      WebSearchPreview20250311: "web_search_preview_2025_03_11"
-    };
-    OpenAIResponsesToolChoiceTypeFunction = {
-      Function: "function"
-    };
-    OpenAIResponsesToolChoiceRequired = {
-      Required: "required"
-    };
-    OpenAIResponsesToolChoiceNone = {
-      None: "none"
-    };
-    OpenAIResponsesToolChoiceAuto = {
-      Auto: "auto"
-    };
-    OpenAIResponsesToolChoiceTypeWebSearchPreview$inboundSchema = _enum2(OpenAIResponsesToolChoiceTypeWebSearchPreview);
-    OpenAIResponsesToolChoiceTypeWebSearchPreview$outboundSchema = OpenAIResponsesToolChoiceTypeWebSearchPreview$inboundSchema;
-    OpenAIResponsesToolChoiceTypeWebSearchPreview20250311$inboundSchema = _enum2(OpenAIResponsesToolChoiceTypeWebSearchPreview20250311);
-    OpenAIResponsesToolChoiceTypeWebSearchPreview20250311$outboundSchema = OpenAIResponsesToolChoiceTypeWebSearchPreview20250311$inboundSchema;
-    Type$inboundSchema = union([
-      OpenAIResponsesToolChoiceTypeWebSearchPreview20250311$inboundSchema,
-      OpenAIResponsesToolChoiceTypeWebSearchPreview$inboundSchema
-    ]);
-    Type$outboundSchema = union([
-      OpenAIResponsesToolChoiceTypeWebSearchPreview20250311$outboundSchema,
-      OpenAIResponsesToolChoiceTypeWebSearchPreview$outboundSchema
-    ]);
-    OpenAIResponsesToolChoice$inboundSchema = object({
-      type: union([
-        OpenAIResponsesToolChoiceTypeWebSearchPreview20250311$inboundSchema,
-        OpenAIResponsesToolChoiceTypeWebSearchPreview$inboundSchema
-      ])
-    });
-    OpenAIResponsesToolChoice$outboundSchema = object({
-      type: union([
-        OpenAIResponsesToolChoiceTypeWebSearchPreview20250311$outboundSchema,
-        OpenAIResponsesToolChoiceTypeWebSearchPreview$outboundSchema
-      ])
-    });
-    OpenAIResponsesToolChoiceTypeFunction$inboundSchema = _enum2(OpenAIResponsesToolChoiceTypeFunction);
-    OpenAIResponsesToolChoiceTypeFunction$outboundSchema = OpenAIResponsesToolChoiceTypeFunction$inboundSchema;
-    OpenAIResponsesToolChoiceFunction$inboundSchema = object({
-      type: OpenAIResponsesToolChoiceTypeFunction$inboundSchema,
-      name: string2()
-    });
-    OpenAIResponsesToolChoiceFunction$outboundSchema = object({
-      type: OpenAIResponsesToolChoiceTypeFunction$outboundSchema,
-      name: string2()
-    });
-    OpenAIResponsesToolChoiceRequired$inboundSchema = _enum2(OpenAIResponsesToolChoiceRequired);
-    OpenAIResponsesToolChoiceRequired$outboundSchema = OpenAIResponsesToolChoiceRequired$inboundSchema;
-    OpenAIResponsesToolChoiceNone$inboundSchema = _enum2(OpenAIResponsesToolChoiceNone);
-    OpenAIResponsesToolChoiceNone$outboundSchema = OpenAIResponsesToolChoiceNone$inboundSchema;
-    OpenAIResponsesToolChoiceAuto$inboundSchema = _enum2(OpenAIResponsesToolChoiceAuto);
-    OpenAIResponsesToolChoiceAuto$outboundSchema = OpenAIResponsesToolChoiceAuto$inboundSchema;
-    OpenAIResponsesToolChoiceUnion$inboundSchema = union([
-      lazy(() => OpenAIResponsesToolChoiceFunction$inboundSchema),
-      lazy(() => OpenAIResponsesToolChoice$inboundSchema),
-      OpenAIResponsesToolChoiceAuto$inboundSchema,
-      OpenAIResponsesToolChoiceNone$inboundSchema,
-      OpenAIResponsesToolChoiceRequired$inboundSchema
-    ]);
-    OpenAIResponsesToolChoiceUnion$outboundSchema = union([
-      lazy(() => OpenAIResponsesToolChoiceFunction$outboundSchema),
-      lazy(() => OpenAIResponsesToolChoice$outboundSchema),
-      OpenAIResponsesToolChoiceAuto$outboundSchema,
-      OpenAIResponsesToolChoiceNone$outboundSchema,
-      OpenAIResponsesToolChoiceRequired$outboundSchema
-    ]);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openairesponsestruncation.js
-var OpenAIResponsesTruncation, OpenAIResponsesTruncation$inboundSchema;
-var init_openairesponsestruncation = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openairesponsestruncation.js"() {
-    init_enums();
-    OpenAIResponsesTruncation = {
-      Auto: "auto",
-      Disabled: "disabled"
-    };
-    OpenAIResponsesTruncation$inboundSchema = inboundSchema(OpenAIResponsesTruncation);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponseserrorevent.js
-var OpenResponsesErrorEvent$inboundSchema;
-var init_openresponseserrorevent = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponseserrorevent.js"() {
-    init_v4();
-    init_primitives();
-    OpenResponsesErrorEvent$inboundSchema = object({
-      type: literal("error"),
-      code: nullable(string2()),
-      message: string2(),
-      param: nullable(string2()),
-      sequence_number: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "sequence_number": "sequenceNumber"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponsesfunctiontoolcall.js
-var OpenResponsesFunctionToolCallType, OpenResponsesFunctionToolCallType$outboundSchema, OpenResponsesFunctionToolCall$outboundSchema;
-var init_openresponsesfunctiontoolcall = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponsesfunctiontoolcall.js"() {
-    init_v4();
-    init_primitives();
-    init_toolcallstatus();
-    OpenResponsesFunctionToolCallType = {
-      FunctionCall: "function_call"
-    };
-    OpenResponsesFunctionToolCallType$outboundSchema = _enum2(OpenResponsesFunctionToolCallType);
-    OpenResponsesFunctionToolCall$outboundSchema = object({
-      type: OpenResponsesFunctionToolCallType$outboundSchema,
-      callId: string2(),
-      name: string2(),
-      arguments: string2(),
-      id: string2(),
-      status: nullable(ToolCallStatus$outboundSchema).optional()
-    }).transform((v) => {
-      return remap(v, {
-        callId: "call_id"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponsesimagegencallcompleted.js
-var OpenResponsesImageGenCallCompleted$inboundSchema;
-var init_openresponsesimagegencallcompleted = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponsesimagegencallcompleted.js"() {
-    init_v4();
-    init_primitives();
-    OpenResponsesImageGenCallCompleted$inboundSchema = object({
-      type: literal("response.image_generation_call.completed"),
-      item_id: string2(),
-      output_index: number2(),
-      sequence_number: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "item_id": "itemId",
-        "output_index": "outputIndex",
-        "sequence_number": "sequenceNumber"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponsesimagegencallgenerating.js
-var OpenResponsesImageGenCallGenerating$inboundSchema;
-var init_openresponsesimagegencallgenerating = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponsesimagegencallgenerating.js"() {
-    init_v4();
-    init_primitives();
-    OpenResponsesImageGenCallGenerating$inboundSchema = object({
-      type: literal("response.image_generation_call.generating"),
-      item_id: string2(),
-      output_index: number2(),
-      sequence_number: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "item_id": "itemId",
-        "output_index": "outputIndex",
-        "sequence_number": "sequenceNumber"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponsesimagegencallinprogress.js
-var OpenResponsesImageGenCallInProgress$inboundSchema;
-var init_openresponsesimagegencallinprogress = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponsesimagegencallinprogress.js"() {
-    init_v4();
-    init_primitives();
-    OpenResponsesImageGenCallInProgress$inboundSchema = object({
-      type: literal("response.image_generation_call.in_progress"),
-      item_id: string2(),
-      output_index: number2(),
-      sequence_number: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "item_id": "itemId",
-        "output_index": "outputIndex",
-        "sequence_number": "sequenceNumber"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponsesimagegencallpartialimage.js
-var OpenResponsesImageGenCallPartialImage$inboundSchema;
-var init_openresponsesimagegencallpartialimage = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponsesimagegencallpartialimage.js"() {
-    init_v4();
-    init_primitives();
-    OpenResponsesImageGenCallPartialImage$inboundSchema = object({
-      type: literal("response.image_generation_call.partial_image"),
-      item_id: string2(),
-      output_index: number2(),
-      sequence_number: number2(),
-      partial_image_b64: string2(),
-      partial_image_index: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "item_id": "itemId",
-        "output_index": "outputIndex",
-        "sequence_number": "sequenceNumber",
-        "partial_image_b64": "partialImageB64",
-        "partial_image_index": "partialImageIndex"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/reasoningsummarytext.js
-var ReasoningSummaryTextType, ReasoningSummaryTextType$inboundSchema, ReasoningSummaryTextType$outboundSchema, ReasoningSummaryText$inboundSchema, ReasoningSummaryText$outboundSchema;
-var init_reasoningsummarytext = __esm({
-  "node_modules/@openrouter/sdk/esm/models/reasoningsummarytext.js"() {
-    init_v4();
-    ReasoningSummaryTextType = {
-      SummaryText: "summary_text"
-    };
-    ReasoningSummaryTextType$inboundSchema = _enum2(ReasoningSummaryTextType);
-    ReasoningSummaryTextType$outboundSchema = ReasoningSummaryTextType$inboundSchema;
-    ReasoningSummaryText$inboundSchema = object({
-      type: ReasoningSummaryTextType$inboundSchema,
-      text: string2()
-    });
-    ReasoningSummaryText$outboundSchema = object({
-      type: ReasoningSummaryTextType$outboundSchema,
-      text: string2()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/reasoningtextcontent.js
-var ReasoningTextContentType, ReasoningTextContentType$inboundSchema, ReasoningTextContentType$outboundSchema, ReasoningTextContent$inboundSchema, ReasoningTextContent$outboundSchema;
-var init_reasoningtextcontent = __esm({
-  "node_modules/@openrouter/sdk/esm/models/reasoningtextcontent.js"() {
-    init_v4();
-    ReasoningTextContentType = {
-      ReasoningText: "reasoning_text"
-    };
-    ReasoningTextContentType$inboundSchema = _enum2(ReasoningTextContentType);
-    ReasoningTextContentType$outboundSchema = ReasoningTextContentType$inboundSchema;
-    ReasoningTextContent$inboundSchema = object({
-      type: ReasoningTextContentType$inboundSchema,
-      text: string2()
-    });
-    ReasoningTextContent$outboundSchema = object({
-      type: ReasoningTextContentType$outboundSchema,
-      text: string2()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponsesreasoning.js
-var OpenResponsesReasoningType, OpenResponsesReasoningStatusInProgress, OpenResponsesReasoningStatusIncomplete, OpenResponsesReasoningStatusCompleted, OpenResponsesReasoningFormat, OpenResponsesReasoningType$outboundSchema, OpenResponsesReasoningStatusInProgress$outboundSchema, OpenResponsesReasoningStatusIncomplete$outboundSchema, OpenResponsesReasoningStatusCompleted$outboundSchema, OpenResponsesReasoningStatusUnion$outboundSchema, OpenResponsesReasoningFormat$outboundSchema, OpenResponsesReasoning$outboundSchema;
-var init_openresponsesreasoning = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponsesreasoning.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    init_reasoningsummarytext();
-    init_reasoningtextcontent();
-    OpenResponsesReasoningType = {
-      Reasoning: "reasoning"
-    };
-    OpenResponsesReasoningStatusInProgress = {
-      InProgress: "in_progress"
-    };
-    OpenResponsesReasoningStatusIncomplete = {
-      Incomplete: "incomplete"
-    };
-    OpenResponsesReasoningStatusCompleted = {
-      Completed: "completed"
-    };
-    OpenResponsesReasoningFormat = {
-      Unknown: "unknown",
-      OpenaiResponsesV1: "openai-responses-v1",
-      AzureOpenaiResponsesV1: "azure-openai-responses-v1",
-      XaiResponsesV1: "xai-responses-v1",
-      AnthropicClaudeV1: "anthropic-claude-v1",
-      GoogleGeminiV1: "google-gemini-v1"
-    };
-    OpenResponsesReasoningType$outboundSchema = _enum2(OpenResponsesReasoningType);
-    OpenResponsesReasoningStatusInProgress$outboundSchema = _enum2(OpenResponsesReasoningStatusInProgress);
-    OpenResponsesReasoningStatusIncomplete$outboundSchema = _enum2(OpenResponsesReasoningStatusIncomplete);
-    OpenResponsesReasoningStatusCompleted$outboundSchema = _enum2(OpenResponsesReasoningStatusCompleted);
-    OpenResponsesReasoningStatusUnion$outboundSchema = union([
-      OpenResponsesReasoningStatusCompleted$outboundSchema,
-      OpenResponsesReasoningStatusIncomplete$outboundSchema,
-      OpenResponsesReasoningStatusInProgress$outboundSchema
-    ]);
-    OpenResponsesReasoningFormat$outboundSchema = outboundSchema(OpenResponsesReasoningFormat);
-    OpenResponsesReasoning$outboundSchema = object({
-      type: OpenResponsesReasoningType$outboundSchema,
-      id: string2(),
-      content: array(ReasoningTextContent$outboundSchema).optional(),
-      summary: array(ReasoningSummaryText$outboundSchema),
-      encryptedContent: nullable(string2()).optional(),
-      status: union([
-        OpenResponsesReasoningStatusCompleted$outboundSchema,
-        OpenResponsesReasoningStatusIncomplete$outboundSchema,
-        OpenResponsesReasoningStatusInProgress$outboundSchema
-      ]).optional(),
-      signature: nullable(string2()).optional(),
-      format: nullable(OpenResponsesReasoningFormat$outboundSchema).optional()
-    }).transform((v) => {
-      return remap(v, {
-        encryptedContent: "encrypted_content"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/responsesimagegenerationcall.js
-var ResponsesImageGenerationCallType, ResponsesImageGenerationCallType$inboundSchema, ResponsesImageGenerationCallType$outboundSchema, ResponsesImageGenerationCall$inboundSchema, ResponsesImageGenerationCall$outboundSchema;
-var init_responsesimagegenerationcall = __esm({
-  "node_modules/@openrouter/sdk/esm/models/responsesimagegenerationcall.js"() {
-    init_v4();
-    init_imagegenerationstatus();
-    ResponsesImageGenerationCallType = {
-      ImageGenerationCall: "image_generation_call"
-    };
-    ResponsesImageGenerationCallType$inboundSchema = _enum2(ResponsesImageGenerationCallType);
-    ResponsesImageGenerationCallType$outboundSchema = ResponsesImageGenerationCallType$inboundSchema;
-    ResponsesImageGenerationCall$inboundSchema = object({
-      type: ResponsesImageGenerationCallType$inboundSchema,
-      id: string2(),
-      result: nullable(string2()).default(null),
-      status: ImageGenerationStatus$inboundSchema
-    });
-    ResponsesImageGenerationCall$outboundSchema = object({
-      type: ResponsesImageGenerationCallType$outboundSchema,
-      id: string2(),
-      result: nullable(string2()).default(null),
-      status: ImageGenerationStatus$outboundSchema
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/websearchstatus.js
-var WebSearchStatus, WebSearchStatus$inboundSchema, WebSearchStatus$outboundSchema;
-var init_websearchstatus = __esm({
-  "node_modules/@openrouter/sdk/esm/models/websearchstatus.js"() {
-    init_enums();
-    WebSearchStatus = {
-      Completed: "completed",
-      Searching: "searching",
-      InProgress: "in_progress",
-      Failed: "failed"
-    };
-    WebSearchStatus$inboundSchema = inboundSchema(WebSearchStatus);
-    WebSearchStatus$outboundSchema = outboundSchema(WebSearchStatus);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/responsesoutputitemfilesearchcall.js
-var ResponsesOutputItemFileSearchCallType, ResponsesOutputItemFileSearchCallType$inboundSchema, ResponsesOutputItemFileSearchCallType$outboundSchema, ResponsesOutputItemFileSearchCall$inboundSchema, ResponsesOutputItemFileSearchCall$outboundSchema;
-var init_responsesoutputitemfilesearchcall = __esm({
-  "node_modules/@openrouter/sdk/esm/models/responsesoutputitemfilesearchcall.js"() {
-    init_v4();
-    init_websearchstatus();
-    ResponsesOutputItemFileSearchCallType = {
-      FileSearchCall: "file_search_call"
-    };
-    ResponsesOutputItemFileSearchCallType$inboundSchema = _enum2(ResponsesOutputItemFileSearchCallType);
-    ResponsesOutputItemFileSearchCallType$outboundSchema = ResponsesOutputItemFileSearchCallType$inboundSchema;
-    ResponsesOutputItemFileSearchCall$inboundSchema = object({
-      type: ResponsesOutputItemFileSearchCallType$inboundSchema,
-      id: string2(),
-      queries: array(string2()),
-      status: WebSearchStatus$inboundSchema
-    });
-    ResponsesOutputItemFileSearchCall$outboundSchema = object({
-      type: ResponsesOutputItemFileSearchCallType$outboundSchema,
-      id: string2(),
-      queries: array(string2()),
-      status: WebSearchStatus$outboundSchema
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/responsesoutputitemfunctioncall.js
-var ResponsesOutputItemFunctionCallType, ResponsesOutputItemFunctionCallStatusInProgress, ResponsesOutputItemFunctionCallStatusIncomplete, ResponsesOutputItemFunctionCallStatusCompleted, ResponsesOutputItemFunctionCallType$inboundSchema, ResponsesOutputItemFunctionCallType$outboundSchema, ResponsesOutputItemFunctionCallStatusInProgress$inboundSchema, ResponsesOutputItemFunctionCallStatusInProgress$outboundSchema, ResponsesOutputItemFunctionCallStatusIncomplete$inboundSchema, ResponsesOutputItemFunctionCallStatusIncomplete$outboundSchema, ResponsesOutputItemFunctionCallStatusCompleted$inboundSchema, ResponsesOutputItemFunctionCallStatusCompleted$outboundSchema, ResponsesOutputItemFunctionCallStatusUnion$inboundSchema, ResponsesOutputItemFunctionCallStatusUnion$outboundSchema, ResponsesOutputItemFunctionCall$inboundSchema, ResponsesOutputItemFunctionCall$outboundSchema;
-var init_responsesoutputitemfunctioncall = __esm({
-  "node_modules/@openrouter/sdk/esm/models/responsesoutputitemfunctioncall.js"() {
-    init_v4();
-    init_primitives();
-    ResponsesOutputItemFunctionCallType = {
-      FunctionCall: "function_call"
-    };
-    ResponsesOutputItemFunctionCallStatusInProgress = {
-      InProgress: "in_progress"
-    };
-    ResponsesOutputItemFunctionCallStatusIncomplete = {
-      Incomplete: "incomplete"
-    };
-    ResponsesOutputItemFunctionCallStatusCompleted = {
-      Completed: "completed"
-    };
-    ResponsesOutputItemFunctionCallType$inboundSchema = _enum2(ResponsesOutputItemFunctionCallType);
-    ResponsesOutputItemFunctionCallType$outboundSchema = ResponsesOutputItemFunctionCallType$inboundSchema;
-    ResponsesOutputItemFunctionCallStatusInProgress$inboundSchema = _enum2(ResponsesOutputItemFunctionCallStatusInProgress);
-    ResponsesOutputItemFunctionCallStatusInProgress$outboundSchema = ResponsesOutputItemFunctionCallStatusInProgress$inboundSchema;
-    ResponsesOutputItemFunctionCallStatusIncomplete$inboundSchema = _enum2(ResponsesOutputItemFunctionCallStatusIncomplete);
-    ResponsesOutputItemFunctionCallStatusIncomplete$outboundSchema = ResponsesOutputItemFunctionCallStatusIncomplete$inboundSchema;
-    ResponsesOutputItemFunctionCallStatusCompleted$inboundSchema = _enum2(ResponsesOutputItemFunctionCallStatusCompleted);
-    ResponsesOutputItemFunctionCallStatusCompleted$outboundSchema = ResponsesOutputItemFunctionCallStatusCompleted$inboundSchema;
-    ResponsesOutputItemFunctionCallStatusUnion$inboundSchema = union([
-      ResponsesOutputItemFunctionCallStatusCompleted$inboundSchema,
-      ResponsesOutputItemFunctionCallStatusIncomplete$inboundSchema,
-      ResponsesOutputItemFunctionCallStatusInProgress$inboundSchema
-    ]);
-    ResponsesOutputItemFunctionCallStatusUnion$outboundSchema = union([
-      ResponsesOutputItemFunctionCallStatusCompleted$outboundSchema,
-      ResponsesOutputItemFunctionCallStatusIncomplete$outboundSchema,
-      ResponsesOutputItemFunctionCallStatusInProgress$outboundSchema
-    ]);
-    ResponsesOutputItemFunctionCall$inboundSchema = object({
-      type: ResponsesOutputItemFunctionCallType$inboundSchema,
-      id: string2().optional(),
-      name: string2(),
-      arguments: string2(),
-      call_id: string2(),
-      status: union([
-        ResponsesOutputItemFunctionCallStatusCompleted$inboundSchema,
-        ResponsesOutputItemFunctionCallStatusIncomplete$inboundSchema,
-        ResponsesOutputItemFunctionCallStatusInProgress$inboundSchema
-      ]).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "call_id": "callId"
-      });
-    });
-    ResponsesOutputItemFunctionCall$outboundSchema = object({
-      type: ResponsesOutputItemFunctionCallType$outboundSchema,
-      id: string2().optional(),
-      name: string2(),
-      arguments: string2(),
-      callId: string2(),
-      status: union([
-        ResponsesOutputItemFunctionCallStatusCompleted$outboundSchema,
-        ResponsesOutputItemFunctionCallStatusIncomplete$outboundSchema,
-        ResponsesOutputItemFunctionCallStatusInProgress$outboundSchema
-      ]).optional()
-    }).transform((v) => {
-      return remap(v, {
-        callId: "call_id"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/responsesoutputitemreasoning.js
-var ResponsesOutputItemReasoningType, ResponsesOutputItemReasoningStatusInProgress, ResponsesOutputItemReasoningStatusIncomplete, ResponsesOutputItemReasoningStatusCompleted, ResponsesOutputItemReasoningFormat, ResponsesOutputItemReasoningType$inboundSchema, ResponsesOutputItemReasoningType$outboundSchema, ResponsesOutputItemReasoningStatusInProgress$inboundSchema, ResponsesOutputItemReasoningStatusInProgress$outboundSchema, ResponsesOutputItemReasoningStatusIncomplete$inboundSchema, ResponsesOutputItemReasoningStatusIncomplete$outboundSchema, ResponsesOutputItemReasoningStatusCompleted$inboundSchema, ResponsesOutputItemReasoningStatusCompleted$outboundSchema, ResponsesOutputItemReasoningStatusUnion$inboundSchema, ResponsesOutputItemReasoningStatusUnion$outboundSchema, ResponsesOutputItemReasoningFormat$inboundSchema, ResponsesOutputItemReasoningFormat$outboundSchema, ResponsesOutputItemReasoning$inboundSchema, ResponsesOutputItemReasoning$outboundSchema;
-var init_responsesoutputitemreasoning = __esm({
-  "node_modules/@openrouter/sdk/esm/models/responsesoutputitemreasoning.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    init_reasoningsummarytext();
-    init_reasoningtextcontent();
-    ResponsesOutputItemReasoningType = {
-      Reasoning: "reasoning"
-    };
-    ResponsesOutputItemReasoningStatusInProgress = {
-      InProgress: "in_progress"
-    };
-    ResponsesOutputItemReasoningStatusIncomplete = {
-      Incomplete: "incomplete"
-    };
-    ResponsesOutputItemReasoningStatusCompleted = {
-      Completed: "completed"
-    };
-    ResponsesOutputItemReasoningFormat = {
-      Unknown: "unknown",
-      OpenaiResponsesV1: "openai-responses-v1",
-      AzureOpenaiResponsesV1: "azure-openai-responses-v1",
-      XaiResponsesV1: "xai-responses-v1",
-      AnthropicClaudeV1: "anthropic-claude-v1",
-      GoogleGeminiV1: "google-gemini-v1"
-    };
-    ResponsesOutputItemReasoningType$inboundSchema = _enum2(ResponsesOutputItemReasoningType);
-    ResponsesOutputItemReasoningType$outboundSchema = ResponsesOutputItemReasoningType$inboundSchema;
-    ResponsesOutputItemReasoningStatusInProgress$inboundSchema = _enum2(ResponsesOutputItemReasoningStatusInProgress);
-    ResponsesOutputItemReasoningStatusInProgress$outboundSchema = ResponsesOutputItemReasoningStatusInProgress$inboundSchema;
-    ResponsesOutputItemReasoningStatusIncomplete$inboundSchema = _enum2(ResponsesOutputItemReasoningStatusIncomplete);
-    ResponsesOutputItemReasoningStatusIncomplete$outboundSchema = ResponsesOutputItemReasoningStatusIncomplete$inboundSchema;
-    ResponsesOutputItemReasoningStatusCompleted$inboundSchema = _enum2(ResponsesOutputItemReasoningStatusCompleted);
-    ResponsesOutputItemReasoningStatusCompleted$outboundSchema = ResponsesOutputItemReasoningStatusCompleted$inboundSchema;
-    ResponsesOutputItemReasoningStatusUnion$inboundSchema = union([
-      ResponsesOutputItemReasoningStatusCompleted$inboundSchema,
-      ResponsesOutputItemReasoningStatusIncomplete$inboundSchema,
-      ResponsesOutputItemReasoningStatusInProgress$inboundSchema
-    ]);
-    ResponsesOutputItemReasoningStatusUnion$outboundSchema = union([
-      ResponsesOutputItemReasoningStatusCompleted$outboundSchema,
-      ResponsesOutputItemReasoningStatusIncomplete$outboundSchema,
-      ResponsesOutputItemReasoningStatusInProgress$outboundSchema
-    ]);
-    ResponsesOutputItemReasoningFormat$inboundSchema = inboundSchema(ResponsesOutputItemReasoningFormat);
-    ResponsesOutputItemReasoningFormat$outboundSchema = outboundSchema(ResponsesOutputItemReasoningFormat);
-    ResponsesOutputItemReasoning$inboundSchema = object({
-      type: ResponsesOutputItemReasoningType$inboundSchema,
-      id: string2(),
-      content: array(ReasoningTextContent$inboundSchema).optional(),
-      summary: array(ReasoningSummaryText$inboundSchema),
-      encrypted_content: nullable(string2()).optional(),
-      status: union([
-        ResponsesOutputItemReasoningStatusCompleted$inboundSchema,
-        ResponsesOutputItemReasoningStatusIncomplete$inboundSchema,
-        ResponsesOutputItemReasoningStatusInProgress$inboundSchema
-      ]).optional(),
-      signature: nullable(string2()).optional(),
-      format: nullable(ResponsesOutputItemReasoningFormat$inboundSchema).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "encrypted_content": "encryptedContent"
-      });
-    });
-    ResponsesOutputItemReasoning$outboundSchema = object({
-      type: ResponsesOutputItemReasoningType$outboundSchema,
-      id: string2(),
-      content: array(ReasoningTextContent$outboundSchema).optional(),
-      summary: array(ReasoningSummaryText$outboundSchema),
-      encryptedContent: nullable(string2()).optional(),
-      status: union([
-        ResponsesOutputItemReasoningStatusCompleted$outboundSchema,
-        ResponsesOutputItemReasoningStatusIncomplete$outboundSchema,
-        ResponsesOutputItemReasoningStatusInProgress$outboundSchema
-      ]).optional(),
-      signature: nullable(string2()).optional(),
-      format: nullable(ResponsesOutputItemReasoningFormat$outboundSchema).optional()
-    }).transform((v) => {
-      return remap(v, {
-        encryptedContent: "encrypted_content"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/responsesoutputmessage.js
-var ResponsesOutputMessageRole, ResponsesOutputMessageType, ResponsesOutputMessageStatusInProgress, ResponsesOutputMessageStatusIncomplete, ResponsesOutputMessageStatusCompleted, ResponsesOutputMessageRole$inboundSchema, ResponsesOutputMessageRole$outboundSchema, ResponsesOutputMessageType$inboundSchema, ResponsesOutputMessageType$outboundSchema, ResponsesOutputMessageStatusInProgress$inboundSchema, ResponsesOutputMessageStatusInProgress$outboundSchema, ResponsesOutputMessageStatusIncomplete$inboundSchema, ResponsesOutputMessageStatusIncomplete$outboundSchema, ResponsesOutputMessageStatusCompleted$inboundSchema, ResponsesOutputMessageStatusCompleted$outboundSchema, ResponsesOutputMessageStatusUnion$inboundSchema, ResponsesOutputMessageStatusUnion$outboundSchema, ResponsesOutputMessageContent$inboundSchema, ResponsesOutputMessageContent$outboundSchema, ResponsesOutputMessage$inboundSchema, ResponsesOutputMessage$outboundSchema;
-var init_responsesoutputmessage = __esm({
-  "node_modules/@openrouter/sdk/esm/models/responsesoutputmessage.js"() {
-    init_v4();
-    init_openairesponsesrefusalcontent();
-    init_responseoutputtext();
-    ResponsesOutputMessageRole = {
-      Assistant: "assistant"
-    };
-    ResponsesOutputMessageType = {
-      Message: "message"
-    };
-    ResponsesOutputMessageStatusInProgress = {
-      InProgress: "in_progress"
-    };
-    ResponsesOutputMessageStatusIncomplete = {
-      Incomplete: "incomplete"
-    };
-    ResponsesOutputMessageStatusCompleted = {
-      Completed: "completed"
-    };
-    ResponsesOutputMessageRole$inboundSchema = _enum2(ResponsesOutputMessageRole);
-    ResponsesOutputMessageRole$outboundSchema = ResponsesOutputMessageRole$inboundSchema;
-    ResponsesOutputMessageType$inboundSchema = _enum2(ResponsesOutputMessageType);
-    ResponsesOutputMessageType$outboundSchema = ResponsesOutputMessageType$inboundSchema;
-    ResponsesOutputMessageStatusInProgress$inboundSchema = _enum2(ResponsesOutputMessageStatusInProgress);
-    ResponsesOutputMessageStatusInProgress$outboundSchema = ResponsesOutputMessageStatusInProgress$inboundSchema;
-    ResponsesOutputMessageStatusIncomplete$inboundSchema = _enum2(ResponsesOutputMessageStatusIncomplete);
-    ResponsesOutputMessageStatusIncomplete$outboundSchema = ResponsesOutputMessageStatusIncomplete$inboundSchema;
-    ResponsesOutputMessageStatusCompleted$inboundSchema = _enum2(ResponsesOutputMessageStatusCompleted);
-    ResponsesOutputMessageStatusCompleted$outboundSchema = ResponsesOutputMessageStatusCompleted$inboundSchema;
-    ResponsesOutputMessageStatusUnion$inboundSchema = union([
-      ResponsesOutputMessageStatusCompleted$inboundSchema,
-      ResponsesOutputMessageStatusIncomplete$inboundSchema,
-      ResponsesOutputMessageStatusInProgress$inboundSchema
-    ]);
-    ResponsesOutputMessageStatusUnion$outboundSchema = union([
-      ResponsesOutputMessageStatusCompleted$outboundSchema,
-      ResponsesOutputMessageStatusIncomplete$outboundSchema,
-      ResponsesOutputMessageStatusInProgress$outboundSchema
-    ]);
-    ResponsesOutputMessageContent$inboundSchema = union([
-      ResponseOutputText$inboundSchema,
-      OpenAIResponsesRefusalContent$inboundSchema
-    ]);
-    ResponsesOutputMessageContent$outboundSchema = union([
-      ResponseOutputText$outboundSchema,
-      OpenAIResponsesRefusalContent$outboundSchema
-    ]);
-    ResponsesOutputMessage$inboundSchema = object({
-      id: string2(),
-      role: ResponsesOutputMessageRole$inboundSchema,
-      type: ResponsesOutputMessageType$inboundSchema,
-      status: union([
-        ResponsesOutputMessageStatusCompleted$inboundSchema,
-        ResponsesOutputMessageStatusIncomplete$inboundSchema,
-        ResponsesOutputMessageStatusInProgress$inboundSchema
-      ]).optional(),
-      content: array(union([
-        ResponseOutputText$inboundSchema,
-        OpenAIResponsesRefusalContent$inboundSchema
-      ]))
-    });
-    ResponsesOutputMessage$outboundSchema = object({
-      id: string2(),
-      role: ResponsesOutputMessageRole$outboundSchema,
-      type: ResponsesOutputMessageType$outboundSchema,
-      status: union([
-        ResponsesOutputMessageStatusCompleted$outboundSchema,
-        ResponsesOutputMessageStatusIncomplete$outboundSchema,
-        ResponsesOutputMessageStatusInProgress$outboundSchema
-      ]).optional(),
-      content: array(union([
-        ResponseOutputText$outboundSchema,
-        OpenAIResponsesRefusalContent$outboundSchema
-      ]))
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/responseswebsearchcalloutput.js
-var ResponsesWebSearchCallOutputType, ResponsesWebSearchCallOutputType$inboundSchema, ResponsesWebSearchCallOutputType$outboundSchema, ResponsesWebSearchCallOutput$inboundSchema, ResponsesWebSearchCallOutput$outboundSchema;
-var init_responseswebsearchcalloutput = __esm({
-  "node_modules/@openrouter/sdk/esm/models/responseswebsearchcalloutput.js"() {
-    init_v4();
-    init_websearchstatus();
-    ResponsesWebSearchCallOutputType = {
-      WebSearchCall: "web_search_call"
-    };
-    ResponsesWebSearchCallOutputType$inboundSchema = _enum2(ResponsesWebSearchCallOutputType);
-    ResponsesWebSearchCallOutputType$outboundSchema = ResponsesWebSearchCallOutputType$inboundSchema;
-    ResponsesWebSearchCallOutput$inboundSchema = object({
-      type: ResponsesWebSearchCallOutputType$inboundSchema,
-      id: string2(),
-      status: WebSearchStatus$inboundSchema
-    });
-    ResponsesWebSearchCallOutput$outboundSchema = object({
-      type: ResponsesWebSearchCallOutputType$outboundSchema,
-      id: string2(),
-      status: WebSearchStatus$outboundSchema
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponsesinput.js
-var OpenResponsesInput1$outboundSchema, OpenResponsesInput$outboundSchema;
-var init_openresponsesinput = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponsesinput.js"() {
-    init_v4();
-    init_openresponseseasyinputmessage();
-    init_openresponsesfunctioncalloutput();
-    init_openresponsesfunctiontoolcall();
-    init_openresponsesinputmessageitem();
-    init_openresponsesreasoning();
-    init_responsesimagegenerationcall();
-    init_responsesoutputitemfilesearchcall();
-    init_responsesoutputitemfunctioncall();
-    init_responsesoutputitemreasoning();
-    init_responsesoutputmessage();
-    init_responseswebsearchcalloutput();
-    OpenResponsesInput1$outboundSchema = union([
-      OpenResponsesFunctionToolCall$outboundSchema,
-      ResponsesOutputMessage$outboundSchema,
-      ResponsesOutputItemFunctionCall$outboundSchema,
-      ResponsesOutputItemFileSearchCall$outboundSchema,
-      OpenResponsesReasoning$outboundSchema,
-      OpenResponsesFunctionCallOutput$outboundSchema,
-      ResponsesOutputItemReasoning$outboundSchema,
-      ResponsesWebSearchCallOutput$outboundSchema,
-      ResponsesImageGenerationCall$outboundSchema,
-      OpenResponsesEasyInputMessage$outboundSchema,
-      OpenResponsesInputMessageItem$outboundSchema
-    ]);
-    OpenResponsesInput$outboundSchema = union([
-      string2(),
-      array(union([
-        OpenResponsesFunctionToolCall$outboundSchema,
-        ResponsesOutputMessage$outboundSchema,
-        ResponsesOutputItemFunctionCall$outboundSchema,
-        ResponsesOutputItemFileSearchCall$outboundSchema,
-        OpenResponsesReasoning$outboundSchema,
-        OpenResponsesFunctionCallOutput$outboundSchema,
-        ResponsesOutputItemReasoning$outboundSchema,
-        ResponsesWebSearchCallOutput$outboundSchema,
-        ResponsesImageGenerationCall$outboundSchema,
-        OpenResponsesEasyInputMessage$outboundSchema,
-        OpenResponsesInputMessageItem$outboundSchema
-      ]))
-    ]);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponsestoplogprobs.js
-var OpenResponsesTopLogprobs$inboundSchema;
-var init_openresponsestoplogprobs = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponsestoplogprobs.js"() {
-    init_v4();
-    OpenResponsesTopLogprobs$inboundSchema = object({
-      token: string2().optional(),
-      logprob: number2().optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponseslogprobs.js
-var OpenResponsesLogProbs$inboundSchema;
-var init_openresponseslogprobs = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponseslogprobs.js"() {
-    init_v4();
-    init_primitives();
-    init_openresponsestoplogprobs();
-    OpenResponsesLogProbs$inboundSchema = object({
-      logprob: number2(),
-      token: string2(),
-      top_logprobs: array(OpenResponsesTopLogprobs$inboundSchema).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "top_logprobs": "topLogprobs"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponsesusage.js
-var InputTokensDetails$inboundSchema, OutputTokensDetails$inboundSchema, CostDetails$inboundSchema, OpenResponsesUsage$inboundSchema;
-var init_openresponsesusage = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponsesusage.js"() {
-    init_v4();
-    init_primitives();
-    InputTokensDetails$inboundSchema = object({
-      cached_tokens: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "cached_tokens": "cachedTokens"
-      });
-    });
-    OutputTokensDetails$inboundSchema = object({
-      reasoning_tokens: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "reasoning_tokens": "reasoningTokens"
-      });
-    });
-    CostDetails$inboundSchema = object({
-      upstream_inference_cost: nullable(number2()).optional(),
-      upstream_inference_input_cost: number2(),
-      upstream_inference_output_cost: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "upstream_inference_cost": "upstreamInferenceCost",
-        "upstream_inference_input_cost": "upstreamInferenceInputCost",
-        "upstream_inference_output_cost": "upstreamInferenceOutputCost"
-      });
-    });
-    OpenResponsesUsage$inboundSchema = object({
-      input_tokens: number2(),
-      input_tokens_details: lazy(() => InputTokensDetails$inboundSchema),
-      output_tokens: number2(),
-      output_tokens_details: lazy(() => OutputTokensDetails$inboundSchema),
-      total_tokens: number2(),
-      cost: nullable(number2()).optional(),
-      is_byok: boolean2().optional(),
-      cost_details: lazy(() => CostDetails$inboundSchema).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "input_tokens": "inputTokens",
-        "input_tokens_details": "inputTokensDetails",
-        "output_tokens": "outputTokens",
-        "output_tokens_details": "outputTokensDetails",
-        "total_tokens": "totalTokens",
-        "is_byok": "isByok",
-        "cost_details": "costDetails"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/responsessearchcontextsize.js
-var ResponsesSearchContextSize, ResponsesSearchContextSize$inboundSchema, ResponsesSearchContextSize$outboundSchema;
-var init_responsessearchcontextsize = __esm({
-  "node_modules/@openrouter/sdk/esm/models/responsessearchcontextsize.js"() {
-    init_enums();
-    ResponsesSearchContextSize = {
-      Low: "low",
-      Medium: "medium",
-      High: "high"
-    };
-    ResponsesSearchContextSize$inboundSchema = inboundSchema(ResponsesSearchContextSize);
-    ResponsesSearchContextSize$outboundSchema = outboundSchema(ResponsesSearchContextSize);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/responseswebsearchuserlocation.js
-var ResponsesWebSearchUserLocationType, ResponsesWebSearchUserLocationType$inboundSchema, ResponsesWebSearchUserLocationType$outboundSchema, ResponsesWebSearchUserLocation$inboundSchema, ResponsesWebSearchUserLocation$outboundSchema;
-var init_responseswebsearchuserlocation = __esm({
-  "node_modules/@openrouter/sdk/esm/models/responseswebsearchuserlocation.js"() {
-    init_v4();
-    ResponsesWebSearchUserLocationType = {
-      Approximate: "approximate"
-    };
-    ResponsesWebSearchUserLocationType$inboundSchema = _enum2(ResponsesWebSearchUserLocationType);
-    ResponsesWebSearchUserLocationType$outboundSchema = ResponsesWebSearchUserLocationType$inboundSchema;
-    ResponsesWebSearchUserLocation$inboundSchema = object({
-      type: ResponsesWebSearchUserLocationType$inboundSchema.optional(),
-      city: nullable(string2()).optional(),
-      country: nullable(string2()).optional(),
-      region: nullable(string2()).optional(),
-      timezone: nullable(string2()).optional()
-    });
-    ResponsesWebSearchUserLocation$outboundSchema = object({
-      type: ResponsesWebSearchUserLocationType$outboundSchema.optional(),
-      city: nullable(string2()).optional(),
-      country: nullable(string2()).optional(),
-      region: nullable(string2()).optional(),
-      timezone: nullable(string2()).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponseswebsearch20250826tool.js
-var OpenResponsesWebSearch20250826ToolFilters$inboundSchema, OpenResponsesWebSearch20250826ToolFilters$outboundSchema, OpenResponsesWebSearch20250826Tool$inboundSchema, OpenResponsesWebSearch20250826Tool$outboundSchema;
-var init_openresponseswebsearch20250826tool = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponseswebsearch20250826tool.js"() {
-    init_v4();
-    init_primitives();
-    init_responsessearchcontextsize();
-    init_responseswebsearchuserlocation();
-    OpenResponsesWebSearch20250826ToolFilters$inboundSchema = object({
-      allowed_domains: nullable(array(string2())).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "allowed_domains": "allowedDomains"
-      });
-    });
-    OpenResponsesWebSearch20250826ToolFilters$outboundSchema = object({
-      allowedDomains: nullable(array(string2())).optional()
-    }).transform((v) => {
-      return remap(v, {
-        allowedDomains: "allowed_domains"
-      });
-    });
-    OpenResponsesWebSearch20250826Tool$inboundSchema = object({
-      type: literal("web_search_2025_08_26"),
-      filters: nullable(lazy(() => OpenResponsesWebSearch20250826ToolFilters$inboundSchema)).optional(),
-      search_context_size: ResponsesSearchContextSize$inboundSchema.optional(),
-      user_location: nullable(ResponsesWebSearchUserLocation$inboundSchema).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "search_context_size": "searchContextSize",
-        "user_location": "userLocation"
-      });
-    });
-    OpenResponsesWebSearch20250826Tool$outboundSchema = object({
-      type: literal("web_search_2025_08_26"),
-      filters: nullable(lazy(() => OpenResponsesWebSearch20250826ToolFilters$outboundSchema)).optional(),
-      searchContextSize: ResponsesSearchContextSize$outboundSchema.optional(),
-      userLocation: nullable(ResponsesWebSearchUserLocation$outboundSchema).optional()
-    }).transform((v) => {
-      return remap(v, {
-        searchContextSize: "search_context_size",
-        userLocation: "user_location"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/websearchpreviewtooluserlocation.js
-var WebSearchPreviewToolUserLocationType, WebSearchPreviewToolUserLocationType$inboundSchema, WebSearchPreviewToolUserLocationType$outboundSchema, WebSearchPreviewToolUserLocation$inboundSchema, WebSearchPreviewToolUserLocation$outboundSchema;
-var init_websearchpreviewtooluserlocation = __esm({
-  "node_modules/@openrouter/sdk/esm/models/websearchpreviewtooluserlocation.js"() {
-    init_v4();
-    WebSearchPreviewToolUserLocationType = {
-      Approximate: "approximate"
-    };
-    WebSearchPreviewToolUserLocationType$inboundSchema = _enum2(WebSearchPreviewToolUserLocationType);
-    WebSearchPreviewToolUserLocationType$outboundSchema = WebSearchPreviewToolUserLocationType$inboundSchema;
-    WebSearchPreviewToolUserLocation$inboundSchema = object({
-      type: WebSearchPreviewToolUserLocationType$inboundSchema,
-      city: nullable(string2()).optional(),
-      country: nullable(string2()).optional(),
-      region: nullable(string2()).optional(),
-      timezone: nullable(string2()).optional()
-    });
-    WebSearchPreviewToolUserLocation$outboundSchema = object({
-      type: WebSearchPreviewToolUserLocationType$outboundSchema,
-      city: nullable(string2()).optional(),
-      country: nullable(string2()).optional(),
-      region: nullable(string2()).optional(),
-      timezone: nullable(string2()).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponseswebsearchpreview20250311tool.js
-var OpenResponsesWebSearchPreview20250311Tool$inboundSchema, OpenResponsesWebSearchPreview20250311Tool$outboundSchema;
-var init_openresponseswebsearchpreview20250311tool = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponseswebsearchpreview20250311tool.js"() {
-    init_v4();
-    init_primitives();
-    init_responsessearchcontextsize();
-    init_websearchpreviewtooluserlocation();
-    OpenResponsesWebSearchPreview20250311Tool$inboundSchema = object({
-      type: literal("web_search_preview_2025_03_11"),
-      search_context_size: ResponsesSearchContextSize$inboundSchema.optional(),
-      user_location: nullable(WebSearchPreviewToolUserLocation$inboundSchema).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "search_context_size": "searchContextSize",
-        "user_location": "userLocation"
-      });
-    });
-    OpenResponsesWebSearchPreview20250311Tool$outboundSchema = object({
-      type: literal("web_search_preview_2025_03_11"),
-      searchContextSize: ResponsesSearchContextSize$outboundSchema.optional(),
-      userLocation: nullable(WebSearchPreviewToolUserLocation$outboundSchema).optional()
-    }).transform((v) => {
-      return remap(v, {
-        searchContextSize: "search_context_size",
-        userLocation: "user_location"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponseswebsearchpreviewtool.js
-var OpenResponsesWebSearchPreviewTool$inboundSchema, OpenResponsesWebSearchPreviewTool$outboundSchema;
-var init_openresponseswebsearchpreviewtool = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponseswebsearchpreviewtool.js"() {
-    init_v4();
-    init_primitives();
-    init_responsessearchcontextsize();
-    init_websearchpreviewtooluserlocation();
-    OpenResponsesWebSearchPreviewTool$inboundSchema = object({
-      type: literal("web_search_preview"),
-      search_context_size: ResponsesSearchContextSize$inboundSchema.optional(),
-      user_location: nullable(WebSearchPreviewToolUserLocation$inboundSchema).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "search_context_size": "searchContextSize",
-        "user_location": "userLocation"
-      });
-    });
-    OpenResponsesWebSearchPreviewTool$outboundSchema = object({
-      type: literal("web_search_preview"),
-      searchContextSize: ResponsesSearchContextSize$outboundSchema.optional(),
-      userLocation: nullable(WebSearchPreviewToolUserLocation$outboundSchema).optional()
-    }).transform((v) => {
-      return remap(v, {
-        searchContextSize: "search_context_size",
-        userLocation: "user_location"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponseswebsearchtool.js
-var OpenResponsesWebSearchToolFilters$inboundSchema, OpenResponsesWebSearchToolFilters$outboundSchema, OpenResponsesWebSearchTool$inboundSchema, OpenResponsesWebSearchTool$outboundSchema;
-var init_openresponseswebsearchtool = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponseswebsearchtool.js"() {
-    init_v4();
-    init_primitives();
-    init_responsessearchcontextsize();
-    init_responseswebsearchuserlocation();
-    OpenResponsesWebSearchToolFilters$inboundSchema = object({
-      allowed_domains: nullable(array(string2())).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "allowed_domains": "allowedDomains"
-      });
-    });
-    OpenResponsesWebSearchToolFilters$outboundSchema = object({
-      allowedDomains: nullable(array(string2())).optional()
-    }).transform((v) => {
-      return remap(v, {
-        allowedDomains: "allowed_domains"
-      });
-    });
-    OpenResponsesWebSearchTool$inboundSchema = object({
-      type: literal("web_search"),
-      filters: nullable(lazy(() => OpenResponsesWebSearchToolFilters$inboundSchema)).optional(),
-      search_context_size: ResponsesSearchContextSize$inboundSchema.optional(),
-      user_location: nullable(ResponsesWebSearchUserLocation$inboundSchema).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "search_context_size": "searchContextSize",
-        "user_location": "userLocation"
-      });
-    });
-    OpenResponsesWebSearchTool$outboundSchema = object({
-      type: literal("web_search"),
-      filters: nullable(lazy(() => OpenResponsesWebSearchToolFilters$outboundSchema)).optional(),
-      searchContextSize: ResponsesSearchContextSize$outboundSchema.optional(),
-      userLocation: nullable(ResponsesWebSearchUserLocation$outboundSchema).optional()
-    }).transform((v) => {
-      return remap(v, {
-        searchContextSize: "search_context_size",
-        userLocation: "user_location"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/responseserrorfield.js
-var CodeEnum, CodeEnum$inboundSchema, ResponsesErrorField$inboundSchema;
-var init_responseserrorfield = __esm({
-  "node_modules/@openrouter/sdk/esm/models/responseserrorfield.js"() {
-    init_v4();
-    init_enums();
-    CodeEnum = {
-      ServerError: "server_error",
-      RateLimitExceeded: "rate_limit_exceeded",
-      InvalidPrompt: "invalid_prompt",
-      VectorStoreTimeout: "vector_store_timeout",
-      InvalidImage: "invalid_image",
-      InvalidImageFormat: "invalid_image_format",
-      InvalidBase64Image: "invalid_base64_image",
-      InvalidImageUrl: "invalid_image_url",
-      ImageTooLarge: "image_too_large",
-      ImageTooSmall: "image_too_small",
-      ImageParseError: "image_parse_error",
-      ImageContentPolicyViolation: "image_content_policy_violation",
-      InvalidImageMode: "invalid_image_mode",
-      ImageFileTooLarge: "image_file_too_large",
-      UnsupportedImageMediaType: "unsupported_image_media_type",
-      EmptyImageFile: "empty_image_file",
-      FailedToDownloadImage: "failed_to_download_image",
-      ImageFileNotFound: "image_file_not_found"
-    };
-    CodeEnum$inboundSchema = inboundSchema(CodeEnum);
-    ResponsesErrorField$inboundSchema = object({
-      code: CodeEnum$inboundSchema,
-      message: string2()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/responsesoutputitem.js
-var ResponsesOutputItem$inboundSchema;
-var init_responsesoutputitem = __esm({
-  "node_modules/@openrouter/sdk/esm/models/responsesoutputitem.js"() {
-    init_v4();
-    init_responsesimagegenerationcall();
-    init_responsesoutputitemfilesearchcall();
-    init_responsesoutputitemfunctioncall();
-    init_responsesoutputitemreasoning();
-    init_responsesoutputmessage();
-    init_responseswebsearchcalloutput();
-    ResponsesOutputItem$inboundSchema = union([
-      ResponsesOutputMessage$inboundSchema.and(object({ type: literal("message") })),
-      ResponsesOutputItemReasoning$inboundSchema.and(object({ type: literal("reasoning") })),
-      ResponsesOutputItemFunctionCall$inboundSchema.and(object({ type: literal("function_call") })),
-      ResponsesWebSearchCallOutput$inboundSchema.and(object({ type: literal("web_search_call") })),
-      ResponsesOutputItemFileSearchCall$inboundSchema.and(object({ type: literal("file_search_call") })),
-      ResponsesImageGenerationCall$inboundSchema.and(object({ type: literal("image_generation_call") }))
-    ]);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/responsesformatjsonobject.js
-var ResponsesFormatJSONObject$inboundSchema, ResponsesFormatJSONObject$outboundSchema;
-var init_responsesformatjsonobject = __esm({
-  "node_modules/@openrouter/sdk/esm/models/responsesformatjsonobject.js"() {
-    init_v4();
-    ResponsesFormatJSONObject$inboundSchema = object({
-      type: literal("json_object")
-    });
-    ResponsesFormatJSONObject$outboundSchema = object({
-      type: literal("json_object")
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/responsesformattext.js
-var ResponsesFormatText$inboundSchema, ResponsesFormatText$outboundSchema;
-var init_responsesformattext = __esm({
-  "node_modules/@openrouter/sdk/esm/models/responsesformattext.js"() {
-    init_v4();
-    ResponsesFormatText$inboundSchema = object({
-      type: literal("text")
-    });
-    ResponsesFormatText$outboundSchema = object({
-      type: literal("text")
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/responsesformattextjsonschemaconfig.js
-var ResponsesFormatTextJSONSchemaConfig$inboundSchema, ResponsesFormatTextJSONSchemaConfig$outboundSchema;
-var init_responsesformattextjsonschemaconfig = __esm({
-  "node_modules/@openrouter/sdk/esm/models/responsesformattextjsonschemaconfig.js"() {
-    init_v4();
-    ResponsesFormatTextJSONSchemaConfig$inboundSchema = object({
-      type: literal("json_schema"),
-      name: string2(),
-      description: string2().optional(),
-      strict: nullable(boolean2()).optional(),
-      schema: record(string2(), nullable(any()))
-    });
-    ResponsesFormatTextJSONSchemaConfig$outboundSchema = object({
-      type: literal("json_schema"),
-      name: string2(),
-      description: string2().optional(),
-      strict: nullable(boolean2()).optional(),
-      schema: record(string2(), nullable(any()))
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/responseformattextconfig.js
-var ResponseFormatTextConfig$inboundSchema, ResponseFormatTextConfig$outboundSchema;
-var init_responseformattextconfig = __esm({
-  "node_modules/@openrouter/sdk/esm/models/responseformattextconfig.js"() {
-    init_v4();
-    init_responsesformatjsonobject();
-    init_responsesformattext();
-    init_responsesformattextjsonschemaconfig();
-    ResponseFormatTextConfig$inboundSchema = union([
-      ResponsesFormatText$inboundSchema,
-      ResponsesFormatJSONObject$inboundSchema,
-      ResponsesFormatTextJSONSchemaConfig$inboundSchema
-    ]);
-    ResponseFormatTextConfig$outboundSchema = union([
-      ResponsesFormatText$outboundSchema,
-      ResponsesFormatJSONObject$outboundSchema,
-      ResponsesFormatTextJSONSchemaConfig$outboundSchema
-    ]);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/responsetextconfig.js
-var ResponseTextConfigVerbosity, ResponseTextConfigVerbosity$inboundSchema, ResponseTextConfig$inboundSchema;
-var init_responsetextconfig = __esm({
-  "node_modules/@openrouter/sdk/esm/models/responsetextconfig.js"() {
-    init_v4();
-    init_enums();
-    init_responseformattextconfig();
-    ResponseTextConfigVerbosity = {
-      High: "high",
-      Low: "low",
-      Medium: "medium"
-    };
-    ResponseTextConfigVerbosity$inboundSchema = inboundSchema(ResponseTextConfigVerbosity);
-    ResponseTextConfig$inboundSchema = object({
-      format: ResponseFormatTextConfig$inboundSchema.optional(),
-      verbosity: nullable(ResponseTextConfigVerbosity$inboundSchema).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponsesnonstreamingresponse.js
-var ObjectT, ObjectT$inboundSchema, OpenResponsesNonStreamingResponseToolFunction$inboundSchema, OpenResponsesNonStreamingResponseToolUnion$inboundSchema, OpenResponsesNonStreamingResponse$inboundSchema;
-var init_openresponsesnonstreamingresponse = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponsesnonstreamingresponse.js"() {
-    init_v4();
-    init_primitives();
-    init_openairesponsesincompletedetails();
-    init_openairesponsesinputunion();
-    init_openairesponsesprompt();
-    init_openairesponsesreasoningconfig();
-    init_openairesponsesresponsestatus();
-    init_openairesponsesservicetier();
-    init_openairesponsestoolchoiceunion();
-    init_openairesponsestruncation();
-    init_openresponsesusage();
-    init_openresponseswebsearch20250826tool();
-    init_openresponseswebsearchpreview20250311tool();
-    init_openresponseswebsearchpreviewtool();
-    init_openresponseswebsearchtool();
-    init_responseserrorfield();
-    init_responsesoutputitem();
-    init_responsetextconfig();
-    ObjectT = {
-      Response: "response"
-    };
-    ObjectT$inboundSchema = _enum2(ObjectT);
-    OpenResponsesNonStreamingResponseToolFunction$inboundSchema = object({
-      type: literal("function"),
-      name: string2(),
-      description: nullable(string2()).optional(),
-      strict: nullable(boolean2()).optional(),
-      parameters: nullable(record(string2(), nullable(any())))
-    });
-    OpenResponsesNonStreamingResponseToolUnion$inboundSchema = union([
-      lazy(() => OpenResponsesNonStreamingResponseToolFunction$inboundSchema),
-      OpenResponsesWebSearchPreviewTool$inboundSchema,
-      OpenResponsesWebSearchPreview20250311Tool$inboundSchema,
-      OpenResponsesWebSearchTool$inboundSchema,
-      OpenResponsesWebSearch20250826Tool$inboundSchema
-    ]);
-    OpenResponsesNonStreamingResponse$inboundSchema = object({
-      id: string2(),
-      object: ObjectT$inboundSchema,
-      created_at: number2(),
-      model: string2(),
-      status: OpenAIResponsesResponseStatus$inboundSchema,
-      completed_at: nullable(number2()),
-      output: array(ResponsesOutputItem$inboundSchema),
-      user: nullable(string2()).optional(),
-      output_text: string2().optional(),
-      prompt_cache_key: nullable(string2()).optional(),
-      safety_identifier: nullable(string2()).optional(),
-      error: nullable(ResponsesErrorField$inboundSchema),
-      incomplete_details: nullable(OpenAIResponsesIncompleteDetails$inboundSchema),
-      usage: nullable(OpenResponsesUsage$inboundSchema).optional(),
-      max_tool_calls: nullable(number2()).optional(),
-      top_logprobs: number2().optional(),
-      max_output_tokens: nullable(number2()).optional(),
-      temperature: nullable(number2()),
-      top_p: nullable(number2()),
-      presence_penalty: nullable(number2()),
-      frequency_penalty: nullable(number2()),
-      instructions: nullable(OpenAIResponsesInputUnion$inboundSchema).optional(),
-      metadata: nullable(record(string2(), string2())),
-      tools: array(union([
-        lazy(() => OpenResponsesNonStreamingResponseToolFunction$inboundSchema),
-        OpenResponsesWebSearchPreviewTool$inboundSchema,
-        OpenResponsesWebSearchPreview20250311Tool$inboundSchema,
-        OpenResponsesWebSearchTool$inboundSchema,
-        OpenResponsesWebSearch20250826Tool$inboundSchema
-      ])),
-      tool_choice: OpenAIResponsesToolChoiceUnion$inboundSchema,
-      parallel_tool_calls: boolean2(),
-      prompt: nullable(OpenAIResponsesPrompt$inboundSchema).optional(),
-      background: nullable(boolean2()).optional(),
-      previous_response_id: nullable(string2()).optional(),
-      reasoning: nullable(OpenAIResponsesReasoningConfig$inboundSchema).optional(),
-      service_tier: nullable(OpenAIResponsesServiceTier$inboundSchema).optional(),
-      store: boolean2().optional(),
-      truncation: nullable(OpenAIResponsesTruncation$inboundSchema).optional(),
-      text: ResponseTextConfig$inboundSchema.optional()
-    }).transform((v) => {
-      return remap(v, {
-        "created_at": "createdAt",
-        "completed_at": "completedAt",
-        "output_text": "outputText",
-        "prompt_cache_key": "promptCacheKey",
-        "safety_identifier": "safetyIdentifier",
-        "incomplete_details": "incompleteDetails",
-        "max_tool_calls": "maxToolCalls",
-        "top_logprobs": "topLogprobs",
-        "max_output_tokens": "maxOutputTokens",
-        "top_p": "topP",
-        "presence_penalty": "presencePenalty",
-        "frequency_penalty": "frequencyPenalty",
-        "tool_choice": "toolChoice",
-        "parallel_tool_calls": "parallelToolCalls",
-        "previous_response_id": "previousResponseId",
-        "service_tier": "serviceTier"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponsesreasoningconfig.js
-var OpenResponsesReasoningConfig$outboundSchema;
-var init_openresponsesreasoningconfig = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponsesreasoningconfig.js"() {
-    init_v4();
-    init_primitives();
-    init_openairesponsesreasoningeffort();
-    init_reasoningsummaryverbosity();
-    OpenResponsesReasoningConfig$outboundSchema = object({
-      effort: nullable(OpenAIResponsesReasoningEffort$outboundSchema).optional(),
-      summary: ReasoningSummaryVerbosity$outboundSchema.optional(),
-      maxTokens: nullable(number2()).optional(),
-      enabled: nullable(boolean2()).optional()
-    }).transform((v) => {
-      return remap(v, {
-        maxTokens: "max_tokens"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponsesreasoningdeltaevent.js
-var OpenResponsesReasoningDeltaEvent$inboundSchema;
-var init_openresponsesreasoningdeltaevent = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponsesreasoningdeltaevent.js"() {
-    init_v4();
-    init_primitives();
-    OpenResponsesReasoningDeltaEvent$inboundSchema = object({
-      type: literal("response.reasoning_text.delta"),
-      output_index: number2(),
-      item_id: string2(),
-      content_index: number2(),
-      delta: string2(),
-      sequence_number: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "output_index": "outputIndex",
-        "item_id": "itemId",
-        "content_index": "contentIndex",
-        "sequence_number": "sequenceNumber"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponsesreasoningdoneevent.js
-var OpenResponsesReasoningDoneEvent$inboundSchema;
-var init_openresponsesreasoningdoneevent = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponsesreasoningdoneevent.js"() {
-    init_v4();
-    init_primitives();
-    OpenResponsesReasoningDoneEvent$inboundSchema = object({
-      type: literal("response.reasoning_text.done"),
-      output_index: number2(),
-      item_id: string2(),
-      content_index: number2(),
-      text: string2(),
-      sequence_number: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "output_index": "outputIndex",
-        "item_id": "itemId",
-        "content_index": "contentIndex",
-        "sequence_number": "sequenceNumber"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponsesreasoningsummarypartaddedevent.js
-var OpenResponsesReasoningSummaryPartAddedEvent$inboundSchema;
-var init_openresponsesreasoningsummarypartaddedevent = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponsesreasoningsummarypartaddedevent.js"() {
-    init_v4();
-    init_primitives();
-    init_reasoningsummarytext();
-    OpenResponsesReasoningSummaryPartAddedEvent$inboundSchema = object({
-      type: literal("response.reasoning_summary_part.added"),
-      output_index: number2(),
-      item_id: string2(),
-      summary_index: number2(),
-      part: ReasoningSummaryText$inboundSchema,
-      sequence_number: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "output_index": "outputIndex",
-        "item_id": "itemId",
-        "summary_index": "summaryIndex",
-        "sequence_number": "sequenceNumber"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponsesreasoningsummarytextdeltaevent.js
-var OpenResponsesReasoningSummaryTextDeltaEvent$inboundSchema;
-var init_openresponsesreasoningsummarytextdeltaevent = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponsesreasoningsummarytextdeltaevent.js"() {
-    init_v4();
-    init_primitives();
-    OpenResponsesReasoningSummaryTextDeltaEvent$inboundSchema = object({
-      type: literal("response.reasoning_summary_text.delta"),
-      item_id: string2(),
-      output_index: number2(),
-      summary_index: number2(),
-      delta: string2(),
-      sequence_number: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "item_id": "itemId",
-        "output_index": "outputIndex",
-        "summary_index": "summaryIndex",
-        "sequence_number": "sequenceNumber"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponsesreasoningsummarytextdoneevent.js
-var OpenResponsesReasoningSummaryTextDoneEvent$inboundSchema;
-var init_openresponsesreasoningsummarytextdoneevent = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponsesreasoningsummarytextdoneevent.js"() {
-    init_v4();
-    init_primitives();
-    OpenResponsesReasoningSummaryTextDoneEvent$inboundSchema = object({
-      type: literal("response.reasoning_summary_text.done"),
-      item_id: string2(),
-      output_index: number2(),
-      summary_index: number2(),
-      text: string2(),
-      sequence_number: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "item_id": "itemId",
-        "output_index": "outputIndex",
-        "summary_index": "summaryIndex",
-        "sequence_number": "sequenceNumber"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponsesresponsetext.js
-var OpenResponsesResponseTextVerbosity, OpenResponsesResponseTextVerbosity$outboundSchema, OpenResponsesResponseText$outboundSchema;
-var init_openresponsesresponsetext = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponsesresponsetext.js"() {
-    init_v4();
-    init_enums();
-    init_responseformattextconfig();
-    OpenResponsesResponseTextVerbosity = {
-      High: "high",
-      Low: "low",
-      Medium: "medium"
-    };
-    OpenResponsesResponseTextVerbosity$outboundSchema = outboundSchema(OpenResponsesResponseTextVerbosity);
-    OpenResponsesResponseText$outboundSchema = object({
-      format: ResponseFormatTextConfig$outboundSchema.optional(),
-      verbosity: nullable(OpenResponsesResponseTextVerbosity$outboundSchema).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/pdfparserengine.js
-var PDFParserEngine, PDFParserEngine$outboundSchema;
-var init_pdfparserengine = __esm({
-  "node_modules/@openrouter/sdk/esm/models/pdfparserengine.js"() {
-    init_enums();
-    PDFParserEngine = {
-      MistralOcr: "mistral-ocr",
-      PdfText: "pdf-text",
-      Native: "native"
-    };
-    PDFParserEngine$outboundSchema = outboundSchema(PDFParserEngine);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/pdfparseroptions.js
-var PDFParserOptions$outboundSchema;
-var init_pdfparseroptions = __esm({
-  "node_modules/@openrouter/sdk/esm/models/pdfparseroptions.js"() {
-    init_v4();
-    init_pdfparserengine();
-    PDFParserOptions$outboundSchema = object({
-      engine: PDFParserEngine$outboundSchema.optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/percentilelatencycutoffs.js
-var PercentileLatencyCutoffs$outboundSchema;
-var init_percentilelatencycutoffs = __esm({
-  "node_modules/@openrouter/sdk/esm/models/percentilelatencycutoffs.js"() {
-    init_v4();
-    PercentileLatencyCutoffs$outboundSchema = object({
-      p50: nullable(number2()).optional(),
-      p75: nullable(number2()).optional(),
-      p90: nullable(number2()).optional(),
-      p99: nullable(number2()).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/preferredmaxlatency.js
-var PreferredMaxLatency$outboundSchema;
-var init_preferredmaxlatency = __esm({
-  "node_modules/@openrouter/sdk/esm/models/preferredmaxlatency.js"() {
-    init_v4();
-    init_percentilelatencycutoffs();
-    PreferredMaxLatency$outboundSchema = union([number2(), PercentileLatencyCutoffs$outboundSchema, any()]);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/percentilethroughputcutoffs.js
-var PercentileThroughputCutoffs$outboundSchema;
-var init_percentilethroughputcutoffs = __esm({
-  "node_modules/@openrouter/sdk/esm/models/percentilethroughputcutoffs.js"() {
-    init_v4();
-    PercentileThroughputCutoffs$outboundSchema = object({
-      p50: nullable(number2()).optional(),
-      p75: nullable(number2()).optional(),
-      p90: nullable(number2()).optional(),
-      p99: nullable(number2()).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/preferredminthroughput.js
-var PreferredMinThroughput$outboundSchema;
-var init_preferredminthroughput = __esm({
-  "node_modules/@openrouter/sdk/esm/models/preferredminthroughput.js"() {
-    init_v4();
-    init_percentilethroughputcutoffs();
-    PreferredMinThroughput$outboundSchema = union([number2(), PercentileThroughputCutoffs$outboundSchema, any()]);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/quantization.js
-var Quantization, Quantization$outboundSchema;
-var init_quantization = __esm({
-  "node_modules/@openrouter/sdk/esm/models/quantization.js"() {
-    init_enums();
-    Quantization = {
-      Int4: "int4",
-      Int8: "int8",
-      Fp4: "fp4",
-      Fp6: "fp6",
-      Fp8: "fp8",
-      Fp16: "fp16",
-      Bf16: "bf16",
-      Fp32: "fp32",
-      Unknown: "unknown"
-    };
-    Quantization$outboundSchema = outboundSchema(Quantization);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/responsesoutputmodality.js
-var ResponsesOutputModality, ResponsesOutputModality$outboundSchema;
-var init_responsesoutputmodality = __esm({
-  "node_modules/@openrouter/sdk/esm/models/responsesoutputmodality.js"() {
-    init_enums();
-    ResponsesOutputModality = {
-      Text: "text",
-      Image: "image"
-    };
-    ResponsesOutputModality$outboundSchema = outboundSchema(ResponsesOutputModality);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/websearchengine.js
-var WebSearchEngine, WebSearchEngine$outboundSchema;
-var init_websearchengine = __esm({
-  "node_modules/@openrouter/sdk/esm/models/websearchengine.js"() {
-    init_enums();
-    WebSearchEngine = {
-      Native: "native",
-      Exa: "exa"
-    };
-    WebSearchEngine$outboundSchema = outboundSchema(WebSearchEngine);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponsesrequest.js
-var ServiceTier, Truncation, OpenResponsesRequestToolFunction$outboundSchema, OpenResponsesRequestToolUnion$outboundSchema, OpenResponsesRequestImageConfig$outboundSchema, ServiceTier$outboundSchema, Truncation$outboundSchema, OpenResponsesRequestOrder$outboundSchema, OpenResponsesRequestOnly$outboundSchema, OpenResponsesRequestIgnore$outboundSchema, OpenResponsesRequestSort$outboundSchema, OpenResponsesRequestMaxPrice$outboundSchema, Provider$outboundSchema, PluginResponseHealing$outboundSchema, PluginFileParser$outboundSchema, PluginWeb$outboundSchema, PluginModeration$outboundSchema, PluginAutoRouter$outboundSchema, Plugin$outboundSchema, OpenResponsesRequest$outboundSchema;
-var init_openresponsesrequest = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponsesrequest.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    init_datacollection();
-    init_openairesponsesincludable();
-    init_openairesponsesprompt();
-    init_openairesponsestoolchoiceunion();
-    init_openresponsesinput();
-    init_openresponsesreasoningconfig();
-    init_openresponsesresponsetext();
-    init_openresponseswebsearch20250826tool();
-    init_openresponseswebsearchpreview20250311tool();
-    init_openresponseswebsearchpreviewtool();
-    init_openresponseswebsearchtool();
-    init_pdfparseroptions();
-    init_preferredmaxlatency();
-    init_preferredminthroughput();
-    init_providername();
-    init_providersort();
-    init_providersortconfig();
-    init_quantization();
-    init_responsesoutputmodality();
-    init_websearchengine();
-    ServiceTier = {
-      Auto: "auto"
-    };
-    Truncation = {
-      Auto: "auto",
-      Disabled: "disabled"
-    };
-    OpenResponsesRequestToolFunction$outboundSchema = object({
-      type: literal("function"),
-      name: string2(),
-      description: nullable(string2()).optional(),
-      strict: nullable(boolean2()).optional(),
-      parameters: nullable(record(string2(), nullable(any())))
-    });
-    OpenResponsesRequestToolUnion$outboundSchema = union([
-      lazy(() => OpenResponsesRequestToolFunction$outboundSchema),
-      OpenResponsesWebSearchPreviewTool$outboundSchema,
-      OpenResponsesWebSearchPreview20250311Tool$outboundSchema,
-      OpenResponsesWebSearchTool$outboundSchema,
-      OpenResponsesWebSearch20250826Tool$outboundSchema
-    ]);
-    OpenResponsesRequestImageConfig$outboundSchema = union([string2(), number2()]);
-    ServiceTier$outboundSchema = _enum2(ServiceTier);
-    Truncation$outboundSchema = outboundSchema(Truncation);
-    OpenResponsesRequestOrder$outboundSchema = union([ProviderName$outboundSchema, string2()]);
-    OpenResponsesRequestOnly$outboundSchema = union([ProviderName$outboundSchema, string2()]);
-    OpenResponsesRequestIgnore$outboundSchema = union([ProviderName$outboundSchema, string2()]);
-    OpenResponsesRequestSort$outboundSchema = union([
-      ProviderSort$outboundSchema,
-      ProviderSortConfig$outboundSchema,
-      any()
-    ]);
-    OpenResponsesRequestMaxPrice$outboundSchema = object({
-      prompt: string2().optional(),
-      completion: string2().optional(),
-      image: string2().optional(),
-      audio: string2().optional(),
-      request: string2().optional()
-    });
-    Provider$outboundSchema = object({
-      allowFallbacks: nullable(boolean2()).optional(),
-      requireParameters: nullable(boolean2()).optional(),
-      dataCollection: nullable(DataCollection$outboundSchema).optional(),
-      zdr: nullable(boolean2()).optional(),
-      enforceDistillableText: nullable(boolean2()).optional(),
-      order: nullable(array(union([ProviderName$outboundSchema, string2()]))).optional(),
-      only: nullable(array(union([ProviderName$outboundSchema, string2()]))).optional(),
-      ignore: nullable(array(union([ProviderName$outboundSchema, string2()]))).optional(),
-      quantizations: nullable(array(Quantization$outboundSchema)).optional(),
-      sort: nullable(union([
-        ProviderSort$outboundSchema,
-        ProviderSortConfig$outboundSchema,
-        any()
-      ])).optional(),
-      maxPrice: lazy(() => OpenResponsesRequestMaxPrice$outboundSchema).optional(),
-      preferredMinThroughput: nullable(PreferredMinThroughput$outboundSchema).optional(),
-      preferredMaxLatency: nullable(PreferredMaxLatency$outboundSchema).optional()
-    }).transform((v) => {
-      return remap(v, {
-        allowFallbacks: "allow_fallbacks",
-        requireParameters: "require_parameters",
-        dataCollection: "data_collection",
-        enforceDistillableText: "enforce_distillable_text",
-        maxPrice: "max_price",
-        preferredMinThroughput: "preferred_min_throughput",
-        preferredMaxLatency: "preferred_max_latency"
-      });
-    });
-    PluginResponseHealing$outboundSchema = object({
-      id: literal("response-healing"),
-      enabled: boolean2().optional()
-    });
-    PluginFileParser$outboundSchema = object({
-      id: literal("file-parser"),
-      enabled: boolean2().optional(),
-      pdf: PDFParserOptions$outboundSchema.optional()
-    });
-    PluginWeb$outboundSchema = object({
-      id: literal("web"),
-      enabled: boolean2().optional(),
-      maxResults: number2().optional(),
-      searchPrompt: string2().optional(),
-      engine: WebSearchEngine$outboundSchema.optional()
-    }).transform((v) => {
-      return remap(v, {
-        maxResults: "max_results",
-        searchPrompt: "search_prompt"
-      });
-    });
-    PluginModeration$outboundSchema = object({
-      id: literal("moderation")
-    });
-    PluginAutoRouter$outboundSchema = object({
-      id: literal("auto-router"),
-      enabled: boolean2().optional(),
-      allowedModels: array(string2()).optional()
-    }).transform((v) => {
-      return remap(v, {
-        allowedModels: "allowed_models"
-      });
-    });
-    Plugin$outboundSchema = union([
-      lazy(() => PluginAutoRouter$outboundSchema),
-      lazy(() => PluginModeration$outboundSchema),
-      lazy(() => PluginWeb$outboundSchema),
-      lazy(() => PluginFileParser$outboundSchema),
-      lazy(() => PluginResponseHealing$outboundSchema)
-    ]);
-    OpenResponsesRequest$outboundSchema = object({
-      input: OpenResponsesInput$outboundSchema.optional(),
-      instructions: nullable(string2()).optional(),
-      metadata: nullable(record(string2(), string2())).optional(),
-      tools: array(union([
-        lazy(() => OpenResponsesRequestToolFunction$outboundSchema),
-        OpenResponsesWebSearchPreviewTool$outboundSchema,
-        OpenResponsesWebSearchPreview20250311Tool$outboundSchema,
-        OpenResponsesWebSearchTool$outboundSchema,
-        OpenResponsesWebSearch20250826Tool$outboundSchema
-      ])).optional(),
-      toolChoice: OpenAIResponsesToolChoiceUnion$outboundSchema.optional(),
-      parallelToolCalls: nullable(boolean2()).optional(),
-      model: string2().optional(),
-      models: array(string2()).optional(),
-      text: OpenResponsesResponseText$outboundSchema.optional(),
-      reasoning: nullable(OpenResponsesReasoningConfig$outboundSchema).optional(),
-      maxOutputTokens: nullable(number2()).optional(),
-      temperature: nullable(number2()).optional(),
-      topP: nullable(number2()).optional(),
-      topLogprobs: nullable(int()).optional(),
-      maxToolCalls: nullable(int()).optional(),
-      presencePenalty: nullable(number2()).optional(),
-      frequencyPenalty: nullable(number2()).optional(),
-      topK: number2().optional(),
-      imageConfig: record(string2(), union([string2(), number2()])).optional(),
-      modalities: array(ResponsesOutputModality$outboundSchema).optional(),
-      promptCacheKey: nullable(string2()).optional(),
-      previousResponseId: nullable(string2()).optional(),
-      prompt: nullable(OpenAIResponsesPrompt$outboundSchema).optional(),
-      include: nullable(array(OpenAIResponsesIncludable$outboundSchema)).optional(),
-      background: nullable(boolean2()).optional(),
-      safetyIdentifier: nullable(string2()).optional(),
-      store: literal(false).default(false),
-      serviceTier: ServiceTier$outboundSchema.default("auto"),
-      truncation: nullable(Truncation$outboundSchema).optional(),
-      stream: boolean2().default(false),
-      provider: nullable(lazy(() => Provider$outboundSchema)).optional(),
-      plugins: array(union([
-        lazy(() => PluginAutoRouter$outboundSchema),
-        lazy(() => PluginModeration$outboundSchema),
-        lazy(() => PluginWeb$outboundSchema),
-        lazy(() => PluginFileParser$outboundSchema),
-        lazy(() => PluginResponseHealing$outboundSchema)
-      ])).optional(),
-      user: string2().optional(),
-      sessionId: string2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        toolChoice: "tool_choice",
-        parallelToolCalls: "parallel_tool_calls",
-        maxOutputTokens: "max_output_tokens",
-        topP: "top_p",
-        topLogprobs: "top_logprobs",
-        maxToolCalls: "max_tool_calls",
-        presencePenalty: "presence_penalty",
-        frequencyPenalty: "frequency_penalty",
-        topK: "top_k",
-        imageConfig: "image_config",
-        promptCacheKey: "prompt_cache_key",
-        previousResponseId: "previous_response_id",
-        safetyIdentifier: "safety_identifier",
-        serviceTier: "service_tier",
-        sessionId: "session_id"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/openresponsesstreamevent.js
-var OpenResponsesStreamEventResponseReasoningSummaryPartDone$inboundSchema, OpenResponsesStreamEventResponseFunctionCallArgumentsDone$inboundSchema, OpenResponsesStreamEventResponseFunctionCallArgumentsDelta$inboundSchema, OpenResponsesStreamEventResponseOutputTextAnnotationAdded$inboundSchema, OpenResponsesStreamEventResponseRefusalDone$inboundSchema, OpenResponsesStreamEventResponseRefusalDelta$inboundSchema, OpenResponsesStreamEventResponseOutputTextDone$inboundSchema, OpenResponsesStreamEventResponseOutputTextDelta$inboundSchema, Part2$inboundSchema, OpenResponsesStreamEventResponseContentPartDone$inboundSchema, Part1$inboundSchema, OpenResponsesStreamEventResponseContentPartAdded$inboundSchema, OpenResponsesStreamEventResponseOutputItemDone$inboundSchema, OpenResponsesStreamEventResponseOutputItemAdded$inboundSchema, OpenResponsesStreamEventResponseFailed$inboundSchema, OpenResponsesStreamEventResponseIncomplete$inboundSchema, OpenResponsesStreamEventResponseCompleted$inboundSchema, OpenResponsesStreamEventResponseInProgress$inboundSchema, OpenResponsesStreamEventResponseCreated$inboundSchema, OpenResponsesStreamEvent$inboundSchema;
-var init_openresponsesstreamevent = __esm({
-  "node_modules/@openrouter/sdk/esm/models/openresponsesstreamevent.js"() {
-    init_v4();
-    init_primitives();
-    init_openairesponsesannotation();
-    init_openairesponsesrefusalcontent();
-    init_openresponseserrorevent();
-    init_openresponsesimagegencallcompleted();
-    init_openresponsesimagegencallgenerating();
-    init_openresponsesimagegencallinprogress();
-    init_openresponsesimagegencallpartialimage();
-    init_openresponseslogprobs();
-    init_openresponsesnonstreamingresponse();
-    init_openresponsesreasoningdeltaevent();
-    init_openresponsesreasoningdoneevent();
-    init_openresponsesreasoningsummarypartaddedevent();
-    init_openresponsesreasoningsummarytextdeltaevent();
-    init_openresponsesreasoningsummarytextdoneevent();
-    init_reasoningsummarytext();
-    init_reasoningtextcontent();
-    init_responseoutputtext();
-    init_responsesoutputitem();
-    OpenResponsesStreamEventResponseReasoningSummaryPartDone$inboundSchema = object({
-      type: literal("response.reasoning_summary_part.done"),
-      output_index: number2(),
-      item_id: string2(),
-      summary_index: number2(),
-      part: ReasoningSummaryText$inboundSchema,
-      sequence_number: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "output_index": "outputIndex",
-        "item_id": "itemId",
-        "summary_index": "summaryIndex",
-        "sequence_number": "sequenceNumber"
-      });
-    });
-    OpenResponsesStreamEventResponseFunctionCallArgumentsDone$inboundSchema = object({
-      type: literal("response.function_call_arguments.done"),
-      item_id: string2(),
-      output_index: number2(),
-      name: string2(),
-      arguments: string2(),
-      sequence_number: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "item_id": "itemId",
-        "output_index": "outputIndex",
-        "sequence_number": "sequenceNumber"
-      });
-    });
-    OpenResponsesStreamEventResponseFunctionCallArgumentsDelta$inboundSchema = object({
-      type: literal("response.function_call_arguments.delta"),
-      item_id: string2(),
-      output_index: number2(),
-      delta: string2(),
-      sequence_number: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "item_id": "itemId",
-        "output_index": "outputIndex",
-        "sequence_number": "sequenceNumber"
-      });
-    });
-    OpenResponsesStreamEventResponseOutputTextAnnotationAdded$inboundSchema = object({
-      type: literal("response.output_text.annotation.added"),
-      output_index: number2(),
-      item_id: string2(),
-      content_index: number2(),
-      sequence_number: number2(),
-      annotation_index: number2(),
-      annotation: OpenAIResponsesAnnotation$inboundSchema
-    }).transform((v) => {
-      return remap(v, {
-        "output_index": "outputIndex",
-        "item_id": "itemId",
-        "content_index": "contentIndex",
-        "sequence_number": "sequenceNumber",
-        "annotation_index": "annotationIndex"
-      });
-    });
-    OpenResponsesStreamEventResponseRefusalDone$inboundSchema = object({
-      type: literal("response.refusal.done"),
-      output_index: number2(),
-      item_id: string2(),
-      content_index: number2(),
-      refusal: string2(),
-      sequence_number: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "output_index": "outputIndex",
-        "item_id": "itemId",
-        "content_index": "contentIndex",
-        "sequence_number": "sequenceNumber"
-      });
-    });
-    OpenResponsesStreamEventResponseRefusalDelta$inboundSchema = object({
-      type: literal("response.refusal.delta"),
-      output_index: number2(),
-      item_id: string2(),
-      content_index: number2(),
-      delta: string2(),
-      sequence_number: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "output_index": "outputIndex",
-        "item_id": "itemId",
-        "content_index": "contentIndex",
-        "sequence_number": "sequenceNumber"
-      });
-    });
-    OpenResponsesStreamEventResponseOutputTextDone$inboundSchema = object({
-      type: literal("response.output_text.done"),
-      output_index: number2(),
-      item_id: string2(),
-      content_index: number2(),
-      text: string2(),
-      sequence_number: number2(),
-      logprobs: array(OpenResponsesLogProbs$inboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        "output_index": "outputIndex",
-        "item_id": "itemId",
-        "content_index": "contentIndex",
-        "sequence_number": "sequenceNumber"
-      });
-    });
-    OpenResponsesStreamEventResponseOutputTextDelta$inboundSchema = object({
-      type: literal("response.output_text.delta"),
-      logprobs: array(OpenResponsesLogProbs$inboundSchema),
-      output_index: number2(),
-      item_id: string2(),
-      content_index: number2(),
-      delta: string2(),
-      sequence_number: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "output_index": "outputIndex",
-        "item_id": "itemId",
-        "content_index": "contentIndex",
-        "sequence_number": "sequenceNumber"
-      });
-    });
-    Part2$inboundSchema = union([
-      ResponseOutputText$inboundSchema,
-      ReasoningTextContent$inboundSchema.and(object({ type: literal("reasoning_text") })),
-      OpenAIResponsesRefusalContent$inboundSchema
-    ]);
-    OpenResponsesStreamEventResponseContentPartDone$inboundSchema = object({
-      type: literal("response.content_part.done"),
-      output_index: number2(),
-      item_id: string2(),
-      content_index: number2(),
-      part: union([
-        ResponseOutputText$inboundSchema,
-        ReasoningTextContent$inboundSchema.and(object({ type: literal("reasoning_text") })),
-        OpenAIResponsesRefusalContent$inboundSchema
-      ]),
-      sequence_number: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "output_index": "outputIndex",
-        "item_id": "itemId",
-        "content_index": "contentIndex",
-        "sequence_number": "sequenceNumber"
-      });
-    });
-    Part1$inboundSchema = union([
-      ResponseOutputText$inboundSchema,
-      ReasoningTextContent$inboundSchema.and(object({ type: literal("reasoning_text") })),
-      OpenAIResponsesRefusalContent$inboundSchema
-    ]);
-    OpenResponsesStreamEventResponseContentPartAdded$inboundSchema = object({
-      type: literal("response.content_part.added"),
-      output_index: number2(),
-      item_id: string2(),
-      content_index: number2(),
-      part: union([
-        ResponseOutputText$inboundSchema,
-        ReasoningTextContent$inboundSchema.and(object({ type: literal("reasoning_text") })),
-        OpenAIResponsesRefusalContent$inboundSchema
-      ]),
-      sequence_number: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "output_index": "outputIndex",
-        "item_id": "itemId",
-        "content_index": "contentIndex",
-        "sequence_number": "sequenceNumber"
-      });
-    });
-    OpenResponsesStreamEventResponseOutputItemDone$inboundSchema = object({
-      type: literal("response.output_item.done"),
-      output_index: number2(),
-      item: ResponsesOutputItem$inboundSchema,
-      sequence_number: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "output_index": "outputIndex",
-        "sequence_number": "sequenceNumber"
-      });
-    });
-    OpenResponsesStreamEventResponseOutputItemAdded$inboundSchema = object({
-      type: literal("response.output_item.added"),
-      output_index: number2(),
-      item: ResponsesOutputItem$inboundSchema,
-      sequence_number: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "output_index": "outputIndex",
-        "sequence_number": "sequenceNumber"
-      });
-    });
-    OpenResponsesStreamEventResponseFailed$inboundSchema = object({
-      type: literal("response.failed"),
-      response: OpenResponsesNonStreamingResponse$inboundSchema,
-      sequence_number: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "sequence_number": "sequenceNumber"
-      });
-    });
-    OpenResponsesStreamEventResponseIncomplete$inboundSchema = object({
-      type: literal("response.incomplete"),
-      response: OpenResponsesNonStreamingResponse$inboundSchema,
-      sequence_number: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "sequence_number": "sequenceNumber"
-      });
-    });
-    OpenResponsesStreamEventResponseCompleted$inboundSchema = object({
-      type: literal("response.completed"),
-      response: OpenResponsesNonStreamingResponse$inboundSchema,
-      sequence_number: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "sequence_number": "sequenceNumber"
-      });
-    });
-    OpenResponsesStreamEventResponseInProgress$inboundSchema = object({
-      type: literal("response.in_progress"),
-      response: OpenResponsesNonStreamingResponse$inboundSchema,
-      sequence_number: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "sequence_number": "sequenceNumber"
-      });
-    });
-    OpenResponsesStreamEventResponseCreated$inboundSchema = object({
-      type: literal("response.created"),
-      response: OpenResponsesNonStreamingResponse$inboundSchema,
-      sequence_number: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "sequence_number": "sequenceNumber"
-      });
-    });
-    OpenResponsesStreamEvent$inboundSchema = union([
-      lazy(() => OpenResponsesStreamEventResponseCreated$inboundSchema),
-      lazy(() => OpenResponsesStreamEventResponseInProgress$inboundSchema),
-      lazy(() => OpenResponsesStreamEventResponseCompleted$inboundSchema),
-      lazy(() => OpenResponsesStreamEventResponseIncomplete$inboundSchema),
-      lazy(() => OpenResponsesStreamEventResponseFailed$inboundSchema),
-      OpenResponsesErrorEvent$inboundSchema,
-      lazy(() => OpenResponsesStreamEventResponseOutputItemAdded$inboundSchema),
-      lazy(() => OpenResponsesStreamEventResponseOutputItemDone$inboundSchema),
-      lazy(() => OpenResponsesStreamEventResponseContentPartAdded$inboundSchema),
-      lazy(() => OpenResponsesStreamEventResponseContentPartDone$inboundSchema),
-      lazy(() => OpenResponsesStreamEventResponseOutputTextDelta$inboundSchema),
-      lazy(() => OpenResponsesStreamEventResponseOutputTextDone$inboundSchema),
-      lazy(() => OpenResponsesStreamEventResponseRefusalDelta$inboundSchema),
-      lazy(() => OpenResponsesStreamEventResponseRefusalDone$inboundSchema),
-      lazy(() => OpenResponsesStreamEventResponseOutputTextAnnotationAdded$inboundSchema),
-      lazy(() => OpenResponsesStreamEventResponseFunctionCallArgumentsDelta$inboundSchema),
-      lazy(() => OpenResponsesStreamEventResponseFunctionCallArgumentsDone$inboundSchema),
-      OpenResponsesReasoningDeltaEvent$inboundSchema,
-      OpenResponsesReasoningDoneEvent$inboundSchema,
-      OpenResponsesReasoningSummaryPartAddedEvent$inboundSchema,
-      lazy(() => OpenResponsesStreamEventResponseReasoningSummaryPartDone$inboundSchema),
-      OpenResponsesReasoningSummaryTextDeltaEvent$inboundSchema,
-      OpenResponsesReasoningSummaryTextDoneEvent$inboundSchema,
-      OpenResponsesImageGenCallInProgress$inboundSchema,
-      OpenResponsesImageGenCallGenerating$inboundSchema,
-      OpenResponsesImageGenCallPartialImage$inboundSchema,
-      OpenResponsesImageGenCallCompleted$inboundSchema
-    ]);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/payloadtoolargeresponseerrordata.js
-var PayloadTooLargeResponseErrorData$inboundSchema;
-var init_payloadtoolargeresponseerrordata = __esm({
-  "node_modules/@openrouter/sdk/esm/models/payloadtoolargeresponseerrordata.js"() {
-    init_v4();
-    PayloadTooLargeResponseErrorData$inboundSchema = object({
-      code: int(),
-      message: string2(),
-      metadata: nullable(record(string2(), nullable(any()))).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/paymentrequiredresponseerrordata.js
-var PaymentRequiredResponseErrorData$inboundSchema;
-var init_paymentrequiredresponseerrordata = __esm({
-  "node_modules/@openrouter/sdk/esm/models/paymentrequiredresponseerrordata.js"() {
-    init_v4();
-    PaymentRequiredResponseErrorData$inboundSchema = object({
-      code: int(),
-      message: string2(),
-      metadata: nullable(record(string2(), nullable(any()))).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/provideroverloadedresponseerrordata.js
-var ProviderOverloadedResponseErrorData$inboundSchema;
-var init_provideroverloadedresponseerrordata = __esm({
-  "node_modules/@openrouter/sdk/esm/models/provideroverloadedresponseerrordata.js"() {
-    init_v4();
-    ProviderOverloadedResponseErrorData$inboundSchema = object({
-      code: int(),
-      message: string2(),
-      metadata: nullable(record(string2(), nullable(any()))).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/providerpreferences.js
-var SortEnum, ProviderSortConfigEnum, ProviderPreferencesPartition, ProviderPreferencesProviderSort, ProviderPreferencesOrder$outboundSchema, ProviderPreferencesOnly$outboundSchema, ProviderPreferencesIgnore$outboundSchema, SortEnum$outboundSchema, ProviderSortConfigEnum$outboundSchema, ProviderPreferencesPartition$outboundSchema, ProviderPreferencesProviderSortConfig$outboundSchema, ProviderSortConfigUnion$outboundSchema, ProviderPreferencesProviderSort$outboundSchema, ProviderPreferencesSortUnion$outboundSchema, ProviderPreferencesMaxPrice$outboundSchema, ProviderPreferences$outboundSchema;
-var init_providerpreferences = __esm({
-  "node_modules/@openrouter/sdk/esm/models/providerpreferences.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    init_datacollection();
-    init_preferredmaxlatency();
-    init_preferredminthroughput();
-    init_providername();
-    init_providersort();
-    init_quantization();
-    SortEnum = {
-      Price: "price",
-      Throughput: "throughput",
-      Latency: "latency"
-    };
-    ProviderSortConfigEnum = {
-      Price: "price",
-      Throughput: "throughput",
-      Latency: "latency"
-    };
-    ProviderPreferencesPartition = {
-      Model: "model",
-      None: "none"
-    };
-    ProviderPreferencesProviderSort = {
-      Price: "price",
-      Throughput: "throughput",
-      Latency: "latency"
-    };
-    ProviderPreferencesOrder$outboundSchema = union([ProviderName$outboundSchema, string2()]);
-    ProviderPreferencesOnly$outboundSchema = union([ProviderName$outboundSchema, string2()]);
-    ProviderPreferencesIgnore$outboundSchema = union([ProviderName$outboundSchema, string2()]);
-    SortEnum$outboundSchema = outboundSchema(SortEnum);
-    ProviderSortConfigEnum$outboundSchema = _enum2(ProviderSortConfigEnum);
-    ProviderPreferencesPartition$outboundSchema = outboundSchema(ProviderPreferencesPartition);
-    ProviderPreferencesProviderSortConfig$outboundSchema = object({
-      by: nullable(ProviderSort$outboundSchema).optional(),
-      partition: nullable(ProviderPreferencesPartition$outboundSchema).optional()
-    });
-    ProviderSortConfigUnion$outboundSchema = union([
-      lazy(() => ProviderPreferencesProviderSortConfig$outboundSchema),
-      ProviderSortConfigEnum$outboundSchema
-    ]);
-    ProviderPreferencesProviderSort$outboundSchema = outboundSchema(ProviderPreferencesProviderSort);
-    ProviderPreferencesSortUnion$outboundSchema = union([
-      ProviderPreferencesProviderSort$outboundSchema,
-      union([
-        lazy(() => ProviderPreferencesProviderSortConfig$outboundSchema),
-        ProviderSortConfigEnum$outboundSchema
-      ]),
-      SortEnum$outboundSchema
-    ]);
-    ProviderPreferencesMaxPrice$outboundSchema = object({
-      prompt: string2().optional(),
-      completion: string2().optional(),
-      image: string2().optional(),
-      audio: string2().optional(),
-      request: string2().optional()
-    });
-    ProviderPreferences$outboundSchema = object({
-      allowFallbacks: nullable(boolean2()).optional(),
-      requireParameters: nullable(boolean2()).optional(),
-      dataCollection: nullable(DataCollection$outboundSchema).optional(),
-      zdr: nullable(boolean2()).optional(),
-      enforceDistillableText: nullable(boolean2()).optional(),
-      order: nullable(array(union([ProviderName$outboundSchema, string2()]))).optional(),
-      only: nullable(array(union([ProviderName$outboundSchema, string2()]))).optional(),
-      ignore: nullable(array(union([ProviderName$outboundSchema, string2()]))).optional(),
-      quantizations: nullable(array(Quantization$outboundSchema)).optional(),
-      sort: nullable(union([
-        ProviderPreferencesProviderSort$outboundSchema,
-        union([
-          lazy(() => ProviderPreferencesProviderSortConfig$outboundSchema),
-          ProviderSortConfigEnum$outboundSchema
-        ]),
-        SortEnum$outboundSchema
-      ])).optional(),
-      maxPrice: lazy(() => ProviderPreferencesMaxPrice$outboundSchema).optional(),
-      preferredMinThroughput: nullable(PreferredMinThroughput$outboundSchema).optional(),
-      preferredMaxLatency: nullable(PreferredMaxLatency$outboundSchema).optional()
-    }).transform((v) => {
-      return remap(v, {
-        allowFallbacks: "allow_fallbacks",
-        requireParameters: "require_parameters",
-        dataCollection: "data_collection",
-        enforceDistillableText: "enforce_distillable_text",
-        maxPrice: "max_price",
-        preferredMinThroughput: "preferred_min_throughput",
-        preferredMaxLatency: "preferred_max_latency"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/requesttimeoutresponseerrordata.js
-var RequestTimeoutResponseErrorData$inboundSchema;
-var init_requesttimeoutresponseerrordata = __esm({
-  "node_modules/@openrouter/sdk/esm/models/requesttimeoutresponseerrordata.js"() {
-    init_v4();
-    RequestTimeoutResponseErrorData$inboundSchema = object({
-      code: int(),
-      message: string2(),
-      metadata: nullable(record(string2(), nullable(any()))).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/security.js
-var Security$outboundSchema;
-var init_security = __esm({
-  "node_modules/@openrouter/sdk/esm/models/security.js"() {
-    init_v4();
-    Security$outboundSchema = object({
-      apiKey: string2().optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/serviceunavailableresponseerrordata.js
-var ServiceUnavailableResponseErrorData$inboundSchema;
-var init_serviceunavailableresponseerrordata = __esm({
-  "node_modules/@openrouter/sdk/esm/models/serviceunavailableresponseerrordata.js"() {
-    init_v4();
-    ServiceUnavailableResponseErrorData$inboundSchema = object({
-      code: int(),
-      message: string2(),
-      metadata: nullable(record(string2(), nullable(any()))).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/toomanyrequestsresponseerrordata.js
-var TooManyRequestsResponseErrorData$inboundSchema;
-var init_toomanyrequestsresponseerrordata = __esm({
-  "node_modules/@openrouter/sdk/esm/models/toomanyrequestsresponseerrordata.js"() {
-    init_v4();
-    TooManyRequestsResponseErrorData$inboundSchema = object({
-      code: int(),
-      message: string2(),
-      metadata: nullable(record(string2(), nullable(any()))).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/unauthorizedresponseerrordata.js
-var UnauthorizedResponseErrorData$inboundSchema;
-var init_unauthorizedresponseerrordata = __esm({
-  "node_modules/@openrouter/sdk/esm/models/unauthorizedresponseerrordata.js"() {
-    init_v4();
-    UnauthorizedResponseErrorData$inboundSchema = object({
-      code: int(),
-      message: string2(),
-      metadata: nullable(record(string2(), nullable(any()))).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/unprocessableentityresponseerrordata.js
-var UnprocessableEntityResponseErrorData$inboundSchema;
-var init_unprocessableentityresponseerrordata = __esm({
-  "node_modules/@openrouter/sdk/esm/models/unprocessableentityresponseerrordata.js"() {
-    init_v4();
-    UnprocessableEntityResponseErrorData$inboundSchema = object({
-      code: int(),
-      message: string2(),
-      metadata: nullable(record(string2(), nullable(any()))).optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/claude-message.js
-var init_claude_message = __esm({
-  "node_modules/@openrouter/sdk/esm/models/claude-message.js"() {
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/index.js
-var init_models = __esm({
-  "node_modules/@openrouter/sdk/esm/models/index.js"() {
-    init_activityitem();
-    init_assistantmessage();
-    init_badgatewayresponseerrordata();
-    init_badrequestresponseerrordata();
-    init_chatcompletionfinishreason();
-    init_chaterror();
-    init_chatgenerationparams();
-    init_chatgenerationtokenusage();
-    init_chatmessagecontentitem();
-    init_chatmessagecontentitemaudio();
-    init_chatmessagecontentitemcachecontrol();
-    init_chatmessagecontentitemimage();
-    init_chatmessagecontentitemtext();
-    init_chatmessagecontentitemvideo();
-    init_chatmessagetokenlogprob();
-    init_chatmessagetokenlogprobs();
-    init_chatmessagetoolcall();
-    init_chatresponse();
-    init_chatresponsechoice();
-    init_chatstreamingchoice();
-    init_chatstreamingmessagechunk();
-    init_chatstreamingmessagetoolcall();
-    init_chatstreamingresponsechunk();
-    init_chatstreamoptions();
-    init_createchargerequest();
-    init_datacollection();
-    init_defaultparameters();
-    init_developermessage();
-    init_edgenetworktimeoutresponseerrordata();
-    init_endpointstatus();
-    init_filecitation();
-    init_filepath();
-    init_forbiddenresponseerrordata();
-    init_imagegenerationstatus();
-    init_inputmodality();
-    init_instructtype();
-    init_internalserverresponseerrordata();
-    init_jsonschemaconfig();
-    init_listendpointsresponse();
-    init_message();
-    init_model();
-    init_modelarchitecture();
-    init_modelgroup();
-    init_modelscountresponse();
-    init_modelslistresponse();
-    init_namedtoolchoice();
-    init_notfoundresponseerrordata();
-    init_openairesponsesannotation();
-    init_openairesponsesincludable();
-    init_openairesponsesincompletedetails();
-    init_openairesponsesinputunion();
-    init_openairesponsesprompt();
-    init_openairesponsesreasoningconfig();
-    init_openairesponsesreasoningeffort();
-    init_openairesponsesrefusalcontent();
-    init_openairesponsesresponsestatus();
-    init_openairesponsesservicetier();
-    init_openairesponsestoolchoiceunion();
-    init_openairesponsestruncation();
-    init_openresponseseasyinputmessage();
-    init_openresponseserrorevent();
-    init_openresponsesfunctioncalloutput();
-    init_openresponsesfunctiontoolcall();
-    init_openresponsesimagegencallcompleted();
-    init_openresponsesimagegencallgenerating();
-    init_openresponsesimagegencallinprogress();
-    init_openresponsesimagegencallpartialimage();
-    init_openresponsesinput();
-    init_openresponsesinputmessageitem();
-    init_openresponseslogprobs();
-    init_openresponsesnonstreamingresponse();
-    init_openresponsesreasoning();
-    init_openresponsesreasoningconfig();
-    init_openresponsesreasoningdeltaevent();
-    init_openresponsesreasoningdoneevent();
-    init_openresponsesreasoningsummarypartaddedevent();
-    init_openresponsesreasoningsummarytextdeltaevent();
-    init_openresponsesreasoningsummarytextdoneevent();
-    init_openresponsesrequest();
-    init_openresponsesresponsetext();
-    init_openresponsesstreamevent();
-    init_openresponsestoplogprobs();
-    init_openresponsesusage();
-    init_openresponseswebsearch20250826tool();
-    init_openresponseswebsearchpreview20250311tool();
-    init_openresponseswebsearchpreviewtool();
-    init_openresponseswebsearchtool();
-    init_outputitemimagegenerationcall();
-    init_outputmessage();
-    init_outputmodality();
-    init_parameter();
-    init_payloadtoolargeresponseerrordata();
-    init_paymentrequiredresponseerrordata();
-    init_pdfparserengine();
-    init_pdfparseroptions();
-    init_percentilelatencycutoffs();
-    init_percentilestats();
-    init_percentilethroughputcutoffs();
-    init_perrequestlimits();
-    init_preferredmaxlatency();
-    init_preferredminthroughput();
-    init_providername();
-    init_provideroverloadedresponseerrordata();
-    init_providerpreferences();
-    init_providersort();
-    init_providersortconfig();
-    init_providersortunion();
-    init_publicendpoint();
-    init_publicpricing();
-    init_quantization();
-    init_reasoningsummarytext();
-    init_reasoningsummaryverbosity();
-    init_reasoningtextcontent();
-    init_requesttimeoutresponseerrordata();
-    init_responseformatjsonschema();
-    init_responseformattextconfig();
-    init_responseformattextgrammar();
-    init_responseinputaudio();
-    init_responseinputfile();
-    init_responseinputimage();
-    init_responseinputtext();
-    init_responseinputvideo();
-    init_responseoutputtext();
-    init_responseserrorfield();
-    init_responsesformatjsonobject();
-    init_responsesformattext();
-    init_responsesformattextjsonschemaconfig();
-    init_responsesimagegenerationcall();
-    init_responsesoutputitem();
-    init_responsesoutputitemfilesearchcall();
-    init_responsesoutputitemfunctioncall();
-    init_responsesoutputitemreasoning();
-    init_responsesoutputmessage();
-    init_responsesoutputmodality();
-    init_responsessearchcontextsize();
-    init_responseswebsearchcalloutput();
-    init_responseswebsearchuserlocation();
-    init_responsetextconfig();
-    init_schema10();
-    init_schema14();
-    init_schema17();
-    init_schema19();
-    init_schema5();
-    init_security();
-    init_serviceunavailableresponseerrordata();
-    init_systemmessage();
-    init_toolcallstatus();
-    init_tooldefinitionjson();
-    init_toolresponsemessage();
-    init_toomanyrequestsresponseerrordata();
-    init_topproviderinfo();
-    init_unauthorizedresponseerrordata();
-    init_unprocessableentityresponseerrordata();
-    init_urlcitation();
-    init_usermessage();
-    init_websearchengine();
-    init_websearchpreviewtooluserlocation();
-    init_websearchstatus();
-    init_claude_message();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/turn-context.js
-function normalizeInputToArray(input) {
-  if (typeof input === "string") {
-    const message = {
-      role: OpenResponsesEasyInputMessageRoleUser.User,
-      content: input
-    };
-    return [message];
-  }
-  return input;
-}
-var init_turn_context = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/turn-context.js"() {
-    init_models();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/conversation-state.js
-function isValidUnsentToolResult(obj) {
-  if (typeof obj !== "object" || obj === null)
-    return false;
-  const candidate = obj;
-  return typeof candidate["callId"] === "string" && typeof candidate["name"] === "string" && "output" in candidate;
-}
-function generateConversationId() {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) {
-    return `conv_${crypto.randomUUID()}`;
-  }
-  return `conv_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-}
-function createInitialState(id) {
-  const now = Date.now();
-  return {
-    id: id ?? generateConversationId(),
-    messages: [],
-    status: "in_progress",
-    createdAt: now,
-    updatedAt: now
-  };
-}
-function updateState(state, updates) {
-  return {
-    ...state,
-    ...updates,
-    updatedAt: Date.now()
-  };
-}
-function appendToMessages(current, newItems) {
-  const currentArray = normalizeInputToArray(current);
-  return [...currentArray, ...newItems];
-}
-async function toolRequiresApproval(toolCall, tools, context, callLevelCheck) {
-  if (callLevelCheck) {
-    return callLevelCheck(toolCall, context);
-  }
-  const tool = tools.find((t) => t.function.name === toolCall.name);
-  if (!tool)
-    return false;
-  const requireApproval = tool.function.requireApproval;
-  if (typeof requireApproval === "function") {
-    return requireApproval(toolCall.arguments, context);
-  }
-  return requireApproval ?? false;
-}
-async function partitionToolCalls(toolCalls, tools, context, callLevelCheck) {
-  const requiresApproval = [];
-  const autoExecute = [];
-  for (const tc of toolCalls) {
-    if (await toolRequiresApproval(tc, tools, context, callLevelCheck)) {
-      requiresApproval.push(tc);
-    } else {
-      autoExecute.push(tc);
-    }
-  }
-  return { requiresApproval, autoExecute };
-}
-function createUnsentResult(callId, name, output) {
-  const result = { callId, name, output };
-  if (!isValidUnsentToolResult(result)) {
-    throw new Error("Invalid UnsentToolResult structure");
-  }
-  return result;
-}
-function createRejectedResult(callId, name, reason) {
-  const result = {
-    callId,
-    name,
-    output: null,
-    error: reason ?? "Tool call rejected by user"
-  };
-  if (!isValidUnsentToolResult(result)) {
-    throw new Error("Invalid UnsentToolResult structure");
-  }
-  return result;
-}
-function unsentResultsToAPIFormat(results) {
-  return results.map((r) => ({
-    type: "function_call_output",
-    id: `output_${r.callId}`,
-    callId: r.callId,
-    output: r.error ? JSON.stringify({ error: r.error }) : JSON.stringify(r.output)
-  }));
-}
-function extractTextFromResponse2(response) {
-  if (!response.output) {
-    return "";
-  }
-  const outputs = Array.isArray(response.output) ? response.output : [response.output];
-  const textParts = [];
-  for (const item of outputs) {
-    if (item.type === "message" && item.content) {
-      for (const content of item.content) {
-        if (content.type === "output_text" && content.text) {
-          textParts.push(content.text);
-        }
-      }
-    }
-  }
-  return textParts.join("");
-}
-var init_conversation_state = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/conversation-state.js"() {
-    init_turn_context();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/tool-event-broadcaster.js
-var ToolEventBroadcaster;
-var init_tool_event_broadcaster = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/tool-event-broadcaster.js"() {
-    ToolEventBroadcaster = class {
-      constructor() {
-        this.buffer = [];
-        this.consumers = /* @__PURE__ */ new Map();
-        this.nextConsumerId = 0;
-        this.isComplete = false;
-        this.completionError = null;
-      }
-      /**
-       * Push a new event to all consumers.
-       * Events are buffered so late-joining consumers can catch up.
-       */
-      push(event) {
-        if (this.isComplete) {
-          return;
-        }
-        this.buffer.push(event);
-        this.notifyWaitingConsumers();
-      }
-      /**
-       * Mark the broadcaster as complete - no more events will be pushed.
-       * Optionally pass an error to signal failure to all consumers.
-       * Cleans up buffer and consumers after completion.
-       */
-      complete(error48) {
-        this.isComplete = true;
-        this.completionError = error48 ?? null;
-        this.notifyWaitingConsumers();
-        queueMicrotask(() => this.cleanup());
-      }
-      /**
-       * Clean up resources after all consumers have finished.
-       * Called automatically after complete(), but can be called manually.
-       */
-      cleanup() {
-        if (this.isComplete && this.consumers.size === 0) {
-          this.buffer = [];
-        }
-      }
-      /**
-       * Create a new consumer that can independently iterate over events.
-       * Consumers can join at any time and will receive events from position 0.
-       * Multiple consumers can be created and will all receive the same events.
-       */
-      createConsumer() {
-        const consumerId = this.nextConsumerId++;
-        const state = {
-          position: 0,
-          waitingPromise: null,
-          cancelled: false
-        };
-        this.consumers.set(consumerId, state);
-        const self = this;
-        return {
-          async next() {
-            const consumer = self.consumers.get(consumerId);
-            if (!consumer) {
-              return { done: true, value: void 0 };
-            }
-            if (consumer.cancelled) {
-              return { done: true, value: void 0 };
-            }
-            if (consumer.position < self.buffer.length) {
-              const value = self.buffer[consumer.position];
-              consumer.position++;
-              return { done: false, value };
-            }
-            if (self.isComplete) {
-              self.consumers.delete(consumerId);
-              self.cleanup();
-              if (self.completionError) {
-                throw self.completionError;
-              }
-              return { done: true, value: void 0 };
-            }
-            const waitPromise = new Promise((resolve, reject) => {
-              consumer.waitingPromise = { resolve, reject };
-              if (self.isComplete || self.completionError || consumer.position < self.buffer.length) {
-                resolve();
-              }
-            });
-            await waitPromise;
-            consumer.waitingPromise = null;
-            return this.next();
-          },
-          async return() {
-            const consumer = self.consumers.get(consumerId);
-            if (consumer) {
-              consumer.cancelled = true;
-              self.consumers.delete(consumerId);
-              self.cleanup();
-            }
-            return { done: true, value: void 0 };
-          },
-          async throw(e) {
-            const consumer = self.consumers.get(consumerId);
-            if (consumer) {
-              consumer.cancelled = true;
-              self.consumers.delete(consumerId);
-              self.cleanup();
-            }
-            throw e;
-          },
-          [Symbol.asyncIterator]() {
-            return this;
-          }
-        };
-      }
-      /**
-       * Notify all waiting consumers that new data is available or stream completed
-       */
-      notifyWaitingConsumers() {
-        for (const consumer of this.consumers.values()) {
-          if (consumer.waitingPromise) {
-            if (this.completionError) {
-              consumer.waitingPromise.reject(this.completionError);
-            } else {
-              consumer.waitingPromise.resolve();
-            }
-            consumer.waitingPromise = null;
-          }
-        }
-      }
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/hooks/registration.js
-function initHooks(_hooks) {
-}
-var init_registration = __esm({
-  "node_modules/@openrouter/sdk/esm/hooks/registration.js"() {
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/hooks/hooks.js
-var SDKHooks;
-var init_hooks = __esm({
-  "node_modules/@openrouter/sdk/esm/hooks/hooks.js"() {
-    init_registration();
-    SDKHooks = class {
-      constructor() {
-        this.sdkInitHooks = [];
-        this.beforeCreateRequestHooks = [];
-        this.beforeRequestHooks = [];
-        this.afterSuccessHooks = [];
-        this.afterErrorHooks = [];
-        const presetHooks = [];
-        for (const hook of presetHooks) {
-          if ("sdkInit" in hook) {
-            this.registerSDKInitHook(hook);
-          }
-          if ("beforeCreateRequest" in hook) {
-            this.registerBeforeCreateRequestHook(hook);
-          }
-          if ("beforeRequest" in hook) {
-            this.registerBeforeRequestHook(hook);
-          }
-          if ("afterSuccess" in hook) {
-            this.registerAfterSuccessHook(hook);
-          }
-          if ("afterError" in hook) {
-            this.registerAfterErrorHook(hook);
-          }
-        }
-        initHooks(this);
-      }
-      registerSDKInitHook(hook) {
-        this.sdkInitHooks.push(hook);
-      }
-      registerBeforeCreateRequestHook(hook) {
-        this.beforeCreateRequestHooks.push(hook);
-      }
-      registerBeforeRequestHook(hook) {
-        this.beforeRequestHooks.push(hook);
-      }
-      registerAfterSuccessHook(hook) {
-        this.afterSuccessHooks.push(hook);
-      }
-      registerAfterErrorHook(hook) {
-        this.afterErrorHooks.push(hook);
-      }
-      sdkInit(opts) {
-        return this.sdkInitHooks.reduce((opts2, hook) => hook.sdkInit(opts2), opts);
-      }
-      beforeCreateRequest(hookCtx, input) {
-        let inp = input;
-        for (const hook of this.beforeCreateRequestHooks) {
-          inp = hook.beforeCreateRequest(hookCtx, inp);
-        }
-        return inp;
-      }
-      async beforeRequest(hookCtx, request) {
-        let req = request;
-        for (const hook of this.beforeRequestHooks) {
-          req = await hook.beforeRequest(hookCtx, req);
-        }
-        return req;
-      }
-      async afterSuccess(hookCtx, response) {
-        let res = response;
-        for (const hook of this.afterSuccessHooks) {
-          res = await hook.afterSuccess(hookCtx, res);
-        }
-        return res;
-      }
-      async afterError(hookCtx, response, error48) {
-        let res = response;
-        let err = error48;
-        for (const hook of this.afterErrorHooks) {
-          const result = await hook.afterError(hookCtx, res, err);
-          res = result.response;
-          err = result.error;
-        }
-        return { response: res, error: err };
-      }
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/errors/httpclienterrors.js
-var HTTPClientError, UnexpectedClientError, InvalidRequestError, RequestAbortedError, RequestTimeoutError, ConnectionError;
-var init_httpclienterrors = __esm({
-  "node_modules/@openrouter/sdk/esm/models/errors/httpclienterrors.js"() {
-    HTTPClientError = class extends Error {
-      constructor(message, opts) {
-        let msg = message;
-        if (opts?.cause) {
-          msg += `: ${opts.cause}`;
-        }
-        super(msg, opts);
-        this.name = "HTTPClientError";
-        if (typeof this.cause === "undefined") {
-          this.cause = opts?.cause;
-        }
-      }
-    };
-    UnexpectedClientError = class extends HTTPClientError {
-      constructor() {
-        super(...arguments);
-        this.name = "UnexpectedClientError";
-      }
-    };
-    InvalidRequestError = class extends HTTPClientError {
-      constructor() {
-        super(...arguments);
-        this.name = "InvalidRequestError";
-      }
-    };
-    RequestAbortedError = class extends HTTPClientError {
-      constructor() {
-        super(...arguments);
-        this.name = "RequestAbortedError";
-      }
-    };
-    RequestTimeoutError = class extends HTTPClientError {
-      constructor() {
-        super(...arguments);
-        this.name = "RequestTimeoutError";
-      }
-    };
-    ConnectionError = class extends HTTPClientError {
-      constructor() {
-        super(...arguments);
-        this.name = "ConnectionError";
-      }
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/base64.js
-function bytesToBase64(u8arr) {
-  return btoa(String.fromCodePoint(...u8arr));
-}
-function bytesFromBase64(encoded) {
-  return Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));
-}
-function stringToBytes(str) {
-  return new TextEncoder().encode(str);
-}
-function stringToBase64(str) {
-  return bytesToBase64(stringToBytes(str));
-}
-var zodOutbound, zodInbound;
-var init_base64 = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/base64.js"() {
-    init_v4();
-    zodOutbound = custom((x) => x instanceof Uint8Array).or(string2().transform(stringToBytes));
-    zodInbound = custom((x) => x instanceof Uint8Array).or(string2().transform(bytesFromBase64));
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/is-plain-object.js
-function isPlainObject2(value) {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-  const prototype = Object.getPrototypeOf(value);
-  return (prototype === null || prototype === Object.prototype || Object.getPrototypeOf(prototype) === null) && !(Symbol.toStringTag in value) && !(Symbol.iterator in value);
-}
-var init_is_plain_object = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/is-plain-object.js"() {
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/encodings.js
-function formEncoder(sep) {
-  return (key, value, options) => {
-    let out = "";
-    const pairs = options?.explode ? explode(key, value) : [[key, value]];
-    if (pairs.every(([_, v]) => v == null)) {
-      return;
-    }
-    const encodeString = (v) => {
-      return options?.charEncoding === "percent" ? encodeURIComponent(v) : v;
-    };
-    const encodeValue = (v) => encodeString(serializeValue(v));
-    const encodedSep = encodeString(sep);
-    pairs.forEach(([pk, pv]) => {
-      let tmp = "";
-      let encValue = null;
-      if (pv == null) {
-        return;
-      } else if (Array.isArray(pv)) {
-        encValue = mapDefined(pv, (v) => `${encodeValue(v)}`)?.join(encodedSep);
-      } else if (isPlainObject2(pv)) {
-        encValue = mapDefinedEntries(Object.entries(pv), ([k, v]) => {
-          return `${encodeString(k)}${encodedSep}${encodeValue(v)}`;
-        })?.join(encodedSep);
-      } else {
-        encValue = `${encodeValue(pv)}`;
-      }
-      if (encValue == null) {
-        return;
-      }
-      tmp = `${encodeString(pk)}=${encValue}`;
-      if (!tmp || tmp === "=") {
-        return;
-      }
-      out += `&${tmp}`;
-    });
-    return out.slice(1);
-  };
-}
-function encodeDeepObject(key, value, options) {
-  if (value == null) {
-    return;
-  }
-  if (!isPlainObject2(value)) {
-    throw new EncodingError(`Value of parameter '${key}' which uses deepObject encoding must be an object or null`);
-  }
-  return encodeDeepObjectObject(key, value, options);
-}
-function encodeDeepObjectObject(key, value, options) {
-  if (value == null) {
-    return;
-  }
-  let out = "";
-  const encodeString = (v) => {
-    return options?.charEncoding === "percent" ? encodeURIComponent(v) : v;
-  };
-  if (!isPlainObject2(value)) {
-    throw new EncodingError(`Expected parameter '${key}' to be an object.`);
-  }
-  Object.entries(value).forEach(([ck, cv]) => {
-    if (cv == null) {
-      return;
-    }
-    const pk = `${key}[${ck}]`;
-    if (isPlainObject2(cv)) {
-      const objOut = encodeDeepObjectObject(pk, cv, options);
-      out += objOut == null ? "" : `&${objOut}`;
-      return;
-    }
-    const pairs = Array.isArray(cv) ? cv : [cv];
-    const encoded = mapDefined(pairs, (v) => {
-      return `${encodeString(pk)}=${encodeString(serializeValue(v))}`;
-    })?.join("&");
-    out += encoded == null ? "" : `&${encoded}`;
-  });
-  return out.slice(1);
-}
-function encodeJSON(key, value, options) {
-  if (typeof value === "undefined") {
-    return;
-  }
-  const encodeString = (v) => {
-    return options?.charEncoding === "percent" ? encodeURIComponent(v) : v;
-  };
-  const encVal = encodeString(JSON.stringify(value, jsonReplacer));
-  return options?.explode ? encVal : `${encodeString(key)}=${encVal}`;
-}
-function explode(key, value) {
-  if (Array.isArray(value)) {
-    return value.map((v) => [key, v]);
-  } else if (isPlainObject2(value)) {
-    const o = value ?? {};
-    return Object.entries(o).map(([k, v]) => [k, v]);
-  } else {
-    return [[key, value]];
-  }
-}
-function serializeValue(value) {
-  if (value == null) {
-    return "";
-  } else if (value instanceof Date) {
-    return value.toISOString();
-  } else if (value instanceof Uint8Array) {
-    return bytesToBase64(value);
-  } else if (typeof value === "object") {
-    return JSON.stringify(value, jsonReplacer);
-  }
-  return `${value}`;
-}
-function jsonReplacer(_, value) {
-  if (value instanceof Uint8Array) {
-    return bytesToBase64(value);
-  } else {
-    return value;
-  }
-}
-function mapDefined(inp, mapper) {
-  const res = inp.reduce((acc, v) => {
-    if (v == null) {
-      return acc;
-    }
-    const m = mapper(v);
-    if (m == null) {
-      return acc;
-    }
-    acc.push(m);
-    return acc;
-  }, []);
-  return res.length ? res : null;
-}
-function mapDefinedEntries(inp, mapper) {
-  const acc = [];
-  for (const [k, v] of inp) {
-    if (v == null) {
-      continue;
-    }
-    const m = mapper([k, v]);
-    if (m == null) {
-      continue;
-    }
-    acc.push(m);
-  }
-  return acc.length ? acc : null;
-}
-function queryJoin(...args) {
-  return args.filter(Boolean).join("&");
-}
-function queryEncoder(f) {
-  const bulkEncode = function(values, options) {
-    const opts = {
-      ...options,
-      explode: options?.explode ?? true,
-      charEncoding: options?.charEncoding ?? "percent"
-    };
-    const allowEmptySet = new Set(options?.allowEmptyValue ?? []);
-    const encoded = Object.entries(values).map(([key, value]) => {
-      if (allowEmptySet.has(key)) {
-        if (value === void 0 || value === null || value === "" || Array.isArray(value) && value.length === 0) {
-          return `${encodeURIComponent(key)}=`;
-        }
-      }
-      return f(key, value, opts);
-    });
-    return queryJoin(...encoded);
-  };
-  return bulkEncode;
-}
-var EncodingError, encodeForm, encodeSpaceDelimited, encodePipeDelimited, encodeSimple, encodeJSONQuery, encodeFormQuery, encodeSpaceDelimitedQuery, encodePipeDelimitedQuery, encodeDeepObjectQuery;
-var init_encodings = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/encodings.js"() {
-    init_base64();
-    init_is_plain_object();
-    EncodingError = class extends Error {
-      constructor(message) {
-        super(message);
-        this.name = "EncodingError";
-      }
-    };
-    encodeForm = formEncoder(",");
-    encodeSpaceDelimited = formEncoder(" ");
-    encodePipeDelimited = formEncoder("|");
-    encodeSimple = (key, value, options) => {
-      let out = "";
-      const pairs = options?.explode ? explode(key, value) : [[key, value]];
-      if (pairs.every(([_, v]) => v == null)) {
-        return;
-      }
-      const encodeString = (v) => {
-        return options?.charEncoding === "percent" ? encodeURIComponent(v) : v;
-      };
-      const encodeValue = (v) => encodeString(serializeValue(v));
-      pairs.forEach(([pk, pv]) => {
-        let tmp = "";
-        if (pv == null) {
-          return;
-        } else if (Array.isArray(pv)) {
-          tmp = mapDefined(pv, (v) => `${encodeValue(v)}`)?.join(",");
-        } else if (isPlainObject2(pv)) {
-          const mapped = mapDefinedEntries(Object.entries(pv), ([k, v]) => {
-            return `,${encodeString(k)},${encodeValue(v)}`;
-          });
-          tmp = mapped?.join("").slice(1);
-        } else {
-          const k = options?.explode && isPlainObject2(value) ? `${pk}=` : "";
-          tmp = `${k}${encodeValue(pv)}`;
-        }
-        out += tmp ? `,${tmp}` : "";
-      });
-      return out.slice(1);
-    };
-    encodeJSONQuery = queryEncoder(encodeJSON);
-    encodeFormQuery = queryEncoder(encodeForm);
-    encodeSpaceDelimitedQuery = queryEncoder(encodeSpaceDelimited);
-    encodePipeDelimitedQuery = queryEncoder(encodePipeDelimited);
-    encodeDeepObjectQuery = queryEncoder(encodeDeepObject);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/dlv.js
-function dlv(obj, key, def, p, undef) {
-  key = Array.isArray(key) ? key : key.split(".");
-  for (p = 0; p < key.length; p++) {
-    const k = key[p];
-    obj = k != null && obj ? obj[k] : undef;
-  }
-  return obj === undef ? def : obj;
-}
-var init_dlv = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/dlv.js"() {
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/env.js
-function isDeno() {
-  if ("Deno" in globalThis) {
-    return true;
-  }
-  return false;
-}
-function env() {
-  if (envMemo) {
-    return envMemo;
-  }
-  let envObject = {};
-  if (isDeno()) {
-    envObject = globalThis.Deno?.env?.toObject?.() ?? {};
-  } else {
-    envObject = dlv(globalThis, "process.env") ?? {};
-  }
-  envMemo = envSchema.parse(envObject);
-  return envMemo;
-}
-function fillGlobals(options) {
-  const clone2 = { ...options };
-  const envVars = env();
-  if (typeof envVars.OPENROUTER_HTTP_REFERER !== "undefined") {
-    clone2.httpReferer ?? (clone2.httpReferer = envVars.OPENROUTER_HTTP_REFERER);
-  }
-  if (typeof envVars.OPENROUTER_X_TITLE !== "undefined") {
-    clone2.xTitle ?? (clone2.xTitle = envVars.OPENROUTER_X_TITLE);
-  }
-  return clone2;
-}
-var envSchema, envMemo;
-var init_env = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/env.js"() {
-    init_v4();
-    init_dlv();
-    envSchema = object({
-      OPENROUTER_API_KEY: string2().optional(),
-      OPENROUTER_HTTP_REFERER: string2().optional(),
-      OPENROUTER_X_TITLE: string2().optional(),
-      OPENROUTER_DEBUG: coerce_exports.boolean().optional()
-    });
-    envMemo = void 0;
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/retries.js
-async function retry(fetchFn, options) {
-  switch (options.config.strategy) {
-    case "backoff":
-      return retryBackoff(wrapFetcher(fetchFn, {
-        statusCodes: options.statusCodes,
-        retryConnectionErrors: !!options.config.retryConnectionErrors
-      }), options.config.backoff ?? defaultBackoff);
-    default:
-      return await fetchFn();
-  }
-}
-function wrapFetcher(fn, options) {
-  return async () => {
-    try {
-      const res = await fn();
-      if (isRetryableResponse(res, options.statusCodes)) {
-        throw new TemporaryError("Response failed with retryable status code", res);
-      }
-      return res;
-    } catch (err) {
-      if (err instanceof TemporaryError) {
-        throw err;
-      }
-      if (options.retryConnectionErrors && (isTimeoutError(err) || isConnectionError(err))) {
-        throw err;
-      }
-      throw new PermanentError("Permanent error", { cause: err });
-    }
-  };
-}
-function isRetryableResponse(res, statusCodes) {
-  const actual = `${res.status}`;
-  return statusCodes.some((code) => {
-    if (!codeRangeRE2.test(code)) {
-      return code === actual;
-    }
-    const expectFamily = code.charAt(0);
-    if (!expectFamily) {
-      throw new Error("Invalid status code range");
-    }
-    const actualFamily = actual.charAt(0);
-    if (!actualFamily) {
-      throw new Error(`Invalid response status code: ${actual}`);
-    }
-    return actualFamily === expectFamily;
-  });
-}
-async function retryBackoff(fn, strategy) {
-  const { maxElapsedTime, initialInterval, exponent, maxInterval } = strategy;
-  const start = Date.now();
-  let x = 0;
-  while (true) {
-    try {
-      const res = await fn();
-      return res;
-    } catch (err) {
-      if (err instanceof PermanentError) {
-        throw err.cause;
-      }
-      const elapsed = Date.now() - start;
-      if (elapsed > maxElapsedTime) {
-        if (err instanceof TemporaryError) {
-          return err.response;
-        }
-        throw err;
-      }
-      let retryInterval = 0;
-      if (err instanceof TemporaryError) {
-        retryInterval = retryIntervalFromResponse(err.response);
-      }
-      if (retryInterval <= 0) {
-        retryInterval = initialInterval * Math.pow(x, exponent) + Math.random() * 1e3;
-      }
-      const d = Math.min(retryInterval, maxInterval);
-      await delay(d);
-      x++;
-    }
-  }
-}
-function retryIntervalFromResponse(res) {
-  const retryVal = res.headers.get("retry-after") || "";
-  if (!retryVal) {
-    return 0;
-  }
-  const parsedNumber = Number(retryVal);
-  if (Number.isInteger(parsedNumber)) {
-    return parsedNumber * 1e3;
-  }
-  const parsedDate = Date.parse(retryVal);
-  if (Number.isInteger(parsedDate)) {
-    const deltaMS = parsedDate - Date.now();
-    return deltaMS > 0 ? Math.ceil(deltaMS) : 0;
-  }
-  return 0;
-}
-async function delay(delay2) {
-  return new Promise((resolve) => setTimeout(resolve, delay2));
-}
-var defaultBackoff, PermanentError, TemporaryError, codeRangeRE2;
-var init_retries = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/retries.js"() {
-    init_http();
-    defaultBackoff = {
-      initialInterval: 500,
-      maxInterval: 6e4,
-      exponent: 1.5,
-      maxElapsedTime: 36e5
-    };
-    PermanentError = class _PermanentError extends Error {
-      constructor(message, options) {
-        let msg = message;
-        if (options?.cause) {
-          msg += `: ${options.cause}`;
-        }
-        super(msg, options);
-        this.name = "PermanentError";
-        if (typeof this.cause === "undefined") {
-          this.cause = options?.cause;
-        }
-        Object.setPrototypeOf(this, _PermanentError.prototype);
-      }
-    };
-    TemporaryError = class _TemporaryError extends Error {
-      constructor(message, response) {
-        super(message);
-        this.response = response;
-        this.name = "TemporaryError";
-        Object.setPrototypeOf(this, _TemporaryError.prototype);
-      }
-    };
-    codeRangeRE2 = new RegExp("^[0-9]xx$", "i");
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/sdks.js
-async function logRequest(logger2, req) {
-  if (!logger2) {
-    return;
-  }
-  const contentType = req.headers.get("content-type");
-  const ct = contentType?.split(";")[0] || "";
-  logger2.group(`> Request: ${req.method} ${req.url}`);
-  logger2.group("Headers:");
-  for (const [k, v] of req.headers.entries()) {
-    logger2.log(`${k}: ${v}`);
-  }
-  logger2.groupEnd();
-  logger2.group("Body:");
-  switch (true) {
-    case jsonLikeContentTypeRE.test(ct):
-      logger2.log(await req.clone().json());
-      break;
-    case ct.startsWith("text/"):
-      logger2.log(await req.clone().text());
-      break;
-    case ct === "multipart/form-data": {
-      const body = await req.clone().formData();
-      for (const [k, v] of body) {
-        const vlabel = v instanceof Blob ? "<Blob>" : v;
-        logger2.log(`${k}: ${vlabel}`);
-      }
-      break;
-    }
-    default:
-      logger2.log(`<${contentType}>`);
-      break;
-  }
-  logger2.groupEnd();
-  logger2.groupEnd();
-}
-async function logResponse(logger2, res, req) {
-  if (!logger2) {
-    return;
-  }
-  const contentType = res.headers.get("content-type");
-  const ct = contentType?.split(";")[0] || "";
-  logger2.group(`< Response: ${req.method} ${req.url}`);
-  logger2.log("Status Code:", res.status, res.statusText);
-  logger2.group("Headers:");
-  for (const [k, v] of res.headers.entries()) {
-    logger2.log(`${k}: ${v}`);
-  }
-  logger2.groupEnd();
-  logger2.group("Body:");
-  switch (true) {
-    case (matchContentType(res, "application/json") || jsonLikeContentTypeRE.test(ct) && !jsonlLikeContentTypeRE.test(ct)):
-      logger2.log(await res.clone().json());
-      break;
-    case (matchContentType(res, "application/jsonl") || jsonlLikeContentTypeRE.test(ct)):
-      logger2.log(await res.clone().text());
-      break;
-    case matchContentType(res, "text/event-stream"):
-      logger2.log(`<${contentType}>`);
-      break;
-    case matchContentType(res, "text/*"):
-      logger2.log(await res.clone().text());
-      break;
-    case matchContentType(res, "multipart/form-data"): {
-      const body = await res.clone().formData();
-      for (const [k, v] of body) {
-        const vlabel = v instanceof Blob ? "<Blob>" : v;
-        logger2.log(`${k}: ${vlabel}`);
-      }
-      break;
-    }
-    default:
-      logger2.log(`<${contentType}>`);
-      break;
-  }
-  logger2.groupEnd();
-  logger2.groupEnd();
-}
-var __classPrivateFieldSet, __classPrivateFieldGet, _ClientSDK_instances, _ClientSDK_httpClient, _ClientSDK_hooks, _ClientSDK_logger, _ClientSDK_registerHook, gt, webWorkerLike, isBrowserLike, ClientSDK, jsonLikeContentTypeRE, jsonlLikeContentTypeRE;
-var init_sdks = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/sdks.js"() {
-    init_hooks();
-    init_httpclienterrors();
-    init_fp();
-    init_base64();
-    init_config();
-    init_encodings();
-    init_env();
-    init_http();
-    init_retries();
-    __classPrivateFieldSet = function(receiver, state, value, kind, f) {
-      if (kind === "m") throw new TypeError("Private method is not writable");
-      if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a setter");
-      if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot write private member to an object whose class did not declare it");
-      return kind === "a" ? f.call(receiver, value) : f ? f.value = value : state.set(receiver, value), value;
-    };
-    __classPrivateFieldGet = function(receiver, state, kind, f) {
-      if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a getter");
-      if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
-      return kind === "m" ? f : kind === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
-    };
-    gt = typeof globalThis === "undefined" ? null : globalThis;
-    webWorkerLike = typeof gt === "object" && gt != null && "importScripts" in gt && typeof gt["importScripts"] === "function";
-    isBrowserLike = webWorkerLike || typeof navigator !== "undefined" && "serviceWorker" in navigator || typeof window === "object" && typeof window.document !== "undefined";
-    ClientSDK = class {
-      constructor(options = {}) {
-        _ClientSDK_instances.add(this);
-        _ClientSDK_httpClient.set(this, void 0);
-        _ClientSDK_hooks.set(this, void 0);
-        _ClientSDK_logger.set(this, void 0);
-        if (options.hooks instanceof SDKHooks) {
-          __classPrivateFieldSet(this, _ClientSDK_hooks, options.hooks, "f");
-        } else {
-          __classPrivateFieldSet(this, _ClientSDK_hooks, new SDKHooks(), "f");
-          if (options.hooks) {
-            const hooksArray = Array.isArray(options.hooks) ? options.hooks : [options.hooks];
-            for (const hook of hooksArray) {
-              __classPrivateFieldGet(this, _ClientSDK_instances, "m", _ClientSDK_registerHook).call(this, hook);
-            }
-          }
-        }
-        const defaultHttpClient = new HTTPClient();
-        options.httpClient = options.httpClient || defaultHttpClient;
-        options = __classPrivateFieldGet(this, _ClientSDK_hooks, "f").sdkInit(options);
-        const url2 = serverURLFromOptions(options);
-        if (url2) {
-          url2.pathname = url2.pathname.replace(/\/+$/, "") + "/";
-        }
-        this._baseURL = url2;
-        __classPrivateFieldSet(this, _ClientSDK_httpClient, options.httpClient || defaultHttpClient, "f");
-        this._options = { ...fillGlobals(options), hooks: __classPrivateFieldGet(this, _ClientSDK_hooks, "f") };
-        __classPrivateFieldSet(this, _ClientSDK_logger, this._options.debugLogger, "f");
-        if (!__classPrivateFieldGet(this, _ClientSDK_logger, "f") && env().OPENROUTER_DEBUG) {
-          __classPrivateFieldSet(this, _ClientSDK_logger, console, "f");
-        }
-      }
-      _createRequest(context, conf, options) {
-        const { method, path: path3, query, headers: opHeaders, security } = conf;
-        const base = conf.baseURL ?? this._baseURL;
-        if (!base) {
-          return ERR(new InvalidRequestError("No base URL provided for operation"));
-        }
-        const reqURL = new URL(base);
-        const inputURL = new URL(path3, reqURL);
-        if (path3) {
-          reqURL.pathname += reqURL.pathname.endsWith("/") ? "" : "/";
-          reqURL.pathname += inputURL.pathname.replace(/^\/+/, "");
-        }
-        let finalQuery = query || "";
-        const secQuery = [];
-        for (const [k, v] of Object.entries(security?.queryParams || {})) {
-          const q = encodeForm(k, v, { charEncoding: "percent" });
-          if (typeof q !== "undefined") {
-            secQuery.push(q);
-          }
-        }
-        if (secQuery.length) {
-          finalQuery += `&${secQuery.join("&")}`;
-        }
-        if (finalQuery) {
-          const q = finalQuery.startsWith("&") ? finalQuery.slice(1) : finalQuery;
-          reqURL.search = `?${q}`;
-        }
-        const headers = new Headers(opHeaders);
-        const username = security?.basic.username;
-        const password = security?.basic.password;
-        if (username != null || password != null) {
-          const encoded = stringToBase64([username || "", password || ""].join(":"));
-          headers.set("Authorization", `Basic ${encoded}`);
-        }
-        const securityHeaders = new Headers(security?.headers || {});
-        for (const [k, v] of securityHeaders) {
-          headers.set(k, v);
-        }
-        let cookie = headers.get("cookie") || "";
-        for (const [k, v] of Object.entries(security?.cookies || {})) {
-          cookie += `; ${k}=${v}`;
-        }
-        cookie = cookie.startsWith("; ") ? cookie.slice(2) : cookie;
-        headers.set("cookie", cookie);
-        const userHeaders = new Headers(options?.headers ?? options?.fetchOptions?.headers);
-        for (const [k, v] of userHeaders) {
-          headers.set(k, v);
-        }
-        if (!isBrowserLike) {
-          headers.set(conf.uaHeader ?? "user-agent", conf.userAgent ?? SDK_METADATA.userAgent);
-        }
-        const fetchOptions = {
-          ...options?.fetchOptions,
-          ...options
-        };
-        if (!fetchOptions?.signal && conf.timeoutMs && conf.timeoutMs > 0) {
-          const timeoutSignal = AbortSignal.timeout(conf.timeoutMs);
-          fetchOptions.signal = timeoutSignal;
-        }
-        if (conf.body instanceof ReadableStream) {
-          Object.assign(fetchOptions, { duplex: "half" });
-        }
-        let input;
-        try {
-          input = __classPrivateFieldGet(this, _ClientSDK_hooks, "f").beforeCreateRequest(context, {
-            url: reqURL,
-            options: {
-              ...fetchOptions,
-              body: conf.body ?? null,
-              headers,
-              method
-            }
-          });
-        } catch (err) {
-          return ERR(new UnexpectedClientError("Create request hook failed to execute", {
-            cause: err
-          }));
-        }
-        return OK(new Request(input.url, input.options));
-      }
-      async _do(request, options) {
-        const { context, errorCodes } = options;
-        return retry(async () => {
-          const req = await __classPrivateFieldGet(this, _ClientSDK_hooks, "f").beforeRequest(context, request.clone());
-          await logRequest(__classPrivateFieldGet(this, _ClientSDK_logger, "f"), req).catch((e) => __classPrivateFieldGet(this, _ClientSDK_logger, "f")?.log("Failed to log request:", e));
-          let response = await __classPrivateFieldGet(this, _ClientSDK_httpClient, "f").request(req);
-          try {
-            if (matchStatusCode(response, errorCodes)) {
-              const result = await __classPrivateFieldGet(this, _ClientSDK_hooks, "f").afterError(context, response, null);
-              if (result.error) {
-                throw result.error;
-              }
-              response = result.response || response;
-            } else {
-              response = await __classPrivateFieldGet(this, _ClientSDK_hooks, "f").afterSuccess(context, response);
-            }
-          } finally {
-            await logResponse(__classPrivateFieldGet(this, _ClientSDK_logger, "f"), response, req).catch((e) => __classPrivateFieldGet(this, _ClientSDK_logger, "f")?.log("Failed to log response:", e));
-          }
-          return response;
-        }, { config: options.retryConfig, statusCodes: options.retryCodes }).then((r) => OK(r), (err) => {
-          switch (true) {
-            case isAbortError(err):
-              return ERR(new RequestAbortedError("Request aborted by client", {
-                cause: err
-              }));
-            case isTimeoutError(err):
-              return ERR(new RequestTimeoutError("Request timed out", { cause: err }));
-            case isConnectionError(err):
-              return ERR(new ConnectionError("Unable to make request", { cause: err }));
-            default:
-              return ERR(new UnexpectedClientError("Unexpected HTTP client error", {
-                cause: err
-              }));
-          }
-        });
-      }
-    };
-    _ClientSDK_httpClient = /* @__PURE__ */ new WeakMap(), _ClientSDK_hooks = /* @__PURE__ */ new WeakMap(), _ClientSDK_logger = /* @__PURE__ */ new WeakMap(), _ClientSDK_instances = /* @__PURE__ */ new WeakSet(), _ClientSDK_registerHook = function _ClientSDK_registerHook2(hook) {
-      if ("sdkInit" in hook) {
-        __classPrivateFieldGet(this, _ClientSDK_hooks, "f").registerSDKInitHook(hook);
-      }
-      if ("beforeCreateRequest" in hook) {
-        __classPrivateFieldGet(this, _ClientSDK_hooks, "f").registerBeforeCreateRequestHook(hook);
-      }
-      if ("beforeRequest" in hook) {
-        __classPrivateFieldGet(this, _ClientSDK_hooks, "f").registerBeforeRequestHook(hook);
-      }
-      if ("afterSuccess" in hook) {
-        __classPrivateFieldGet(this, _ClientSDK_hooks, "f").registerAfterSuccessHook(hook);
-      }
-      if ("afterError" in hook) {
-        __classPrivateFieldGet(this, _ClientSDK_hooks, "f").registerAfterErrorHook(hook);
-      }
-    };
-    jsonLikeContentTypeRE = /(application|text)\/.*?\+*json.*/;
-    jsonlLikeContentTypeRE = /(application|text)\/(.*?\+*\bjsonl\b.*|.*?\+*\bx-ndjson\b.*)/;
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/errors/openroutererror.js
-var OpenRouterError;
-var init_openroutererror = __esm({
-  "node_modules/@openrouter/sdk/esm/models/errors/openroutererror.js"() {
-    OpenRouterError = class extends Error {
-      constructor(message, httpMeta) {
-        super(message);
-        this.statusCode = httpMeta.response.status;
-        this.body = httpMeta.body;
-        this.headers = httpMeta.response.headers;
-        this.contentType = httpMeta.response.headers.get("content-type") || "";
-        this.rawResponse = httpMeta.response;
-        this.name = "OpenRouterError";
-      }
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/errors/openrouterdefaulterror.js
-var OpenRouterDefaultError;
-var init_openrouterdefaulterror = __esm({
-  "node_modules/@openrouter/sdk/esm/models/errors/openrouterdefaulterror.js"() {
-    init_openroutererror();
-    OpenRouterDefaultError = class extends OpenRouterError {
-      constructor(message, httpMeta) {
-        if (message) {
-          message += `: `;
-        }
-        message += `Status ${httpMeta.response.status}`;
-        const contentType = httpMeta.response.headers.get("content-type") || `""`;
-        if (contentType !== "application/json") {
-          message += ` Content-Type ${contentType.includes(" ") ? `"${contentType}"` : contentType}`;
-        }
-        const body = httpMeta.body || `""`;
-        message += body.length > 100 ? "\n" : ". ";
-        let bodyDisplay = body;
-        if (body.length > 1e4) {
-          const truncated = body.substring(0, 1e4);
-          const remaining = body.length - 1e4;
-          bodyDisplay = `${truncated}...and ${remaining} more chars`;
-        }
-        message += `Body: ${bodyDisplay}`;
-        message = message.trim();
-        super(message, httpMeta);
-        this.name = "OpenRouterDefaultError";
-      }
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/errors/responsevalidationerror.js
-var ResponseValidationError;
-var init_responsevalidationerror = __esm({
-  "node_modules/@openrouter/sdk/esm/models/errors/responsevalidationerror.js"() {
-    init_core2();
-    init_openroutererror();
-    init_sdkvalidationerror();
-    ResponseValidationError = class extends OpenRouterError {
-      constructor(message, extra) {
-        super(message, extra);
-        this.name = "ResponseValidationError";
-        this.cause = extra.cause;
-        this.rawValue = extra.rawValue;
-        this.rawMessage = extra.rawMessage;
-      }
-      /**
-       * Return a pretty-formatted error message if the underlying validation error
-       * is a ZodError or some other recognized error type, otherwise return the
-       * default error message.
-       */
-      pretty() {
-        if (this.cause instanceof $ZodError) {
-          return `${this.rawMessage}
-${formatZodError(this.cause)}`;
-        } else {
-          return this.toString();
-        }
-      }
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/matchers.js
-function jsonErr(codes, schema, options) {
-  return { ...options, err: true, enc: "json", codes, schema };
-}
-function json2(codes, schema, options) {
-  return { ...options, enc: "json", codes, schema };
-}
-function text(codes, schema, options) {
-  return { ...options, enc: "text", codes, schema };
-}
-function sse(codes, schema, options) {
-  return { ...options, enc: "sse", codes, schema };
-}
-function fail(codes) {
-  return { enc: "fail", codes };
-}
-function match(...matchers) {
-  return async function matchFunc(response, request, options) {
-    let raw;
-    let matcher;
-    for (const match2 of matchers) {
-      const { codes } = match2;
-      const ctpattern = "ctype" in match2 ? match2.ctype : DEFAULT_CONTENT_TYPES[match2.enc];
-      if (ctpattern && matchResponse(response, codes, ctpattern)) {
-        matcher = match2;
-        break;
-      } else if (!ctpattern && matchStatusCode(response, codes)) {
-        matcher = match2;
-        break;
-      }
-    }
-    if (!matcher) {
-      return [{
-        ok: false,
-        error: new OpenRouterDefaultError("Unexpected Status or Content-Type", {
-          response,
-          request,
-          body: await response.text().catch(() => "")
-        })
-      }, raw];
-    }
-    const encoding = matcher.enc;
-    let body = "";
-    switch (encoding) {
-      case "json":
-        body = await response.text();
-        raw = JSON.parse(body);
-        break;
-      case "jsonl":
-        raw = response.body;
-        break;
-      case "bytes":
-        raw = new Uint8Array(await response.arrayBuffer());
-        break;
-      case "stream":
-        raw = response.body;
-        break;
-      case "text":
-        body = await response.text();
-        raw = body;
-        break;
-      case "sse":
-        raw = response.body;
-        break;
-      case "nil":
-        body = await response.text();
-        raw = void 0;
-        break;
-      case "fail":
-        body = await response.text();
-        raw = body;
-        break;
-      default:
-        encoding;
-        throw new Error(`Unsupported response type: ${encoding}`);
-    }
-    if (matcher.enc === "fail") {
-      return [{
-        ok: false,
-        error: new OpenRouterDefaultError("API error occurred", {
-          request,
-          response,
-          body
-        })
-      }, raw];
-    }
-    const resultKey = matcher.key || options?.resultKey;
-    let data;
-    if ("err" in matcher) {
-      data = {
-        ...options?.extraFields,
-        ...matcher.hdrs ? { Headers: unpackHeaders(response.headers) } : null,
-        ...isPlainObject2(raw) ? raw : null,
-        request$: request,
-        response$: response,
-        body$: body
-      };
-    } else if (resultKey) {
-      data = {
-        ...options?.extraFields,
-        ...matcher.hdrs ? { Headers: unpackHeaders(response.headers) } : null,
-        [resultKey]: raw
-      };
-    } else if (matcher.hdrs) {
-      data = {
-        ...options?.extraFields,
-        ...matcher.hdrs ? { Headers: unpackHeaders(response.headers) } : null,
-        ...isPlainObject2(raw) ? raw : null
-      };
-    } else {
-      data = raw;
-    }
-    if ("err" in matcher) {
-      const result = safeParseResponse(data, (v) => matcher.schema.parse(v), "Response validation failed", { request, response, body });
-      return [result.ok ? { ok: false, error: result.value } : result, raw];
-    } else {
-      return [
-        safeParseResponse(data, (v) => matcher.schema.parse(v), "Response validation failed", { request, response, body }),
-        raw
-      ];
-    }
-  };
-}
-function unpackHeaders(headers) {
-  const out = {};
-  for (const [k, v] of headers.entries()) {
-    out[k] = v.split(headerValRE);
-  }
-  return out;
-}
-function safeParseResponse(rawValue, fn, errorMessage, httpMeta) {
-  try {
-    return OK(fn(rawValue));
-  } catch (err) {
-    return ERR(new ResponseValidationError(errorMessage, {
-      cause: err,
-      rawValue,
-      rawMessage: errorMessage,
-      ...httpMeta
-    }));
-  }
-}
-var DEFAULT_CONTENT_TYPES, headerValRE;
-var init_matchers = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/matchers.js"() {
-    init_openrouterdefaulterror();
-    init_responsevalidationerror();
-    init_fp();
-    init_http();
-    init_is_plain_object();
-    DEFAULT_CONTENT_TYPES = {
-      jsonl: "application/jsonl",
-      json: "application/json",
-      text: "text/plain",
-      bytes: "application/octet-stream",
-      stream: "application/octet-stream",
-      sse: "text/event-stream",
-      nil: "*",
-      fail: "*"
-    };
-    headerValRE = /, */;
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/security.js
-function resolveSecurity(...options) {
-  const state = {
-    basic: {},
-    headers: {},
-    queryParams: {},
-    cookies: {},
-    oauth2: { type: "none" }
-  };
-  const option = options.find((opts) => {
-    return opts.every((o) => {
-      if (o.value == null) {
-        return false;
-      } else if (o.type === "http:basic") {
-        return o.value.username != null || o.value.password != null;
-      } else if (o.type === "http:custom") {
-        return null;
-      } else if (o.type === "oauth2:password") {
-        return typeof o.value === "string" && !!o.value;
-      } else if (o.type === "oauth2:client_credentials") {
-        if (typeof o.value == "string") {
-          return !!o.value;
-        }
-        return o.value.clientID != null || o.value.clientSecret != null;
-      } else if (typeof o.value === "string") {
-        return !!o.value;
-      } else {
-        throw new Error(`Unrecognized security type: ${o.type} (value type: ${typeof o.value})`);
-      }
-    });
-  });
-  if (option == null) {
-    return null;
-  }
-  option.forEach((spec) => {
-    if (spec.value == null) {
-      return;
-    }
-    const { type } = spec;
-    switch (type) {
-      case "apiKey:header":
-        state.headers[spec.fieldName] = spec.value;
-        break;
-      case "apiKey:query":
-        state.queryParams[spec.fieldName] = spec.value;
-        break;
-      case "apiKey:cookie":
-        state.cookies[spec.fieldName] = spec.value;
-        break;
-      case "http:basic":
-        applyBasic(state, spec);
-        break;
-      case "http:custom":
-        break;
-      case "http:bearer":
-        applyBearer(state, spec);
-        break;
-      case "oauth2":
-        applyBearer(state, spec);
-        break;
-      case "oauth2:password":
-        applyBearer(state, spec);
-        break;
-      case "oauth2:client_credentials":
-        break;
-      case "openIdConnect":
-        applyBearer(state, spec);
-        break;
-      default:
-        spec;
-        throw SecurityError.unrecognizedType(type);
-    }
-  });
-  return state;
-}
-function applyBasic(state, spec) {
-  if (spec.value == null) {
-    return;
-  }
-  state.basic = spec.value;
-}
-function applyBearer(state, spec) {
-  if (typeof spec.value !== "string" || !spec.value) {
-    return;
-  }
-  let value = spec.value;
-  if (value.slice(0, 7).toLowerCase() !== "bearer ") {
-    value = `Bearer ${value}`;
-  }
-  if (spec.fieldName !== void 0) {
-    state.headers[spec.fieldName] = value;
-  }
-}
-function resolveGlobalSecurity(security) {
-  return resolveSecurity([
-    {
-      fieldName: "Authorization",
-      type: "http:bearer",
-      value: security?.apiKey ?? env().OPENROUTER_API_KEY
-    }
-  ]);
-}
-async function extractSecurity(sec) {
-  if (sec == null) {
-    return;
-  }
-  return typeof sec === "function" ? sec() : sec;
-}
-var SecurityErrorCode, SecurityError;
-var init_security2 = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/security.js"() {
-    init_env();
-    (function(SecurityErrorCode2) {
-      SecurityErrorCode2["Incomplete"] = "incomplete";
-      SecurityErrorCode2["UnrecognisedSecurityType"] = "unrecognized_security_type";
-    })(SecurityErrorCode || (SecurityErrorCode = {}));
-    SecurityError = class _SecurityError extends Error {
-      constructor(code, message) {
-        super(message);
-        this.code = code;
-        this.name = "SecurityError";
-      }
-      static incomplete() {
-        return new _SecurityError(SecurityErrorCode.Incomplete, "Security requirements not met in order to perform the operation");
-      }
-      static unrecognizedType(type) {
-        return new _SecurityError(SecurityErrorCode.UnrecognisedSecurityType, `Unrecognised security type: ${type}`);
-      }
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/errors/badgatewayresponseerror.js
-var BadGatewayResponseError, BadGatewayResponseError$inboundSchema;
-var init_badgatewayresponseerror = __esm({
-  "node_modules/@openrouter/sdk/esm/models/errors/badgatewayresponseerror.js"() {
-    init_v4();
-    init_primitives();
-    init_models();
-    init_openroutererror();
-    BadGatewayResponseError = class extends OpenRouterError {
-      constructor(err, httpMeta) {
-        const message = err.error?.message || `API error occurred: ${JSON.stringify(err)}`;
-        super(message, httpMeta);
-        this.data$ = err;
-        this.error = err.error;
-        if (err.userId != null)
-          this.userId = err.userId;
-        this.name = "BadGatewayResponseError";
-      }
-    };
-    BadGatewayResponseError$inboundSchema = object({
-      error: BadGatewayResponseErrorData$inboundSchema,
-      user_id: nullable(string2()).optional(),
-      request$: custom((x) => x instanceof Request),
-      response$: custom((x) => x instanceof Response),
-      body$: string2()
-    }).transform((v) => {
-      const remapped = remap(v, {
-        "user_id": "userId"
-      });
-      return new BadGatewayResponseError(remapped, {
-        request: v.request$,
-        response: v.response$,
-        body: v.body$
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/errors/badrequestresponseerror.js
-var BadRequestResponseError, BadRequestResponseError$inboundSchema;
-var init_badrequestresponseerror = __esm({
-  "node_modules/@openrouter/sdk/esm/models/errors/badrequestresponseerror.js"() {
-    init_v4();
-    init_primitives();
-    init_models();
-    init_openroutererror();
-    BadRequestResponseError = class extends OpenRouterError {
-      constructor(err, httpMeta) {
-        const message = err.error?.message || `API error occurred: ${JSON.stringify(err)}`;
-        super(message, httpMeta);
-        this.data$ = err;
-        this.error = err.error;
-        if (err.userId != null)
-          this.userId = err.userId;
-        this.name = "BadRequestResponseError";
-      }
-    };
-    BadRequestResponseError$inboundSchema = object({
-      error: BadRequestResponseErrorData$inboundSchema,
-      user_id: nullable(string2()).optional(),
-      request$: custom((x) => x instanceof Request),
-      response$: custom((x) => x instanceof Response),
-      body$: string2()
-    }).transform((v) => {
-      const remapped = remap(v, {
-        "user_id": "userId"
-      });
-      return new BadRequestResponseError(remapped, {
-        request: v.request$,
-        response: v.response$,
-        body: v.body$
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/errors/chaterror.js
-var ChatError, ChatError$inboundSchema;
-var init_chaterror2 = __esm({
-  "node_modules/@openrouter/sdk/esm/models/errors/chaterror.js"() {
-    init_v4();
-    init_models();
-    init_openroutererror();
-    ChatError = class extends OpenRouterError {
-      constructor(err, httpMeta) {
-        const message = err.error?.message || `API error occurred: ${JSON.stringify(err)}`;
-        super(message, httpMeta);
-        this.data$ = err;
-        this.error = err.error;
-        this.name = "ChatError";
-      }
-    };
-    ChatError$inboundSchema = object({
-      error: lazy(() => ChatErrorError$inboundSchema),
-      request$: custom((x) => x instanceof Request),
-      response$: custom((x) => x instanceof Response),
-      body$: string2()
-    }).transform((v) => {
-      return new ChatError(v, {
-        request: v.request$,
-        response: v.response$,
-        body: v.body$
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/errors/edgenetworktimeoutresponseerror.js
-var EdgeNetworkTimeoutResponseError, EdgeNetworkTimeoutResponseError$inboundSchema;
-var init_edgenetworktimeoutresponseerror = __esm({
-  "node_modules/@openrouter/sdk/esm/models/errors/edgenetworktimeoutresponseerror.js"() {
-    init_v4();
-    init_primitives();
-    init_models();
-    init_openroutererror();
-    EdgeNetworkTimeoutResponseError = class extends OpenRouterError {
-      constructor(err, httpMeta) {
-        const message = err.error?.message || `API error occurred: ${JSON.stringify(err)}`;
-        super(message, httpMeta);
-        this.data$ = err;
-        this.error = err.error;
-        if (err.userId != null)
-          this.userId = err.userId;
-        this.name = "EdgeNetworkTimeoutResponseError";
-      }
-    };
-    EdgeNetworkTimeoutResponseError$inboundSchema = object({
-      error: EdgeNetworkTimeoutResponseErrorData$inboundSchema,
-      user_id: nullable(string2()).optional(),
-      request$: custom((x) => x instanceof Request),
-      response$: custom((x) => x instanceof Response),
-      body$: string2()
-    }).transform((v) => {
-      const remapped = remap(v, {
-        "user_id": "userId"
-      });
-      return new EdgeNetworkTimeoutResponseError(remapped, {
-        request: v.request$,
-        response: v.response$,
-        body: v.body$
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/errors/forbiddenresponseerror.js
-var ForbiddenResponseError, ForbiddenResponseError$inboundSchema;
-var init_forbiddenresponseerror = __esm({
-  "node_modules/@openrouter/sdk/esm/models/errors/forbiddenresponseerror.js"() {
-    init_v4();
-    init_primitives();
-    init_models();
-    init_openroutererror();
-    ForbiddenResponseError = class extends OpenRouterError {
-      constructor(err, httpMeta) {
-        const message = err.error?.message || `API error occurred: ${JSON.stringify(err)}`;
-        super(message, httpMeta);
-        this.data$ = err;
-        this.error = err.error;
-        if (err.userId != null)
-          this.userId = err.userId;
-        this.name = "ForbiddenResponseError";
-      }
-    };
-    ForbiddenResponseError$inboundSchema = object({
-      error: ForbiddenResponseErrorData$inboundSchema,
-      user_id: nullable(string2()).optional(),
-      request$: custom((x) => x instanceof Request),
-      response$: custom((x) => x instanceof Response),
-      body$: string2()
-    }).transform((v) => {
-      const remapped = remap(v, {
-        "user_id": "userId"
-      });
-      return new ForbiddenResponseError(remapped, {
-        request: v.request$,
-        response: v.response$,
-        body: v.body$
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/errors/internalserverresponseerror.js
-var InternalServerResponseError, InternalServerResponseError$inboundSchema;
-var init_internalserverresponseerror = __esm({
-  "node_modules/@openrouter/sdk/esm/models/errors/internalserverresponseerror.js"() {
-    init_v4();
-    init_primitives();
-    init_models();
-    init_openroutererror();
-    InternalServerResponseError = class extends OpenRouterError {
-      constructor(err, httpMeta) {
-        const message = err.error?.message || `API error occurred: ${JSON.stringify(err)}`;
-        super(message, httpMeta);
-        this.data$ = err;
-        this.error = err.error;
-        if (err.userId != null)
-          this.userId = err.userId;
-        this.name = "InternalServerResponseError";
-      }
-    };
-    InternalServerResponseError$inboundSchema = object({
-      error: InternalServerResponseErrorData$inboundSchema,
-      user_id: nullable(string2()).optional(),
-      request$: custom((x) => x instanceof Request),
-      response$: custom((x) => x instanceof Response),
-      body$: string2()
-    }).transform((v) => {
-      const remapped = remap(v, {
-        "user_id": "userId"
-      });
-      return new InternalServerResponseError(remapped, {
-        request: v.request$,
-        response: v.response$,
-        body: v.body$
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/errors/notfoundresponseerror.js
-var NotFoundResponseError, NotFoundResponseError$inboundSchema;
-var init_notfoundresponseerror = __esm({
-  "node_modules/@openrouter/sdk/esm/models/errors/notfoundresponseerror.js"() {
-    init_v4();
-    init_primitives();
-    init_models();
-    init_openroutererror();
-    NotFoundResponseError = class extends OpenRouterError {
-      constructor(err, httpMeta) {
-        const message = err.error?.message || `API error occurred: ${JSON.stringify(err)}`;
-        super(message, httpMeta);
-        this.data$ = err;
-        this.error = err.error;
-        if (err.userId != null)
-          this.userId = err.userId;
-        this.name = "NotFoundResponseError";
-      }
-    };
-    NotFoundResponseError$inboundSchema = object({
-      error: NotFoundResponseErrorData$inboundSchema,
-      user_id: nullable(string2()).optional(),
-      request$: custom((x) => x instanceof Request),
-      response$: custom((x) => x instanceof Response),
-      body$: string2()
-    }).transform((v) => {
-      const remapped = remap(v, {
-        "user_id": "userId"
-      });
-      return new NotFoundResponseError(remapped, {
-        request: v.request$,
-        response: v.response$,
-        body: v.body$
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/errors/payloadtoolargeresponseerror.js
-var PayloadTooLargeResponseError, PayloadTooLargeResponseError$inboundSchema;
-var init_payloadtoolargeresponseerror = __esm({
-  "node_modules/@openrouter/sdk/esm/models/errors/payloadtoolargeresponseerror.js"() {
-    init_v4();
-    init_primitives();
-    init_models();
-    init_openroutererror();
-    PayloadTooLargeResponseError = class extends OpenRouterError {
-      constructor(err, httpMeta) {
-        const message = err.error?.message || `API error occurred: ${JSON.stringify(err)}`;
-        super(message, httpMeta);
-        this.data$ = err;
-        this.error = err.error;
-        if (err.userId != null)
-          this.userId = err.userId;
-        this.name = "PayloadTooLargeResponseError";
-      }
-    };
-    PayloadTooLargeResponseError$inboundSchema = object({
-      error: PayloadTooLargeResponseErrorData$inboundSchema,
-      user_id: nullable(string2()).optional(),
-      request$: custom((x) => x instanceof Request),
-      response$: custom((x) => x instanceof Response),
-      body$: string2()
-    }).transform((v) => {
-      const remapped = remap(v, {
-        "user_id": "userId"
-      });
-      return new PayloadTooLargeResponseError(remapped, {
-        request: v.request$,
-        response: v.response$,
-        body: v.body$
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/errors/paymentrequiredresponseerror.js
-var PaymentRequiredResponseError, PaymentRequiredResponseError$inboundSchema;
-var init_paymentrequiredresponseerror = __esm({
-  "node_modules/@openrouter/sdk/esm/models/errors/paymentrequiredresponseerror.js"() {
-    init_v4();
-    init_primitives();
-    init_models();
-    init_openroutererror();
-    PaymentRequiredResponseError = class extends OpenRouterError {
-      constructor(err, httpMeta) {
-        const message = err.error?.message || `API error occurred: ${JSON.stringify(err)}`;
-        super(message, httpMeta);
-        this.data$ = err;
-        this.error = err.error;
-        if (err.userId != null)
-          this.userId = err.userId;
-        this.name = "PaymentRequiredResponseError";
-      }
-    };
-    PaymentRequiredResponseError$inboundSchema = object({
-      error: PaymentRequiredResponseErrorData$inboundSchema,
-      user_id: nullable(string2()).optional(),
-      request$: custom((x) => x instanceof Request),
-      response$: custom((x) => x instanceof Response),
-      body$: string2()
-    }).transform((v) => {
-      const remapped = remap(v, {
-        "user_id": "userId"
-      });
-      return new PaymentRequiredResponseError(remapped, {
-        request: v.request$,
-        response: v.response$,
-        body: v.body$
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/errors/provideroverloadedresponseerror.js
-var ProviderOverloadedResponseError, ProviderOverloadedResponseError$inboundSchema;
-var init_provideroverloadedresponseerror = __esm({
-  "node_modules/@openrouter/sdk/esm/models/errors/provideroverloadedresponseerror.js"() {
-    init_v4();
-    init_primitives();
-    init_models();
-    init_openroutererror();
-    ProviderOverloadedResponseError = class extends OpenRouterError {
-      constructor(err, httpMeta) {
-        const message = err.error?.message || `API error occurred: ${JSON.stringify(err)}`;
-        super(message, httpMeta);
-        this.data$ = err;
-        this.error = err.error;
-        if (err.userId != null)
-          this.userId = err.userId;
-        this.name = "ProviderOverloadedResponseError";
-      }
-    };
-    ProviderOverloadedResponseError$inboundSchema = object({
-      error: ProviderOverloadedResponseErrorData$inboundSchema,
-      user_id: nullable(string2()).optional(),
-      request$: custom((x) => x instanceof Request),
-      response$: custom((x) => x instanceof Response),
-      body$: string2()
-    }).transform((v) => {
-      const remapped = remap(v, {
-        "user_id": "userId"
-      });
-      return new ProviderOverloadedResponseError(remapped, {
-        request: v.request$,
-        response: v.response$,
-        body: v.body$
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/errors/requesttimeoutresponseerror.js
-var RequestTimeoutResponseError, RequestTimeoutResponseError$inboundSchema;
-var init_requesttimeoutresponseerror = __esm({
-  "node_modules/@openrouter/sdk/esm/models/errors/requesttimeoutresponseerror.js"() {
-    init_v4();
-    init_primitives();
-    init_models();
-    init_openroutererror();
-    RequestTimeoutResponseError = class extends OpenRouterError {
-      constructor(err, httpMeta) {
-        const message = err.error?.message || `API error occurred: ${JSON.stringify(err)}`;
-        super(message, httpMeta);
-        this.data$ = err;
-        this.error = err.error;
-        if (err.userId != null)
-          this.userId = err.userId;
-        this.name = "RequestTimeoutResponseError";
-      }
-    };
-    RequestTimeoutResponseError$inboundSchema = object({
-      error: RequestTimeoutResponseErrorData$inboundSchema,
-      user_id: nullable(string2()).optional(),
-      request$: custom((x) => x instanceof Request),
-      response$: custom((x) => x instanceof Response),
-      body$: string2()
-    }).transform((v) => {
-      const remapped = remap(v, {
-        "user_id": "userId"
-      });
-      return new RequestTimeoutResponseError(remapped, {
-        request: v.request$,
-        response: v.response$,
-        body: v.body$
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/errors/serviceunavailableresponseerror.js
-var ServiceUnavailableResponseError, ServiceUnavailableResponseError$inboundSchema;
-var init_serviceunavailableresponseerror = __esm({
-  "node_modules/@openrouter/sdk/esm/models/errors/serviceunavailableresponseerror.js"() {
-    init_v4();
-    init_primitives();
-    init_models();
-    init_openroutererror();
-    ServiceUnavailableResponseError = class extends OpenRouterError {
-      constructor(err, httpMeta) {
-        const message = err.error?.message || `API error occurred: ${JSON.stringify(err)}`;
-        super(message, httpMeta);
-        this.data$ = err;
-        this.error = err.error;
-        if (err.userId != null)
-          this.userId = err.userId;
-        this.name = "ServiceUnavailableResponseError";
-      }
-    };
-    ServiceUnavailableResponseError$inboundSchema = object({
-      error: ServiceUnavailableResponseErrorData$inboundSchema,
-      user_id: nullable(string2()).optional(),
-      request$: custom((x) => x instanceof Request),
-      response$: custom((x) => x instanceof Response),
-      body$: string2()
-    }).transform((v) => {
-      const remapped = remap(v, {
-        "user_id": "userId"
-      });
-      return new ServiceUnavailableResponseError(remapped, {
-        request: v.request$,
-        response: v.response$,
-        body: v.body$
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/errors/toomanyrequestsresponseerror.js
-var TooManyRequestsResponseError, TooManyRequestsResponseError$inboundSchema;
-var init_toomanyrequestsresponseerror = __esm({
-  "node_modules/@openrouter/sdk/esm/models/errors/toomanyrequestsresponseerror.js"() {
-    init_v4();
-    init_primitives();
-    init_models();
-    init_openroutererror();
-    TooManyRequestsResponseError = class extends OpenRouterError {
-      constructor(err, httpMeta) {
-        const message = err.error?.message || `API error occurred: ${JSON.stringify(err)}`;
-        super(message, httpMeta);
-        this.data$ = err;
-        this.error = err.error;
-        if (err.userId != null)
-          this.userId = err.userId;
-        this.name = "TooManyRequestsResponseError";
-      }
-    };
-    TooManyRequestsResponseError$inboundSchema = object({
-      error: TooManyRequestsResponseErrorData$inboundSchema,
-      user_id: nullable(string2()).optional(),
-      request$: custom((x) => x instanceof Request),
-      response$: custom((x) => x instanceof Response),
-      body$: string2()
-    }).transform((v) => {
-      const remapped = remap(v, {
-        "user_id": "userId"
-      });
-      return new TooManyRequestsResponseError(remapped, {
-        request: v.request$,
-        response: v.response$,
-        body: v.body$
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/errors/unauthorizedresponseerror.js
-var UnauthorizedResponseError, UnauthorizedResponseError$inboundSchema;
-var init_unauthorizedresponseerror = __esm({
-  "node_modules/@openrouter/sdk/esm/models/errors/unauthorizedresponseerror.js"() {
-    init_v4();
-    init_primitives();
-    init_models();
-    init_openroutererror();
-    UnauthorizedResponseError = class extends OpenRouterError {
-      constructor(err, httpMeta) {
-        const message = err.error?.message || `API error occurred: ${JSON.stringify(err)}`;
-        super(message, httpMeta);
-        this.data$ = err;
-        this.error = err.error;
-        if (err.userId != null)
-          this.userId = err.userId;
-        this.name = "UnauthorizedResponseError";
-      }
-    };
-    UnauthorizedResponseError$inboundSchema = object({
-      error: UnauthorizedResponseErrorData$inboundSchema,
-      user_id: nullable(string2()).optional(),
-      request$: custom((x) => x instanceof Request),
-      response$: custom((x) => x instanceof Response),
-      body$: string2()
-    }).transform((v) => {
-      const remapped = remap(v, {
-        "user_id": "userId"
-      });
-      return new UnauthorizedResponseError(remapped, {
-        request: v.request$,
-        response: v.response$,
-        body: v.body$
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/errors/unprocessableentityresponseerror.js
-var UnprocessableEntityResponseError, UnprocessableEntityResponseError$inboundSchema;
-var init_unprocessableentityresponseerror = __esm({
-  "node_modules/@openrouter/sdk/esm/models/errors/unprocessableentityresponseerror.js"() {
-    init_v4();
-    init_primitives();
-    init_models();
-    init_openroutererror();
-    UnprocessableEntityResponseError = class extends OpenRouterError {
-      constructor(err, httpMeta) {
-        const message = err.error?.message || `API error occurred: ${JSON.stringify(err)}`;
-        super(message, httpMeta);
-        this.data$ = err;
-        this.error = err.error;
-        if (err.userId != null)
-          this.userId = err.userId;
-        this.name = "UnprocessableEntityResponseError";
-      }
-    };
-    UnprocessableEntityResponseError$inboundSchema = object({
-      error: UnprocessableEntityResponseErrorData$inboundSchema,
-      user_id: nullable(string2()).optional(),
-      request$: custom((x) => x instanceof Request),
-      response$: custom((x) => x instanceof Response),
-      body$: string2()
-    }).transform((v) => {
-      const remapped = remap(v, {
-        "user_id": "userId"
-      });
-      return new UnprocessableEntityResponseError(remapped, {
-        request: v.request$,
-        response: v.response$,
-        body: v.body$
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/errors/index.js
-var init_errors3 = __esm({
-  "node_modules/@openrouter/sdk/esm/models/errors/index.js"() {
-    init_badgatewayresponseerror();
-    init_badrequestresponseerror();
-    init_chaterror2();
-    init_edgenetworktimeoutresponseerror();
-    init_forbiddenresponseerror();
-    init_httpclienterrors();
-    init_internalserverresponseerror();
-    init_notfoundresponseerror();
-    init_openrouterdefaulterror();
-    init_openroutererror();
-    init_payloadtoolargeresponseerror();
-    init_paymentrequiredresponseerror();
-    init_provideroverloadedresponseerror();
-    init_requesttimeoutresponseerror();
-    init_responsevalidationerror();
-    init_sdkvalidationerror();
-    init_serviceunavailableresponseerror();
-    init_toomanyrequestsresponseerror();
-    init_unauthorizedresponseerror();
-    init_unprocessableentityresponseerror();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/bulkassignkeystoguardrail.js
-var BulkAssignKeysToGuardrailRequestBody$outboundSchema, BulkAssignKeysToGuardrailRequest$outboundSchema, BulkAssignKeysToGuardrailResponse$inboundSchema;
-var init_bulkassignkeystoguardrail = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/bulkassignkeystoguardrail.js"() {
-    init_v4();
-    init_primitives();
-    BulkAssignKeysToGuardrailRequestBody$outboundSchema = object({
-      keyHashes: array(string2())
-    }).transform((v) => {
-      return remap(v, {
-        keyHashes: "key_hashes"
-      });
-    });
-    BulkAssignKeysToGuardrailRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      id: string2(),
-      requestBody: lazy(() => BulkAssignKeysToGuardrailRequestBody$outboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title",
-        requestBody: "RequestBody"
-      });
-    });
-    BulkAssignKeysToGuardrailResponse$inboundSchema = object({
-      assigned_count: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "assigned_count": "assignedCount"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/bulkassignmemberstoguardrail.js
-var BulkAssignMembersToGuardrailRequestBody$outboundSchema, BulkAssignMembersToGuardrailRequest$outboundSchema, BulkAssignMembersToGuardrailResponse$inboundSchema;
-var init_bulkassignmemberstoguardrail = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/bulkassignmemberstoguardrail.js"() {
-    init_v4();
-    init_primitives();
-    BulkAssignMembersToGuardrailRequestBody$outboundSchema = object({
-      memberUserIds: array(string2())
-    }).transform((v) => {
-      return remap(v, {
-        memberUserIds: "member_user_ids"
-      });
-    });
-    BulkAssignMembersToGuardrailRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      id: string2(),
-      requestBody: lazy(() => BulkAssignMembersToGuardrailRequestBody$outboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title",
-        requestBody: "RequestBody"
-      });
-    });
-    BulkAssignMembersToGuardrailResponse$inboundSchema = object({
-      assigned_count: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "assigned_count": "assignedCount"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/bulkunassignkeysfromguardrail.js
-var BulkUnassignKeysFromGuardrailRequestBody$outboundSchema, BulkUnassignKeysFromGuardrailRequest$outboundSchema, BulkUnassignKeysFromGuardrailResponse$inboundSchema;
-var init_bulkunassignkeysfromguardrail = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/bulkunassignkeysfromguardrail.js"() {
-    init_v4();
-    init_primitives();
-    BulkUnassignKeysFromGuardrailRequestBody$outboundSchema = object({
-      keyHashes: array(string2())
-    }).transform((v) => {
-      return remap(v, {
-        keyHashes: "key_hashes"
-      });
-    });
-    BulkUnassignKeysFromGuardrailRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      id: string2(),
-      requestBody: lazy(() => BulkUnassignKeysFromGuardrailRequestBody$outboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title",
-        requestBody: "RequestBody"
-      });
-    });
-    BulkUnassignKeysFromGuardrailResponse$inboundSchema = object({
-      unassigned_count: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "unassigned_count": "unassignedCount"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/bulkunassignmembersfromguardrail.js
-var BulkUnassignMembersFromGuardrailRequestBody$outboundSchema, BulkUnassignMembersFromGuardrailRequest$outboundSchema, BulkUnassignMembersFromGuardrailResponse$inboundSchema;
-var init_bulkunassignmembersfromguardrail = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/bulkunassignmembersfromguardrail.js"() {
-    init_v4();
-    init_primitives();
-    BulkUnassignMembersFromGuardrailRequestBody$outboundSchema = object({
-      memberUserIds: array(string2())
-    }).transform((v) => {
-      return remap(v, {
-        memberUserIds: "member_user_ids"
-      });
-    });
-    BulkUnassignMembersFromGuardrailRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      id: string2(),
-      requestBody: lazy(() => BulkUnassignMembersFromGuardrailRequestBody$outboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title",
-        requestBody: "RequestBody"
-      });
-    });
-    BulkUnassignMembersFromGuardrailResponse$inboundSchema = object({
-      unassigned_count: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "unassigned_count": "unassignedCount"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/createauthkeyscode.js
-var CreateAuthKeysCodeCodeChallengeMethod, CreateAuthKeysCodeCodeChallengeMethod$outboundSchema, CreateAuthKeysCodeRequestBody$outboundSchema, CreateAuthKeysCodeRequest$outboundSchema, CreateAuthKeysCodeData$inboundSchema, CreateAuthKeysCodeResponse$inboundSchema;
-var init_createauthkeyscode = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/createauthkeyscode.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    CreateAuthKeysCodeCodeChallengeMethod = {
-      S256: "S256",
-      Plain: "plain"
-    };
-    CreateAuthKeysCodeCodeChallengeMethod$outboundSchema = outboundSchema(CreateAuthKeysCodeCodeChallengeMethod);
-    CreateAuthKeysCodeRequestBody$outboundSchema = object({
-      callbackUrl: string2(),
-      codeChallenge: string2().optional(),
-      codeChallengeMethod: CreateAuthKeysCodeCodeChallengeMethod$outboundSchema.optional(),
-      limit: number2().optional(),
-      expiresAt: nullable(date3().transform((v) => v.toISOString())).optional()
-    }).transform((v) => {
-      return remap(v, {
-        callbackUrl: "callback_url",
-        codeChallenge: "code_challenge",
-        codeChallengeMethod: "code_challenge_method",
-        expiresAt: "expires_at"
-      });
-    });
-    CreateAuthKeysCodeRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      requestBody: lazy(() => CreateAuthKeysCodeRequestBody$outboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title",
-        requestBody: "RequestBody"
-      });
-    });
-    CreateAuthKeysCodeData$inboundSchema = object({
-      id: string2(),
-      app_id: number2(),
-      created_at: string2()
-    }).transform((v) => {
-      return remap(v, {
-        "app_id": "appId",
-        "created_at": "createdAt"
-      });
-    });
-    CreateAuthKeysCodeResponse$inboundSchema = object({
-      data: lazy(() => CreateAuthKeysCodeData$inboundSchema)
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/createcoinbasecharge.js
-var CreateCoinbaseChargeSecurity$outboundSchema, CreateCoinbaseChargeRequest$outboundSchema, CallData$inboundSchema, Metadata$inboundSchema, TransferIntent$inboundSchema, Web3Data$inboundSchema, CreateCoinbaseChargeData$inboundSchema, CreateCoinbaseChargeResponse$inboundSchema;
-var init_createcoinbasecharge = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/createcoinbasecharge.js"() {
-    init_v4();
-    init_primitives();
-    init_models();
-    CreateCoinbaseChargeSecurity$outboundSchema = object({
-      bearer: string2()
-    });
-    CreateCoinbaseChargeRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      createChargeRequest: CreateChargeRequest$outboundSchema
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title",
-        createChargeRequest: "CreateChargeRequest"
-      });
-    });
-    CallData$inboundSchema = object({
-      deadline: string2(),
-      fee_amount: string2(),
-      id: string2(),
-      operator: string2(),
-      prefix: string2(),
-      recipient: string2(),
-      recipient_amount: string2(),
-      recipient_currency: string2(),
-      refund_destination: string2(),
-      signature: string2()
-    }).transform((v) => {
-      return remap(v, {
-        "fee_amount": "feeAmount",
-        "recipient_amount": "recipientAmount",
-        "recipient_currency": "recipientCurrency",
-        "refund_destination": "refundDestination"
-      });
-    });
-    Metadata$inboundSchema = object({
-      chain_id: number2(),
-      contract_address: string2(),
-      sender: string2()
-    }).transform((v) => {
-      return remap(v, {
-        "chain_id": "chainId",
-        "contract_address": "contractAddress"
-      });
-    });
-    TransferIntent$inboundSchema = object({
-      call_data: lazy(() => CallData$inboundSchema),
-      metadata: lazy(() => Metadata$inboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        "call_data": "callData"
-      });
-    });
-    Web3Data$inboundSchema = object({
-      transfer_intent: lazy(() => TransferIntent$inboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        "transfer_intent": "transferIntent"
-      });
-    });
-    CreateCoinbaseChargeData$inboundSchema = object({
-      id: string2(),
-      created_at: string2(),
-      expires_at: string2(),
-      web3_data: lazy(() => Web3Data$inboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        "created_at": "createdAt",
-        "expires_at": "expiresAt",
-        "web3_data": "web3Data"
-      });
-    });
-    CreateCoinbaseChargeResponse$inboundSchema = object({
-      data: lazy(() => CreateCoinbaseChargeData$inboundSchema)
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/createembeddings.js
-var EncodingFormat, ObjectT2, ObjectEmbedding, ImageUrl$outboundSchema, ContentImageURL$outboundSchema, ContentText$outboundSchema, Content$outboundSchema, Input$outboundSchema, InputUnion$outboundSchema, EncodingFormat$outboundSchema, CreateEmbeddingsRequestBody$outboundSchema, CreateEmbeddingsRequest$outboundSchema, ObjectT$inboundSchema2, ObjectEmbedding$inboundSchema, Embedding$inboundSchema, CreateEmbeddingsData$inboundSchema, Usage$inboundSchema, CreateEmbeddingsResponseBody$inboundSchema, CreateEmbeddingsResponse$inboundSchema;
-var init_createembeddings = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/createembeddings.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    init_models();
-    EncodingFormat = {
-      Float: "float",
-      Base64: "base64"
-    };
-    ObjectT2 = {
-      List: "list"
-    };
-    ObjectEmbedding = {
-      Embedding: "embedding"
-    };
-    ImageUrl$outboundSchema = object({
-      url: string2()
-    });
-    ContentImageURL$outboundSchema = object({
-      type: literal("image_url"),
-      imageUrl: lazy(() => ImageUrl$outboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        imageUrl: "image_url"
-      });
-    });
-    ContentText$outboundSchema = object({
-      type: literal("text"),
-      text: string2()
-    });
-    Content$outboundSchema = union([
-      lazy(() => ContentText$outboundSchema),
-      lazy(() => ContentImageURL$outboundSchema)
-    ]);
-    Input$outboundSchema = object({
-      content: array(union([
-        lazy(() => ContentText$outboundSchema),
-        lazy(() => ContentImageURL$outboundSchema)
-      ]))
-    });
-    InputUnion$outboundSchema = union([
-      string2(),
-      array(string2()),
-      array(number2()),
-      array(array(number2())),
-      array(lazy(() => Input$outboundSchema))
-    ]);
-    EncodingFormat$outboundSchema = outboundSchema(EncodingFormat);
-    CreateEmbeddingsRequestBody$outboundSchema = object({
-      input: union([
-        string2(),
-        array(string2()),
-        array(number2()),
-        array(array(number2())),
-        array(lazy(() => Input$outboundSchema))
-      ]),
-      model: string2(),
-      encodingFormat: EncodingFormat$outboundSchema.optional(),
-      dimensions: int().optional(),
-      user: string2().optional(),
-      provider: ProviderPreferences$outboundSchema.optional(),
-      inputType: string2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        encodingFormat: "encoding_format",
-        inputType: "input_type"
-      });
-    });
-    CreateEmbeddingsRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      requestBody: lazy(() => CreateEmbeddingsRequestBody$outboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title",
-        requestBody: "RequestBody"
-      });
-    });
-    ObjectT$inboundSchema2 = _enum2(ObjectT2);
-    ObjectEmbedding$inboundSchema = _enum2(ObjectEmbedding);
-    Embedding$inboundSchema = union([
-      array(number2()),
-      string2()
-    ]);
-    CreateEmbeddingsData$inboundSchema = object({
-      object: ObjectEmbedding$inboundSchema,
-      embedding: union([array(number2()), string2()]),
-      index: number2().optional()
-    });
-    Usage$inboundSchema = object({
-      prompt_tokens: number2(),
-      total_tokens: number2(),
-      cost: number2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        "prompt_tokens": "promptTokens",
-        "total_tokens": "totalTokens"
-      });
-    });
-    CreateEmbeddingsResponseBody$inboundSchema = object({
-      id: string2().optional(),
-      object: ObjectT$inboundSchema2,
-      data: array(lazy(() => CreateEmbeddingsData$inboundSchema)),
-      model: string2(),
-      usage: lazy(() => Usage$inboundSchema).optional()
-    });
-    CreateEmbeddingsResponse$inboundSchema = union([
-      lazy(() => CreateEmbeddingsResponseBody$inboundSchema),
-      string2()
-    ]);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/createguardrail.js
-var CreateGuardrailResetIntervalRequest, CreateGuardrailResetIntervalResponse, CreateGuardrailResetIntervalRequest$outboundSchema, CreateGuardrailRequestBody$outboundSchema, CreateGuardrailRequest$outboundSchema, CreateGuardrailResetIntervalResponse$inboundSchema, CreateGuardrailData$inboundSchema, CreateGuardrailResponse$inboundSchema;
-var init_createguardrail = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/createguardrail.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    CreateGuardrailResetIntervalRequest = {
-      Daily: "daily",
-      Weekly: "weekly",
-      Monthly: "monthly"
-    };
-    CreateGuardrailResetIntervalResponse = {
-      Daily: "daily",
-      Weekly: "weekly",
-      Monthly: "monthly"
-    };
-    CreateGuardrailResetIntervalRequest$outboundSchema = outboundSchema(CreateGuardrailResetIntervalRequest);
-    CreateGuardrailRequestBody$outboundSchema = object({
-      name: string2(),
-      description: nullable(string2()).optional(),
-      limitUsd: nullable(number2()).optional(),
-      resetInterval: nullable(CreateGuardrailResetIntervalRequest$outboundSchema).optional(),
-      allowedProviders: nullable(array(string2())).optional(),
-      allowedModels: nullable(array(string2())).optional(),
-      enforceZdr: nullable(boolean2()).optional()
-    }).transform((v) => {
-      return remap(v, {
-        limitUsd: "limit_usd",
-        resetInterval: "reset_interval",
-        allowedProviders: "allowed_providers",
-        allowedModels: "allowed_models",
-        enforceZdr: "enforce_zdr"
-      });
-    });
-    CreateGuardrailRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      requestBody: lazy(() => CreateGuardrailRequestBody$outboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title",
-        requestBody: "RequestBody"
-      });
-    });
-    CreateGuardrailResetIntervalResponse$inboundSchema = inboundSchema(CreateGuardrailResetIntervalResponse);
-    CreateGuardrailData$inboundSchema = object({
-      id: string2(),
-      name: string2(),
-      description: nullable(string2()).optional(),
-      limit_usd: nullable(number2()).optional(),
-      reset_interval: nullable(CreateGuardrailResetIntervalResponse$inboundSchema).optional(),
-      allowed_providers: nullable(array(string2())).optional(),
-      allowed_models: nullable(array(string2())).optional(),
-      enforce_zdr: nullable(boolean2()).optional(),
-      created_at: string2(),
-      updated_at: nullable(string2()).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "limit_usd": "limitUsd",
-        "reset_interval": "resetInterval",
-        "allowed_providers": "allowedProviders",
-        "allowed_models": "allowedModels",
-        "enforce_zdr": "enforceZdr",
-        "created_at": "createdAt",
-        "updated_at": "updatedAt"
-      });
-    });
-    CreateGuardrailResponse$inboundSchema = object({
-      data: lazy(() => CreateGuardrailData$inboundSchema)
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/createkeys.js
-var CreateKeysLimitReset, CreateKeysLimitReset$outboundSchema, CreateKeysRequestBody$outboundSchema, CreateKeysRequest$outboundSchema, CreateKeysData$inboundSchema, CreateKeysResponse$inboundSchema;
-var init_createkeys = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/createkeys.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    CreateKeysLimitReset = {
-      Daily: "daily",
-      Weekly: "weekly",
-      Monthly: "monthly"
-    };
-    CreateKeysLimitReset$outboundSchema = outboundSchema(CreateKeysLimitReset);
-    CreateKeysRequestBody$outboundSchema = object({
-      name: string2(),
-      limit: nullable(number2()).optional(),
-      limitReset: nullable(CreateKeysLimitReset$outboundSchema).optional(),
-      includeByokInLimit: boolean2().optional(),
-      expiresAt: nullable(date3().transform((v) => v.toISOString())).optional()
-    }).transform((v) => {
-      return remap(v, {
-        limitReset: "limit_reset",
-        includeByokInLimit: "include_byok_in_limit",
-        expiresAt: "expires_at"
-      });
-    });
-    CreateKeysRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      requestBody: lazy(() => CreateKeysRequestBody$outboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title",
-        requestBody: "RequestBody"
-      });
-    });
-    CreateKeysData$inboundSchema = object({
-      hash: string2(),
-      name: string2(),
-      label: string2(),
-      disabled: boolean2(),
-      limit: nullable(number2()),
-      limit_remaining: nullable(number2()),
-      limit_reset: nullable(string2()),
-      include_byok_in_limit: boolean2(),
-      usage: number2(),
-      usage_daily: number2(),
-      usage_weekly: number2(),
-      usage_monthly: number2(),
-      byok_usage: number2(),
-      byok_usage_daily: number2(),
-      byok_usage_weekly: number2(),
-      byok_usage_monthly: number2(),
-      created_at: string2(),
-      updated_at: nullable(string2()),
-      expires_at: nullable(iso_exports.datetime({ offset: true }).transform((v) => new Date(v))).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "limit_remaining": "limitRemaining",
-        "limit_reset": "limitReset",
-        "include_byok_in_limit": "includeByokInLimit",
-        "usage_daily": "usageDaily",
-        "usage_weekly": "usageWeekly",
-        "usage_monthly": "usageMonthly",
-        "byok_usage": "byokUsage",
-        "byok_usage_daily": "byokUsageDaily",
-        "byok_usage_weekly": "byokUsageWeekly",
-        "byok_usage_monthly": "byokUsageMonthly",
-        "created_at": "createdAt",
-        "updated_at": "updatedAt",
-        "expires_at": "expiresAt"
-      });
-    });
-    CreateKeysResponse$inboundSchema = object({
-      data: lazy(() => CreateKeysData$inboundSchema),
-      key: string2()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/event-streams.js
-function concatBuffer(a, b) {
-  const c = new Uint8Array(a.length + b.length);
-  c.set(a, 0);
-  c.set(b, a.length);
-  return c;
-}
-function findBoundary(buf) {
-  const len = buf.length;
-  for (let i = 0; i < len; i++) {
-    if (i <= len - 4 && buf[i] === 13 && buf[i + 1] === 10 && buf[i + 2] === 13 && buf[i + 3] === 10) {
-      return { index: i, length: 4 };
-    }
-    if (i <= len - 2 && buf[i] === 13 && buf[i + 1] === 13) {
-      return { index: i, length: 2 };
-    }
-    if (i <= len - 2 && buf[i] === 10 && buf[i + 1] === 10) {
-      return { index: i, length: 2 };
-    }
-  }
-  return null;
-}
-function parseMessage(chunk, parse3) {
-  const text2 = new TextDecoder().decode(chunk);
-  const lines = text2.split(/\r\n|\r|\n/);
-  const dataLines = [];
-  const ret = {};
-  let ignore = true;
-  for (const line of lines) {
-    if (!line || line.startsWith(":"))
-      continue;
-    ignore = false;
-    const i = line.indexOf(":");
-    const field = line.slice(0, i);
-    const value = line[i + 1] === " " ? line.slice(i + 2) : line.slice(i + 1);
-    if (field === "data")
-      dataLines.push(value);
-    else if (field === "event")
-      ret.event = value;
-    else if (field === "id")
-      ret.id = value;
-    else if (field === "retry") {
-      const n = Number(value);
-      if (!isNaN(n))
-        ret.retry = n;
-    }
-  }
-  if (ignore)
-    return;
-  if (dataLines.length)
-    ret.data = dataLines.join("\n");
-  return parse3(ret);
-}
-var EventStream;
-var init_event_streams = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/event-streams.js"() {
-    EventStream = class extends ReadableStream {
-      constructor(responseBody, parse3) {
-        const upstream = responseBody.getReader();
-        let buffer = new Uint8Array();
-        super({
-          async pull(downstream) {
-            try {
-              while (true) {
-                const match2 = findBoundary(buffer);
-                if (!match2) {
-                  const chunk = await upstream.read();
-                  if (chunk.done)
-                    return downstream.close();
-                  buffer = concatBuffer(buffer, chunk.value);
-                  continue;
-                }
-                const message = buffer.slice(0, match2.index);
-                buffer = buffer.slice(match2.index + match2.length);
-                const item = parseMessage(message, parse3);
-                if (item && !item.done)
-                  return downstream.enqueue(item.value);
-                if (item?.done) {
-                  await upstream.cancel("done");
-                  return downstream.close();
-                }
-              }
-            } catch (e) {
-              downstream.error(e);
-              await upstream.cancel(e);
-            }
-          },
-          cancel: (reason) => upstream.cancel(reason)
-        });
-      }
-      // Polyfill for older browsers
-      [Symbol.asyncIterator]() {
-        const fn = ReadableStream.prototype[Symbol.asyncIterator];
-        if (typeof fn === "function")
-          return fn.call(this);
-        const reader = this.getReader();
-        return {
-          next: async () => {
-            const r = await reader.read();
-            if (r.done) {
-              reader.releaseLock();
-              return { done: true, value: void 0 };
-            }
-            return { done: false, value: r.value };
-          },
-          throw: async (e) => {
-            await reader.cancel(e);
-            reader.releaseLock();
-            return { done: true, value: void 0 };
-          },
-          return: async () => {
-            await reader.cancel("done");
-            reader.releaseLock();
-            return { done: true, value: void 0 };
-          },
-          [Symbol.asyncIterator]() {
-            return this;
-          }
-        };
-      }
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/createresponses.js
-var CreateResponsesRequest$outboundSchema, CreateResponsesResponseBody$inboundSchema, CreateResponsesResponse$inboundSchema;
-var init_createresponses = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/createresponses.js"() {
-    init_v4();
-    init_event_streams();
-    init_primitives();
-    init_models();
-    CreateResponsesRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      openResponsesRequest: OpenResponsesRequest$outboundSchema
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title",
-        openResponsesRequest: "OpenResponsesRequest"
-      });
-    });
-    CreateResponsesResponseBody$inboundSchema = object({
-      data: string2().transform((v, ctx) => {
-        try {
-          return JSON.parse(v);
-        } catch (err) {
-          ctx.addIssue({
-            input: v,
-            code: "custom",
-            message: `malformed json: ${err}`
-          });
-          return NEVER;
-        }
-      }).pipe(OpenResponsesStreamEvent$inboundSchema)
-    });
-    CreateResponsesResponse$inboundSchema = union([
-      OpenResponsesNonStreamingResponse$inboundSchema,
-      custom((x) => x instanceof ReadableStream).transform((stream) => {
-        return new EventStream(stream, (rawEvent) => {
-          if (rawEvent.data === "[DONE]")
-            return { done: true };
-          return {
-            value: lazy(() => CreateResponsesResponseBody$inboundSchema).parse(rawEvent)?.data
-          };
-        });
-      })
-    ]);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/deleteguardrail.js
-var DeleteGuardrailRequest$outboundSchema, DeleteGuardrailResponse$inboundSchema;
-var init_deleteguardrail = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/deleteguardrail.js"() {
-    init_v4();
-    init_primitives();
-    DeleteGuardrailRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      id: string2()
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title"
-      });
-    });
-    DeleteGuardrailResponse$inboundSchema = object({
-      deleted: literal(true)
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/deletekeys.js
-var DeleteKeysRequest$outboundSchema, DeleteKeysResponse$inboundSchema;
-var init_deletekeys = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/deletekeys.js"() {
-    init_v4();
-    init_primitives();
-    DeleteKeysRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      hash: string2()
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title"
-      });
-    });
-    DeleteKeysResponse$inboundSchema = object({
-      deleted: literal(true)
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/exchangeauthcodeforapikey.js
-var ExchangeAuthCodeForAPIKeyCodeChallengeMethod, ExchangeAuthCodeForAPIKeyCodeChallengeMethod$outboundSchema, ExchangeAuthCodeForAPIKeyRequestBody$outboundSchema, ExchangeAuthCodeForAPIKeyRequest$outboundSchema, ExchangeAuthCodeForAPIKeyResponse$inboundSchema;
-var init_exchangeauthcodeforapikey = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/exchangeauthcodeforapikey.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    ExchangeAuthCodeForAPIKeyCodeChallengeMethod = {
-      S256: "S256",
-      Plain: "plain"
-    };
-    ExchangeAuthCodeForAPIKeyCodeChallengeMethod$outboundSchema = outboundSchema(ExchangeAuthCodeForAPIKeyCodeChallengeMethod);
-    ExchangeAuthCodeForAPIKeyRequestBody$outboundSchema = object({
-      code: string2(),
-      codeVerifier: string2().optional(),
-      codeChallengeMethod: nullable(ExchangeAuthCodeForAPIKeyCodeChallengeMethod$outboundSchema).optional()
-    }).transform((v) => {
-      return remap(v, {
-        codeVerifier: "code_verifier",
-        codeChallengeMethod: "code_challenge_method"
-      });
-    });
-    ExchangeAuthCodeForAPIKeyRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      requestBody: lazy(() => ExchangeAuthCodeForAPIKeyRequestBody$outboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title",
-        requestBody: "RequestBody"
-      });
-    });
-    ExchangeAuthCodeForAPIKeyResponse$inboundSchema = object({
-      key: string2(),
-      user_id: nullable(string2())
-    }).transform((v) => {
-      return remap(v, {
-        "user_id": "userId"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/getcredits.js
-var GetCreditsRequest$outboundSchema, GetCreditsData$inboundSchema, GetCreditsResponse$inboundSchema;
-var init_getcredits = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/getcredits.js"() {
-    init_v4();
-    init_primitives();
-    GetCreditsRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title"
-      });
-    });
-    GetCreditsData$inboundSchema = object({
-      total_credits: number2(),
-      total_usage: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "total_credits": "totalCredits",
-        "total_usage": "totalUsage"
-      });
-    });
-    GetCreditsResponse$inboundSchema = object({
-      data: lazy(() => GetCreditsData$inboundSchema)
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/getcurrentkey.js
-var GetCurrentKeyRequest$outboundSchema, RateLimit$inboundSchema, GetCurrentKeyData$inboundSchema, GetCurrentKeyResponse$inboundSchema;
-var init_getcurrentkey = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/getcurrentkey.js"() {
-    init_v4();
-    init_primitives();
-    GetCurrentKeyRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title"
-      });
-    });
-    RateLimit$inboundSchema = object({
-      requests: number2(),
-      interval: string2(),
-      note: string2()
-    });
-    GetCurrentKeyData$inboundSchema = object({
-      label: string2(),
-      limit: nullable(number2()),
-      usage: number2(),
-      usage_daily: number2(),
-      usage_weekly: number2(),
-      usage_monthly: number2(),
-      byok_usage: number2(),
-      byok_usage_daily: number2(),
-      byok_usage_weekly: number2(),
-      byok_usage_monthly: number2(),
-      is_free_tier: boolean2(),
-      is_management_key: boolean2(),
-      is_provisioning_key: boolean2(),
-      limit_remaining: nullable(number2()),
-      limit_reset: nullable(string2()),
-      include_byok_in_limit: boolean2(),
-      expires_at: nullable(iso_exports.datetime({ offset: true }).transform((v) => new Date(v))).optional(),
-      rate_limit: lazy(() => RateLimit$inboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        "usage_daily": "usageDaily",
-        "usage_weekly": "usageWeekly",
-        "usage_monthly": "usageMonthly",
-        "byok_usage": "byokUsage",
-        "byok_usage_daily": "byokUsageDaily",
-        "byok_usage_weekly": "byokUsageWeekly",
-        "byok_usage_monthly": "byokUsageMonthly",
-        "is_free_tier": "isFreeTier",
-        "is_management_key": "isManagementKey",
-        "is_provisioning_key": "isProvisioningKey",
-        "limit_remaining": "limitRemaining",
-        "limit_reset": "limitReset",
-        "include_byok_in_limit": "includeByokInLimit",
-        "expires_at": "expiresAt",
-        "rate_limit": "rateLimit"
-      });
-    });
-    GetCurrentKeyResponse$inboundSchema = object({
-      data: lazy(() => GetCurrentKeyData$inboundSchema)
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/getgeneration.js
-var ApiType, ProviderName2, GetGenerationRequest$outboundSchema, ApiType$inboundSchema, ProviderName$inboundSchema2, ProviderResponse$inboundSchema, GetGenerationData$inboundSchema, GetGenerationResponse$inboundSchema;
-var init_getgeneration = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/getgeneration.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    ApiType = {
-      Completions: "completions",
-      Embeddings: "embeddings"
-    };
-    ProviderName2 = {
-      AnyScale: "AnyScale",
-      Atoma: "Atoma",
-      CentML: "Cent-ML",
-      CrofAI: "CrofAI",
-      Enfer: "Enfer",
-      GoPomelo: "GoPomelo",
-      HuggingFace: "HuggingFace",
-      Hyperbolic2: "Hyperbolic 2",
-      InoCloud: "InoCloud",
-      Kluster: "Kluster",
-      Lambda: "Lambda",
-      Lepton: "Lepton",
-      Lynn2: "Lynn 2",
-      Lynn: "Lynn",
-      Mancer: "Mancer",
-      Meta: "Meta",
-      Modal: "Modal",
-      Nineteen: "Nineteen",
-      OctoAI: "OctoAI",
-      Recursal: "Recursal",
-      Reflection: "Reflection",
-      Replicate: "Replicate",
-      SambaNova2: "SambaNova 2",
-      SFCompute: "SF Compute",
-      Targon: "Targon",
-      Together2: "Together 2",
-      Ubicloud: "Ubicloud",
-      OneDotAI: "01.AI",
-      Ai21: "AI21",
-      AionLabs: "AionLabs",
-      Alibaba: "Alibaba",
-      Ambient: "Ambient",
-      AmazonBedrock: "Amazon Bedrock",
-      AmazonNova: "Amazon Nova",
-      Anthropic: "Anthropic",
-      ArceeAI: "Arcee AI",
-      AtlasCloud: "AtlasCloud",
-      Avian: "Avian",
-      Azure: "Azure",
-      BaseTen: "BaseTen",
-      BytePlus: "BytePlus",
-      BlackForestLabs: "Black Forest Labs",
-      Cerebras: "Cerebras",
-      Chutes: "Chutes",
-      Cirrascale: "Cirrascale",
-      Clarifai: "Clarifai",
-      Cloudflare: "Cloudflare",
-      Cohere: "Cohere",
-      Crusoe: "Crusoe",
-      DeepInfra: "DeepInfra",
-      DeepSeek: "DeepSeek",
-      Featherless: "Featherless",
-      Fireworks: "Fireworks",
-      Friendli: "Friendli",
-      GMICloud: "GMICloud",
-      Google: "Google",
-      GoogleAIStudio: "Google AI Studio",
-      Groq: "Groq",
-      Hyperbolic: "Hyperbolic",
-      Inception: "Inception",
-      Inceptron: "Inceptron",
-      InferenceNet: "InferenceNet",
-      Infermatic: "Infermatic",
-      Inflection: "Inflection",
-      Liquid: "Liquid",
-      Mara: "Mara",
-      Mancer2: "Mancer 2",
-      Minimax: "Minimax",
-      ModelRun: "ModelRun",
-      Mistral: "Mistral",
-      Modular: "Modular",
-      MoonshotAI: "Moonshot AI",
-      Morph: "Morph",
-      NCompass: "NCompass",
-      Nebius: "Nebius",
-      NextBit: "NextBit",
-      Novita: "Novita",
-      Nvidia: "Nvidia",
-      OpenAI: "OpenAI",
-      OpenInference: "OpenInference",
-      Parasail: "Parasail",
-      Perplexity: "Perplexity",
-      Phala: "Phala",
-      Relace: "Relace",
-      SambaNova: "SambaNova",
-      Seed: "Seed",
-      SiliconFlow: "SiliconFlow",
-      Sourceful: "Sourceful",
-      StepFun: "StepFun",
-      Stealth: "Stealth",
-      StreamLake: "StreamLake",
-      Switchpoint: "Switchpoint",
-      Together: "Together",
-      Upstage: "Upstage",
-      Venice: "Venice",
-      WandB: "WandB",
-      Xiaomi: "Xiaomi",
-      XAI: "xAI",
-      ZAi: "Z.AI",
-      FakeProvider: "FakeProvider"
-    };
-    GetGenerationRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      id: string2()
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title"
-      });
-    });
-    ApiType$inboundSchema = inboundSchema(ApiType);
-    ProviderName$inboundSchema2 = inboundSchema(ProviderName2);
-    ProviderResponse$inboundSchema = object({
-      id: string2().optional(),
-      endpoint_id: string2().optional(),
-      model_permaslug: string2().optional(),
-      provider_name: ProviderName$inboundSchema2.optional(),
-      status: nullable(number2()),
-      latency: number2().optional(),
-      is_byok: boolean2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        "endpoint_id": "endpointId",
-        "model_permaslug": "modelPermaslug",
-        "provider_name": "providerName",
-        "is_byok": "isByok"
-      });
-    });
-    GetGenerationData$inboundSchema = object({
-      id: string2(),
-      upstream_id: nullable(string2()),
-      total_cost: number2(),
-      cache_discount: nullable(number2()),
-      upstream_inference_cost: nullable(number2()),
-      created_at: string2(),
-      model: string2(),
-      app_id: nullable(number2()),
-      streamed: nullable(boolean2()),
-      cancelled: nullable(boolean2()),
-      provider_name: nullable(string2()),
-      latency: nullable(number2()),
-      moderation_latency: nullable(number2()),
-      generation_time: nullable(number2()),
-      finish_reason: nullable(string2()),
-      tokens_prompt: nullable(number2()),
-      tokens_completion: nullable(number2()),
-      native_tokens_prompt: nullable(number2()),
-      native_tokens_completion: nullable(number2()),
-      native_tokens_completion_images: nullable(number2()),
-      native_tokens_reasoning: nullable(number2()),
-      native_tokens_cached: nullable(number2()),
-      num_media_prompt: nullable(number2()),
-      num_input_audio_prompt: nullable(number2()),
-      num_media_completion: nullable(number2()),
-      num_search_results: nullable(number2()),
-      origin: string2(),
-      usage: number2(),
-      is_byok: boolean2(),
-      native_finish_reason: nullable(string2()),
-      external_user: nullable(string2()),
-      api_type: nullable(ApiType$inboundSchema),
-      router: nullable(string2()),
-      provider_responses: nullable(array(lazy(() => ProviderResponse$inboundSchema)))
-    }).transform((v) => {
-      return remap(v, {
-        "upstream_id": "upstreamId",
-        "total_cost": "totalCost",
-        "cache_discount": "cacheDiscount",
-        "upstream_inference_cost": "upstreamInferenceCost",
-        "created_at": "createdAt",
-        "app_id": "appId",
-        "provider_name": "providerName",
-        "moderation_latency": "moderationLatency",
-        "generation_time": "generationTime",
-        "finish_reason": "finishReason",
-        "tokens_prompt": "tokensPrompt",
-        "tokens_completion": "tokensCompletion",
-        "native_tokens_prompt": "nativeTokensPrompt",
-        "native_tokens_completion": "nativeTokensCompletion",
-        "native_tokens_completion_images": "nativeTokensCompletionImages",
-        "native_tokens_reasoning": "nativeTokensReasoning",
-        "native_tokens_cached": "nativeTokensCached",
-        "num_media_prompt": "numMediaPrompt",
-        "num_input_audio_prompt": "numInputAudioPrompt",
-        "num_media_completion": "numMediaCompletion",
-        "num_search_results": "numSearchResults",
-        "is_byok": "isByok",
-        "native_finish_reason": "nativeFinishReason",
-        "external_user": "externalUser",
-        "api_type": "apiType",
-        "provider_responses": "providerResponses"
-      });
-    });
-    GetGenerationResponse$inboundSchema = object({
-      data: lazy(() => GetGenerationData$inboundSchema)
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/getguardrail.js
-var GetGuardrailResetInterval, GetGuardrailRequest$outboundSchema, GetGuardrailResetInterval$inboundSchema, GetGuardrailData$inboundSchema, GetGuardrailResponse$inboundSchema;
-var init_getguardrail = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/getguardrail.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    GetGuardrailResetInterval = {
-      Daily: "daily",
-      Weekly: "weekly",
-      Monthly: "monthly"
-    };
-    GetGuardrailRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      id: string2()
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title"
-      });
-    });
-    GetGuardrailResetInterval$inboundSchema = inboundSchema(GetGuardrailResetInterval);
-    GetGuardrailData$inboundSchema = object({
-      id: string2(),
-      name: string2(),
-      description: nullable(string2()).optional(),
-      limit_usd: nullable(number2()).optional(),
-      reset_interval: nullable(GetGuardrailResetInterval$inboundSchema).optional(),
-      allowed_providers: nullable(array(string2())).optional(),
-      allowed_models: nullable(array(string2())).optional(),
-      enforce_zdr: nullable(boolean2()).optional(),
-      created_at: string2(),
-      updated_at: nullable(string2()).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "limit_usd": "limitUsd",
-        "reset_interval": "resetInterval",
-        "allowed_providers": "allowedProviders",
-        "allowed_models": "allowedModels",
-        "enforce_zdr": "enforceZdr",
-        "created_at": "createdAt",
-        "updated_at": "updatedAt"
-      });
-    });
-    GetGuardrailResponse$inboundSchema = object({
-      data: lazy(() => GetGuardrailData$inboundSchema)
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/getkey.js
-var GetKeyRequest$outboundSchema, GetKeyData$inboundSchema, GetKeyResponse$inboundSchema;
-var init_getkey = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/getkey.js"() {
-    init_v4();
-    init_primitives();
-    GetKeyRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      hash: string2()
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title"
-      });
-    });
-    GetKeyData$inboundSchema = object({
-      hash: string2(),
-      name: string2(),
-      label: string2(),
-      disabled: boolean2(),
-      limit: nullable(number2()),
-      limit_remaining: nullable(number2()),
-      limit_reset: nullable(string2()),
-      include_byok_in_limit: boolean2(),
-      usage: number2(),
-      usage_daily: number2(),
-      usage_weekly: number2(),
-      usage_monthly: number2(),
-      byok_usage: number2(),
-      byok_usage_daily: number2(),
-      byok_usage_weekly: number2(),
-      byok_usage_monthly: number2(),
-      created_at: string2(),
-      updated_at: nullable(string2()),
-      expires_at: nullable(iso_exports.datetime({ offset: true }).transform((v) => new Date(v))).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "limit_remaining": "limitRemaining",
-        "limit_reset": "limitReset",
-        "include_byok_in_limit": "includeByokInLimit",
-        "usage_daily": "usageDaily",
-        "usage_weekly": "usageWeekly",
-        "usage_monthly": "usageMonthly",
-        "byok_usage": "byokUsage",
-        "byok_usage_daily": "byokUsageDaily",
-        "byok_usage_weekly": "byokUsageWeekly",
-        "byok_usage_monthly": "byokUsageMonthly",
-        "created_at": "createdAt",
-        "updated_at": "updatedAt",
-        "expires_at": "expiresAt"
-      });
-    });
-    GetKeyResponse$inboundSchema = object({
-      data: lazy(() => GetKeyData$inboundSchema)
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/getmodels.js
-var Category, Category$outboundSchema, GetModelsRequest$outboundSchema;
-var init_getmodels = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/getmodels.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    Category = {
-      Programming: "programming",
-      Roleplay: "roleplay",
-      Marketing: "marketing",
-      MarketingSeo: "marketing/seo",
-      Technology: "technology",
-      Science: "science",
-      Translation: "translation",
-      Legal: "legal",
-      Finance: "finance",
-      Health: "health",
-      Trivia: "trivia",
-      Academia: "academia"
-    };
-    Category$outboundSchema = outboundSchema(Category);
-    GetModelsRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      category: Category$outboundSchema.optional(),
-      supportedParameters: string2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title",
-        supportedParameters: "supported_parameters"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/getuseractivity.js
-var GetUserActivityRequest$outboundSchema, GetUserActivityResponse$inboundSchema;
-var init_getuseractivity = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/getuseractivity.js"() {
-    init_v4();
-    init_primitives();
-    init_models();
-    GetUserActivityRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      date: string2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title"
-      });
-    });
-    GetUserActivityResponse$inboundSchema = object({
-      data: array(ActivityItem$inboundSchema)
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/list.js
-var ListRequest$outboundSchema, ListData$inboundSchema, ListResponse$inboundSchema;
-var init_list = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/list.js"() {
-    init_v4();
-    init_primitives();
-    ListRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      includeDisabled: string2().optional(),
-      offset: string2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title",
-        includeDisabled: "include_disabled"
-      });
-    });
-    ListData$inboundSchema = object({
-      hash: string2(),
-      name: string2(),
-      label: string2(),
-      disabled: boolean2(),
-      limit: nullable(number2()),
-      limit_remaining: nullable(number2()),
-      limit_reset: nullable(string2()),
-      include_byok_in_limit: boolean2(),
-      usage: number2(),
-      usage_daily: number2(),
-      usage_weekly: number2(),
-      usage_monthly: number2(),
-      byok_usage: number2(),
-      byok_usage_daily: number2(),
-      byok_usage_weekly: number2(),
-      byok_usage_monthly: number2(),
-      created_at: string2(),
-      updated_at: nullable(string2()),
-      expires_at: nullable(iso_exports.datetime({ offset: true }).transform((v) => new Date(v))).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "limit_remaining": "limitRemaining",
-        "limit_reset": "limitReset",
-        "include_byok_in_limit": "includeByokInLimit",
-        "usage_daily": "usageDaily",
-        "usage_weekly": "usageWeekly",
-        "usage_monthly": "usageMonthly",
-        "byok_usage": "byokUsage",
-        "byok_usage_daily": "byokUsageDaily",
-        "byok_usage_weekly": "byokUsageWeekly",
-        "byok_usage_monthly": "byokUsageMonthly",
-        "created_at": "createdAt",
-        "updated_at": "updatedAt",
-        "expires_at": "expiresAt"
-      });
-    });
-    ListResponse$inboundSchema = object({
-      data: array(lazy(() => ListData$inboundSchema))
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/listembeddingsmodels.js
-var ListEmbeddingsModelsRequest$outboundSchema;
-var init_listembeddingsmodels = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/listembeddingsmodels.js"() {
-    init_v4();
-    init_primitives();
-    ListEmbeddingsModelsRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/listendpoints.js
-var ListEndpointsRequest$outboundSchema, ListEndpointsResponse$inboundSchema2;
-var init_listendpoints = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/listendpoints.js"() {
-    init_v4();
-    init_primitives();
-    init_models();
-    ListEndpointsRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      author: string2(),
-      slug: string2()
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title"
-      });
-    });
-    ListEndpointsResponse$inboundSchema2 = object({
-      data: ListEndpointsResponse$inboundSchema
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/listendpointszdr.js
-var ListEndpointsZdrRequest$outboundSchema, ListEndpointsZdrResponse$inboundSchema;
-var init_listendpointszdr = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/listendpointszdr.js"() {
-    init_v4();
-    init_primitives();
-    init_models();
-    ListEndpointsZdrRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title"
-      });
-    });
-    ListEndpointsZdrResponse$inboundSchema = object({
-      data: array(PublicEndpoint$inboundSchema)
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/listguardrailkeyassignments.js
-var ListGuardrailKeyAssignmentsRequest$outboundSchema, ListGuardrailKeyAssignmentsData$inboundSchema, ListGuardrailKeyAssignmentsResponse$inboundSchema;
-var init_listguardrailkeyassignments = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/listguardrailkeyassignments.js"() {
-    init_v4();
-    init_primitives();
-    ListGuardrailKeyAssignmentsRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      id: string2(),
-      offset: string2().optional(),
-      limit: string2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title"
-      });
-    });
-    ListGuardrailKeyAssignmentsData$inboundSchema = object({
-      id: string2(),
-      key_hash: string2(),
-      guardrail_id: string2(),
-      key_name: string2(),
-      key_label: string2(),
-      assigned_by: nullable(string2()),
-      created_at: string2()
-    }).transform((v) => {
-      return remap(v, {
-        "key_hash": "keyHash",
-        "guardrail_id": "guardrailId",
-        "key_name": "keyName",
-        "key_label": "keyLabel",
-        "assigned_by": "assignedBy",
-        "created_at": "createdAt"
-      });
-    });
-    ListGuardrailKeyAssignmentsResponse$inboundSchema = object({
-      data: array(lazy(() => ListGuardrailKeyAssignmentsData$inboundSchema)),
-      total_count: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "total_count": "totalCount"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/listguardrailmemberassignments.js
-var ListGuardrailMemberAssignmentsRequest$outboundSchema, ListGuardrailMemberAssignmentsData$inboundSchema, ListGuardrailMemberAssignmentsResponse$inboundSchema;
-var init_listguardrailmemberassignments = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/listguardrailmemberassignments.js"() {
-    init_v4();
-    init_primitives();
-    ListGuardrailMemberAssignmentsRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      id: string2(),
-      offset: string2().optional(),
-      limit: string2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title"
-      });
-    });
-    ListGuardrailMemberAssignmentsData$inboundSchema = object({
-      id: string2(),
-      user_id: string2(),
-      organization_id: string2(),
-      guardrail_id: string2(),
-      assigned_by: nullable(string2()),
-      created_at: string2()
-    }).transform((v) => {
-      return remap(v, {
-        "user_id": "userId",
-        "organization_id": "organizationId",
-        "guardrail_id": "guardrailId",
-        "assigned_by": "assignedBy",
-        "created_at": "createdAt"
-      });
-    });
-    ListGuardrailMemberAssignmentsResponse$inboundSchema = object({
-      data: array(lazy(() => ListGuardrailMemberAssignmentsData$inboundSchema)),
-      total_count: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "total_count": "totalCount"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/listguardrails.js
-var ListGuardrailsResetInterval, ListGuardrailsRequest$outboundSchema, ListGuardrailsResetInterval$inboundSchema, ListGuardrailsData$inboundSchema, ListGuardrailsResponse$inboundSchema;
-var init_listguardrails = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/listguardrails.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    ListGuardrailsResetInterval = {
-      Daily: "daily",
-      Weekly: "weekly",
-      Monthly: "monthly"
-    };
-    ListGuardrailsRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      offset: string2().optional(),
-      limit: string2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title"
-      });
-    });
-    ListGuardrailsResetInterval$inboundSchema = inboundSchema(ListGuardrailsResetInterval);
-    ListGuardrailsData$inboundSchema = object({
-      id: string2(),
-      name: string2(),
-      description: nullable(string2()).optional(),
-      limit_usd: nullable(number2()).optional(),
-      reset_interval: nullable(ListGuardrailsResetInterval$inboundSchema).optional(),
-      allowed_providers: nullable(array(string2())).optional(),
-      allowed_models: nullable(array(string2())).optional(),
-      enforce_zdr: nullable(boolean2()).optional(),
-      created_at: string2(),
-      updated_at: nullable(string2()).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "limit_usd": "limitUsd",
-        "reset_interval": "resetInterval",
-        "allowed_providers": "allowedProviders",
-        "allowed_models": "allowedModels",
-        "enforce_zdr": "enforceZdr",
-        "created_at": "createdAt",
-        "updated_at": "updatedAt"
-      });
-    });
-    ListGuardrailsResponse$inboundSchema = object({
-      data: array(lazy(() => ListGuardrailsData$inboundSchema)),
-      total_count: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "total_count": "totalCount"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/listkeyassignments.js
-var ListKeyAssignmentsRequest$outboundSchema, ListKeyAssignmentsData$inboundSchema, ListKeyAssignmentsResponse$inboundSchema;
-var init_listkeyassignments = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/listkeyassignments.js"() {
-    init_v4();
-    init_primitives();
-    ListKeyAssignmentsRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      offset: string2().optional(),
-      limit: string2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title"
-      });
-    });
-    ListKeyAssignmentsData$inboundSchema = object({
-      id: string2(),
-      key_hash: string2(),
-      guardrail_id: string2(),
-      key_name: string2(),
-      key_label: string2(),
-      assigned_by: nullable(string2()),
-      created_at: string2()
-    }).transform((v) => {
-      return remap(v, {
-        "key_hash": "keyHash",
-        "guardrail_id": "guardrailId",
-        "key_name": "keyName",
-        "key_label": "keyLabel",
-        "assigned_by": "assignedBy",
-        "created_at": "createdAt"
-      });
-    });
-    ListKeyAssignmentsResponse$inboundSchema = object({
-      data: array(lazy(() => ListKeyAssignmentsData$inboundSchema)),
-      total_count: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "total_count": "totalCount"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/listmemberassignments.js
-var ListMemberAssignmentsRequest$outboundSchema, ListMemberAssignmentsData$inboundSchema, ListMemberAssignmentsResponse$inboundSchema;
-var init_listmemberassignments = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/listmemberassignments.js"() {
-    init_v4();
-    init_primitives();
-    ListMemberAssignmentsRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      offset: string2().optional(),
-      limit: string2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title"
-      });
-    });
-    ListMemberAssignmentsData$inboundSchema = object({
-      id: string2(),
-      user_id: string2(),
-      organization_id: string2(),
-      guardrail_id: string2(),
-      assigned_by: nullable(string2()),
-      created_at: string2()
-    }).transform((v) => {
-      return remap(v, {
-        "user_id": "userId",
-        "organization_id": "organizationId",
-        "guardrail_id": "guardrailId",
-        "assigned_by": "assignedBy",
-        "created_at": "createdAt"
-      });
-    });
-    ListMemberAssignmentsResponse$inboundSchema = object({
-      data: array(lazy(() => ListMemberAssignmentsData$inboundSchema)),
-      total_count: number2()
-    }).transform((v) => {
-      return remap(v, {
-        "total_count": "totalCount"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/listmodelscount.js
-var ListModelsCountRequest$outboundSchema;
-var init_listmodelscount = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/listmodelscount.js"() {
-    init_v4();
-    init_primitives();
-    ListModelsCountRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/listmodelsuser.js
-var ListModelsUserSecurity$outboundSchema, ListModelsUserRequest$outboundSchema;
-var init_listmodelsuser = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/listmodelsuser.js"() {
-    init_v4();
-    init_primitives();
-    ListModelsUserSecurity$outboundSchema = object({
-      bearer: string2()
-    });
-    ListModelsUserRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title"
-      });
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/listproviders.js
-var ListProvidersRequest$outboundSchema, ListProvidersData$inboundSchema, ListProvidersResponse$inboundSchema;
-var init_listproviders = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/listproviders.js"() {
-    init_v4();
-    init_primitives();
-    ListProvidersRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title"
-      });
-    });
-    ListProvidersData$inboundSchema = object({
-      name: string2(),
-      slug: string2(),
-      privacy_policy_url: nullable(string2()),
-      terms_of_service_url: nullable(string2()).optional(),
-      status_page_url: nullable(string2()).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "privacy_policy_url": "privacyPolicyUrl",
-        "terms_of_service_url": "termsOfServiceUrl",
-        "status_page_url": "statusPageUrl"
-      });
-    });
-    ListProvidersResponse$inboundSchema = object({
-      data: array(lazy(() => ListProvidersData$inboundSchema))
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/sendchatcompletionrequest.js
-var SendChatCompletionRequestRequest$outboundSchema, SendChatCompletionRequestResponse$inboundSchema;
-var init_sendchatcompletionrequest = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/sendchatcompletionrequest.js"() {
-    init_v4();
-    init_event_streams();
-    init_primitives();
-    init_models();
-    SendChatCompletionRequestRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      chatGenerationParams: ChatGenerationParams$outboundSchema
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title",
-        chatGenerationParams: "ChatGenerationParams"
-      });
-    });
-    SendChatCompletionRequestResponse$inboundSchema = union([
-      ChatResponse$inboundSchema,
-      custom((x) => x instanceof ReadableStream).transform((stream) => {
-        return new EventStream(stream, (rawEvent) => {
-          if (rawEvent.data === "[DONE]")
-            return { done: true };
-          return {
-            value: ChatStreamingResponseChunk$inboundSchema.parse(rawEvent)?.data
-          };
-        });
-      })
-    ]);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/updateguardrail.js
-var UpdateGuardrailResetIntervalRequest, UpdateGuardrailResetIntervalResponse, UpdateGuardrailResetIntervalRequest$outboundSchema, UpdateGuardrailRequestBody$outboundSchema, UpdateGuardrailRequest$outboundSchema, UpdateGuardrailResetIntervalResponse$inboundSchema, UpdateGuardrailData$inboundSchema, UpdateGuardrailResponse$inboundSchema;
-var init_updateguardrail = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/updateguardrail.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    UpdateGuardrailResetIntervalRequest = {
-      Daily: "daily",
-      Weekly: "weekly",
-      Monthly: "monthly"
-    };
-    UpdateGuardrailResetIntervalResponse = {
-      Daily: "daily",
-      Weekly: "weekly",
-      Monthly: "monthly"
-    };
-    UpdateGuardrailResetIntervalRequest$outboundSchema = outboundSchema(UpdateGuardrailResetIntervalRequest);
-    UpdateGuardrailRequestBody$outboundSchema = object({
-      name: string2().optional(),
-      description: nullable(string2()).optional(),
-      limitUsd: nullable(number2()).optional(),
-      resetInterval: nullable(UpdateGuardrailResetIntervalRequest$outboundSchema).optional(),
-      allowedProviders: nullable(array(string2())).optional(),
-      allowedModels: nullable(array(string2())).optional(),
-      enforceZdr: nullable(boolean2()).optional()
-    }).transform((v) => {
-      return remap(v, {
-        limitUsd: "limit_usd",
-        resetInterval: "reset_interval",
-        allowedProviders: "allowed_providers",
-        allowedModels: "allowed_models",
-        enforceZdr: "enforce_zdr"
-      });
-    });
-    UpdateGuardrailRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      id: string2(),
-      requestBody: lazy(() => UpdateGuardrailRequestBody$outboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title",
-        requestBody: "RequestBody"
-      });
-    });
-    UpdateGuardrailResetIntervalResponse$inboundSchema = inboundSchema(UpdateGuardrailResetIntervalResponse);
-    UpdateGuardrailData$inboundSchema = object({
-      id: string2(),
-      name: string2(),
-      description: nullable(string2()).optional(),
-      limit_usd: nullable(number2()).optional(),
-      reset_interval: nullable(UpdateGuardrailResetIntervalResponse$inboundSchema).optional(),
-      allowed_providers: nullable(array(string2())).optional(),
-      allowed_models: nullable(array(string2())).optional(),
-      enforce_zdr: nullable(boolean2()).optional(),
-      created_at: string2(),
-      updated_at: nullable(string2()).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "limit_usd": "limitUsd",
-        "reset_interval": "resetInterval",
-        "allowed_providers": "allowedProviders",
-        "allowed_models": "allowedModels",
-        "enforce_zdr": "enforceZdr",
-        "created_at": "createdAt",
-        "updated_at": "updatedAt"
-      });
-    });
-    UpdateGuardrailResponse$inboundSchema = object({
-      data: lazy(() => UpdateGuardrailData$inboundSchema)
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/updatekeys.js
-var UpdateKeysLimitReset, UpdateKeysLimitReset$outboundSchema, UpdateKeysRequestBody$outboundSchema, UpdateKeysRequest$outboundSchema, UpdateKeysData$inboundSchema, UpdateKeysResponse$inboundSchema;
-var init_updatekeys = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/updatekeys.js"() {
-    init_v4();
-    init_primitives();
-    init_enums();
-    UpdateKeysLimitReset = {
-      Daily: "daily",
-      Weekly: "weekly",
-      Monthly: "monthly"
-    };
-    UpdateKeysLimitReset$outboundSchema = outboundSchema(UpdateKeysLimitReset);
-    UpdateKeysRequestBody$outboundSchema = object({
-      name: string2().optional(),
-      disabled: boolean2().optional(),
-      limit: nullable(number2()).optional(),
-      limitReset: nullable(UpdateKeysLimitReset$outboundSchema).optional(),
-      includeByokInLimit: boolean2().optional()
-    }).transform((v) => {
-      return remap(v, {
-        limitReset: "limit_reset",
-        includeByokInLimit: "include_byok_in_limit"
-      });
-    });
-    UpdateKeysRequest$outboundSchema = object({
-      httpReferer: string2().optional(),
-      xTitle: string2().optional(),
-      hash: string2(),
-      requestBody: lazy(() => UpdateKeysRequestBody$outboundSchema)
-    }).transform((v) => {
-      return remap(v, {
-        httpReferer: "HTTP-Referer",
-        xTitle: "X-Title",
-        requestBody: "RequestBody"
-      });
-    });
-    UpdateKeysData$inboundSchema = object({
-      hash: string2(),
-      name: string2(),
-      label: string2(),
-      disabled: boolean2(),
-      limit: nullable(number2()),
-      limit_remaining: nullable(number2()),
-      limit_reset: nullable(string2()),
-      include_byok_in_limit: boolean2(),
-      usage: number2(),
-      usage_daily: number2(),
-      usage_weekly: number2(),
-      usage_monthly: number2(),
-      byok_usage: number2(),
-      byok_usage_daily: number2(),
-      byok_usage_weekly: number2(),
-      byok_usage_monthly: number2(),
-      created_at: string2(),
-      updated_at: nullable(string2()),
-      expires_at: nullable(iso_exports.datetime({ offset: true }).transform((v) => new Date(v))).optional()
-    }).transform((v) => {
-      return remap(v, {
-        "limit_remaining": "limitRemaining",
-        "limit_reset": "limitReset",
-        "include_byok_in_limit": "includeByokInLimit",
-        "usage_daily": "usageDaily",
-        "usage_weekly": "usageWeekly",
-        "usage_monthly": "usageMonthly",
-        "byok_usage": "byokUsage",
-        "byok_usage_daily": "byokUsageDaily",
-        "byok_usage_weekly": "byokUsageWeekly",
-        "byok_usage_monthly": "byokUsageMonthly",
-        "created_at": "createdAt",
-        "updated_at": "updatedAt",
-        "expires_at": "expiresAt"
-      });
-    });
-    UpdateKeysResponse$inboundSchema = object({
-      data: lazy(() => UpdateKeysData$inboundSchema)
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/models/operations/index.js
-var init_operations = __esm({
-  "node_modules/@openrouter/sdk/esm/models/operations/index.js"() {
-    init_bulkassignkeystoguardrail();
-    init_bulkassignmemberstoguardrail();
-    init_bulkunassignkeysfromguardrail();
-    init_bulkunassignmembersfromguardrail();
-    init_createauthkeyscode();
-    init_createcoinbasecharge();
-    init_createembeddings();
-    init_createguardrail();
-    init_createkeys();
-    init_createresponses();
-    init_deleteguardrail();
-    init_deletekeys();
-    init_exchangeauthcodeforapikey();
-    init_getcredits();
-    init_getcurrentkey();
-    init_getgeneration();
-    init_getguardrail();
-    init_getkey();
-    init_getmodels();
-    init_getuseractivity();
-    init_list();
-    init_listembeddingsmodels();
-    init_listendpoints();
-    init_listendpointszdr();
-    init_listguardrailkeyassignments();
-    init_listguardrailmemberassignments();
-    init_listguardrails();
-    init_listkeyassignments();
-    init_listmemberassignments();
-    init_listmodelscount();
-    init_listmodelsuser();
-    init_listproviders();
-    init_sendchatcompletionrequest();
-    init_updateguardrail();
-    init_updatekeys();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/types/async.js
-var __classPrivateFieldSet2, __classPrivateFieldGet2, _APIPromise_promise, _APIPromise_unwrapped, _a2, APIPromise;
-var init_async = __esm({
-  "node_modules/@openrouter/sdk/esm/types/async.js"() {
-    __classPrivateFieldSet2 = function(receiver, state, value, kind, f) {
-      if (kind === "m") throw new TypeError("Private method is not writable");
-      if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a setter");
-      if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot write private member to an object whose class did not declare it");
-      return kind === "a" ? f.call(receiver, value) : f ? f.value = value : state.set(receiver, value), value;
-    };
-    __classPrivateFieldGet2 = function(receiver, state, kind, f) {
-      if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a getter");
-      if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
-      return kind === "m" ? f : kind === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
-    };
-    APIPromise = class {
-      constructor(p) {
-        _APIPromise_promise.set(this, void 0);
-        _APIPromise_unwrapped.set(this, void 0);
-        this[_a2] = "APIPromise";
-        __classPrivateFieldSet2(this, _APIPromise_promise, p instanceof Promise ? p : Promise.resolve(p), "f");
-        __classPrivateFieldSet2(this, _APIPromise_unwrapped, p instanceof Promise ? __classPrivateFieldGet2(this, _APIPromise_promise, "f").then(([value]) => value) : Promise.resolve(p[0]), "f");
-      }
-      then(onfulfilled, onrejected) {
-        return __classPrivateFieldGet2(this, _APIPromise_promise, "f").then(onfulfilled ? ([value]) => onfulfilled(value) : void 0, onrejected);
-      }
-      catch(onrejected) {
-        return __classPrivateFieldGet2(this, _APIPromise_unwrapped, "f").catch(onrejected);
-      }
-      finally(onfinally) {
-        return __classPrivateFieldGet2(this, _APIPromise_unwrapped, "f").finally(onfinally);
-      }
-      $inspect() {
-        return __classPrivateFieldGet2(this, _APIPromise_promise, "f");
-      }
-    };
-    _APIPromise_promise = /* @__PURE__ */ new WeakMap(), _APIPromise_unwrapped = /* @__PURE__ */ new WeakMap(), _a2 = Symbol.toStringTag;
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/analyticsGetUserActivity.js
-function analyticsGetUserActivity(client, request, options) {
-  return new APIPromise($do(client, request, options));
-}
-async function $do(client, request, options) {
-  const parsed = safeParse3(request, (value) => GetUserActivityRequest$outboundSchema.optional().parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = null;
-  const path3 = pathToFunc("/activity")();
-  const query = encodeFormQuery({
-    "date": payload?.date
-  });
-  const headers = new Headers(compactMap({
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload?.["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload?.["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getUserActivity",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "GET",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    query,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["400", "401", "403", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, GetUserActivityResponse$inboundSchema), jsonErr(400, BadRequestResponseError$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(403, ForbiddenResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_analyticsGetUserActivity = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/analyticsGetUserActivity.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/sdk/analytics.js
-var Analytics;
-var init_analytics = __esm({
-  "node_modules/@openrouter/sdk/esm/sdk/analytics.js"() {
-    init_analyticsGetUserActivity();
-    init_sdks();
-    init_fp();
-    Analytics = class extends ClientSDK {
-      /**
-       * Get user activity grouped by endpoint
-       *
-       * @remarks
-       * Returns user activity data grouped by endpoint for the last 30 (completed) UTC days. [Management key](/docs/guides/overview/auth/management-api-keys) required.
-       */
-      async getUserActivity(request, options) {
-        return unwrapAsync(analyticsGetUserActivity(this, request, options));
-      }
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/apiKeysCreate.js
-function apiKeysCreate(client, request, options) {
-  return new APIPromise($do2(client, request, options));
-}
-async function $do2(client, request, options) {
-  const parsed = safeParse3(request, (value) => CreateKeysRequest$outboundSchema.parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = encodeJSON("body", payload.RequestBody, { explode: true });
-  const path3 = pathToFunc("/keys")();
-  const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "createKeys",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "POST",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["400", "401", "429", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(201, CreateKeysResponse$inboundSchema), jsonErr(400, BadRequestResponseError$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(429, TooManyRequestsResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_apiKeysCreate = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/apiKeysCreate.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/apiKeysDelete.js
-function apiKeysDelete(client, request, options) {
-  return new APIPromise($do3(client, request, options));
-}
-async function $do3(client, request, options) {
-  const parsed = safeParse3(request, (value) => DeleteKeysRequest$outboundSchema.parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = null;
-  const pathParams = {
-    hash: encodeSimple("hash", payload.hash, {
-      explode: false,
-      charEncoding: "percent"
-    })
-  };
-  const path3 = pathToFunc("/keys/{hash}")(pathParams);
-  const headers = new Headers(compactMap({
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "deleteKeys",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "DELETE",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["401", "404", "429", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, DeleteKeysResponse$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(404, NotFoundResponseError$inboundSchema), jsonErr(429, TooManyRequestsResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_apiKeysDelete = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/apiKeysDelete.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/apiKeysGet.js
-function apiKeysGet(client, request, options) {
-  return new APIPromise($do4(client, request, options));
-}
-async function $do4(client, request, options) {
-  const parsed = safeParse3(request, (value) => GetKeyRequest$outboundSchema.parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = null;
-  const pathParams = {
-    hash: encodeSimple("hash", payload.hash, {
-      explode: false,
-      charEncoding: "percent"
-    })
-  };
-  const path3 = pathToFunc("/keys/{hash}")(pathParams);
-  const headers = new Headers(compactMap({
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getKey",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "GET",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["401", "404", "429", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, GetKeyResponse$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(404, NotFoundResponseError$inboundSchema), jsonErr(429, TooManyRequestsResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_apiKeysGet = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/apiKeysGet.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/apiKeysGetCurrentKeyMetadata.js
-function apiKeysGetCurrentKeyMetadata(client, request, options) {
-  return new APIPromise($do5(client, request, options));
-}
-async function $do5(client, request, options) {
-  const parsed = safeParse3(request, (value) => GetCurrentKeyRequest$outboundSchema.optional().parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = null;
-  const path3 = pathToFunc("/key")();
-  const headers = new Headers(compactMap({
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload?.["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload?.["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getCurrentKey",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "GET",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["401", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, GetCurrentKeyResponse$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_apiKeysGetCurrentKeyMetadata = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/apiKeysGetCurrentKeyMetadata.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/apiKeysList.js
-function apiKeysList(client, request, options) {
-  return new APIPromise($do6(client, request, options));
-}
-async function $do6(client, request, options) {
-  const parsed = safeParse3(request, (value) => ListRequest$outboundSchema.optional().parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = null;
-  const path3 = pathToFunc("/keys")();
-  const query = encodeFormQuery({
-    "include_disabled": payload?.include_disabled,
-    "offset": payload?.offset
-  });
-  const headers = new Headers(compactMap({
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload?.["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload?.["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "list",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "GET",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    query,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["401", "429", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, ListResponse$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(429, TooManyRequestsResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_apiKeysList = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/apiKeysList.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/apiKeysUpdate.js
-function apiKeysUpdate(client, request, options) {
-  return new APIPromise($do7(client, request, options));
-}
-async function $do7(client, request, options) {
-  const parsed = safeParse3(request, (value) => UpdateKeysRequest$outboundSchema.parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = encodeJSON("body", payload.RequestBody, { explode: true });
-  const pathParams = {
-    hash: encodeSimple("hash", payload.hash, {
-      explode: false,
-      charEncoding: "percent"
-    })
-  };
-  const path3 = pathToFunc("/keys/{hash}")(pathParams);
-  const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "updateKeys",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "PATCH",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["400", "401", "404", "429", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, UpdateKeysResponse$inboundSchema), jsonErr(400, BadRequestResponseError$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(404, NotFoundResponseError$inboundSchema), jsonErr(429, TooManyRequestsResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_apiKeysUpdate = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/apiKeysUpdate.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/sdk/apikeys.js
-var APIKeys;
-var init_apikeys = __esm({
-  "node_modules/@openrouter/sdk/esm/sdk/apikeys.js"() {
-    init_apiKeysCreate();
-    init_apiKeysDelete();
-    init_apiKeysGet();
-    init_apiKeysGetCurrentKeyMetadata();
-    init_apiKeysList();
-    init_apiKeysUpdate();
-    init_sdks();
-    init_fp();
-    APIKeys = class extends ClientSDK {
-      /**
-       * List API keys
-       *
-       * @remarks
-       * List all API keys for the authenticated user. [Management key](/docs/guides/overview/auth/management-api-keys) required.
-       */
-      async list(request, options) {
-        return unwrapAsync(apiKeysList(this, request, options));
-      }
-      /**
-       * Create a new API key
-       *
-       * @remarks
-       * Create a new API key for the authenticated user. [Management key](/docs/guides/overview/auth/management-api-keys) required.
-       */
-      async create(request, options) {
-        return unwrapAsync(apiKeysCreate(this, request, options));
-      }
-      /**
-       * Update an API key
-       *
-       * @remarks
-       * Update an existing API key. [Management key](/docs/guides/overview/auth/management-api-keys) required.
-       */
-      async update(request, options) {
-        return unwrapAsync(apiKeysUpdate(this, request, options));
-      }
-      /**
-       * Delete an API key
-       *
-       * @remarks
-       * Delete an existing API key. [Management key](/docs/guides/overview/auth/management-api-keys) required.
-       */
-      async delete(request, options) {
-        return unwrapAsync(apiKeysDelete(this, request, options));
-      }
-      /**
-       * Get a single API key
-       *
-       * @remarks
-       * Get a single API key by hash. [Management key](/docs/guides/overview/auth/management-api-keys) required.
-       */
-      async get(request, options) {
-        return unwrapAsync(apiKeysGet(this, request, options));
-      }
-      /**
-       * Get current API key
-       *
-       * @remarks
-       * Get information on the API key associated with the current authentication session
-       */
-      async getCurrentKeyMetadata(request, options) {
-        return unwrapAsync(apiKeysGetCurrentKeyMetadata(this, request, options));
-      }
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/betaResponsesSend.js
-function betaResponsesSend(client, request, options) {
-  return new APIPromise($do8(client, request, options));
-}
-async function $do8(client, request, options) {
-  const parsed = safeParse3(request, (value) => CreateResponsesRequest$outboundSchema.parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = encodeJSON("body", payload.OpenResponsesRequest, {
-    explode: true
-  });
-  const path3 = pathToFunc("/responses")();
-  const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
-    Accept: request?.openResponsesRequest?.stream ? "text/event-stream" : "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "createResponses",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "POST",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: [
-      "400",
-      "401",
-      "402",
-      "404",
-      "408",
-      "413",
-      "422",
-      "429",
-      "4XX",
-      "500",
-      "502",
-      "503",
-      "524",
-      "529",
-      "5XX"
-    ],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, CreateResponsesResponse$inboundSchema), sse(200, CreateResponsesResponse$inboundSchema), jsonErr(400, BadRequestResponseError$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(402, PaymentRequiredResponseError$inboundSchema), jsonErr(404, NotFoundResponseError$inboundSchema), jsonErr(408, RequestTimeoutResponseError$inboundSchema), jsonErr(413, PayloadTooLargeResponseError$inboundSchema), jsonErr(422, UnprocessableEntityResponseError$inboundSchema), jsonErr(429, TooManyRequestsResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), jsonErr(502, BadGatewayResponseError$inboundSchema), jsonErr(503, ServiceUnavailableResponseError$inboundSchema), jsonErr(524, EdgeNetworkTimeoutResponseError$inboundSchema), jsonErr(529, ProviderOverloadedResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_betaResponsesSend = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/betaResponsesSend.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/sdk/responses.js
-var Responses;
-var init_responses = __esm({
-  "node_modules/@openrouter/sdk/esm/sdk/responses.js"() {
-    init_betaResponsesSend();
-    init_sdks();
-    init_fp();
-    Responses = class extends ClientSDK {
-      async send(request, options) {
-        return unwrapAsync(betaResponsesSend(this, request, options));
-      }
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/sdk/beta.js
-var Beta;
-var init_beta = __esm({
-  "node_modules/@openrouter/sdk/esm/sdk/beta.js"() {
-    init_sdks();
-    init_responses();
-    Beta = class extends ClientSDK {
-      get responses() {
-        return this._responses ?? (this._responses = new Responses(this._options));
-      }
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/chatSend.js
-function chatSend(client, request, options) {
-  return new APIPromise($do9(client, request, options));
-}
-async function $do9(client, request, options) {
-  const parsed = safeParse3(request, (value) => SendChatCompletionRequestRequest$outboundSchema.parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = encodeJSON("body", payload.ChatGenerationParams, {
-    explode: true
-  });
-  const path3 = pathToFunc("/chat/completions")();
-  const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
-    Accept: request?.chatGenerationParams?.stream ? "text/event-stream" : "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "sendChatCompletionRequest",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "POST",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["400", "401", "429", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, SendChatCompletionRequestResponse$inboundSchema), sse(200, SendChatCompletionRequestResponse$inboundSchema), jsonErr([400, 401, 429], ChatError$inboundSchema), jsonErr(500, ChatError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_chatSend = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/chatSend.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/sdk/chat.js
-var Chat;
-var init_chat = __esm({
-  "node_modules/@openrouter/sdk/esm/sdk/chat.js"() {
-    init_chatSend();
-    init_sdks();
-    init_fp();
-    Chat = class extends ClientSDK {
-      async send(request, options) {
-        return unwrapAsync(chatSend(this, request, options));
-      }
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/creditsCreateCoinbaseCharge.js
-function creditsCreateCoinbaseCharge(client, security, request, options) {
-  return new APIPromise($do10(client, security, request, options));
-}
-async function $do10(client, security, request, options) {
-  const parsed = safeParse3(request, (value) => CreateCoinbaseChargeRequest$outboundSchema.parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = encodeJSON("body", payload.CreateChargeRequest, {
-    explode: true
-  });
-  const path3 = pathToFunc("/credits/coinbase")();
-  const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const requestSecurity = resolveSecurity([
-    {
-      fieldName: "Authorization",
-      type: "http:bearer",
-      value: security?.bearer
-    }
-  ]);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "createCoinbaseCharge",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: security,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "POST",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["400", "401", "429", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, CreateCoinbaseChargeResponse$inboundSchema), jsonErr(400, BadRequestResponseError$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(429, TooManyRequestsResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_creditsCreateCoinbaseCharge = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/creditsCreateCoinbaseCharge.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/creditsGetCredits.js
-function creditsGetCredits(client, request, options) {
-  return new APIPromise($do11(client, request, options));
-}
-async function $do11(client, request, options) {
-  const parsed = safeParse3(request, (value) => GetCreditsRequest$outboundSchema.optional().parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = null;
-  const path3 = pathToFunc("/credits")();
-  const headers = new Headers(compactMap({
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload?.["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload?.["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getCredits",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "GET",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["401", "403", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, GetCreditsResponse$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(403, ForbiddenResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_creditsGetCredits = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/creditsGetCredits.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/sdk/credits.js
-var Credits;
-var init_credits = __esm({
-  "node_modules/@openrouter/sdk/esm/sdk/credits.js"() {
-    init_creditsCreateCoinbaseCharge();
-    init_creditsGetCredits();
-    init_sdks();
-    init_fp();
-    Credits = class extends ClientSDK {
-      /**
-       * Get remaining credits
-       *
-       * @remarks
-       * Get total credits purchased and used for the authenticated user. [Management key](/docs/guides/overview/auth/management-api-keys) required.
-       */
-      async getCredits(request, options) {
-        return unwrapAsync(creditsGetCredits(this, request, options));
-      }
-      /**
-       * Create a Coinbase charge for crypto payment
-       *
-       * @remarks
-       * Create a Coinbase charge for crypto payment
-       */
-      async createCoinbaseCharge(security, request, options) {
-        return unwrapAsync(creditsCreateCoinbaseCharge(this, security, request, options));
-      }
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/embeddingsGenerate.js
-function embeddingsGenerate(client, request, options) {
-  return new APIPromise($do12(client, request, options));
-}
-async function $do12(client, request, options) {
-  const parsed = safeParse3(request, (value) => CreateEmbeddingsRequest$outboundSchema.parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = encodeJSON("body", payload.RequestBody, { explode: true });
-  const path3 = pathToFunc("/embeddings")();
-  const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
-    Accept: "application/json;q=1, text/event-stream;q=0",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "createEmbeddings",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "POST",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: [
-      "400",
-      "401",
-      "402",
-      "404",
-      "429",
-      "4XX",
-      "500",
-      "502",
-      "503",
-      "524",
-      "529",
-      "5XX"
-    ],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, CreateEmbeddingsResponse$inboundSchema), text(200, CreateEmbeddingsResponse$inboundSchema, {
-    ctype: "text/event-stream"
-  }), jsonErr(400, BadRequestResponseError$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(402, PaymentRequiredResponseError$inboundSchema), jsonErr(404, NotFoundResponseError$inboundSchema), jsonErr(429, TooManyRequestsResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), jsonErr(502, BadGatewayResponseError$inboundSchema), jsonErr(503, ServiceUnavailableResponseError$inboundSchema), jsonErr(524, EdgeNetworkTimeoutResponseError$inboundSchema), jsonErr(529, ProviderOverloadedResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_embeddingsGenerate = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/embeddingsGenerate.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/embeddingsListModels.js
-function embeddingsListModels(client, request, options) {
-  return new APIPromise($do13(client, request, options));
-}
-async function $do13(client, request, options) {
-  const parsed = safeParse3(request, (value) => ListEmbeddingsModelsRequest$outboundSchema.optional().parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = null;
-  const path3 = pathToFunc("/embeddings/models")();
-  const headers = new Headers(compactMap({
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload?.["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload?.["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listEmbeddingsModels",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "GET",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["400", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, ModelsListResponse$inboundSchema), jsonErr(400, BadRequestResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_embeddingsListModels = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/embeddingsListModels.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_models();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/sdk/embeddings.js
-var Embeddings;
-var init_embeddings = __esm({
-  "node_modules/@openrouter/sdk/esm/sdk/embeddings.js"() {
-    init_embeddingsGenerate();
-    init_embeddingsListModels();
-    init_sdks();
-    init_fp();
-    Embeddings = class extends ClientSDK {
-      /**
-       * Submit an embedding request
-       *
-       * @remarks
-       * Submits an embedding request to the embeddings router
-       */
-      async generate(request, options) {
-        return unwrapAsync(embeddingsGenerate(this, request, options));
-      }
-      /**
-       * List all embeddings models
-       *
-       * @remarks
-       * Returns a list of all available embeddings models and their properties
-       */
-      async listModels(request, options) {
-        return unwrapAsync(embeddingsListModels(this, request, options));
-      }
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/endpointsList.js
-function endpointsList(client, request, options) {
-  return new APIPromise($do14(client, request, options));
-}
-async function $do14(client, request, options) {
-  const parsed = safeParse3(request, (value) => ListEndpointsRequest$outboundSchema.parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = null;
-  const pathParams = {
-    author: encodeSimple("author", payload.author, {
-      explode: false,
-      charEncoding: "percent"
-    }),
-    slug: encodeSimple("slug", payload.slug, {
-      explode: false,
-      charEncoding: "percent"
-    })
-  };
-  const path3 = pathToFunc("/models/{author}/{slug}/endpoints")(pathParams);
-  const headers = new Headers(compactMap({
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listEndpoints",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "GET",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["404", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, ListEndpointsResponse$inboundSchema2), jsonErr(404, NotFoundResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_endpointsList = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/endpointsList.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/endpointsListZdrEndpoints.js
-function endpointsListZdrEndpoints(client, request, options) {
-  return new APIPromise($do15(client, request, options));
-}
-async function $do15(client, request, options) {
-  const parsed = safeParse3(request, (value) => ListEndpointsZdrRequest$outboundSchema.optional().parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = null;
-  const path3 = pathToFunc("/endpoints/zdr")();
-  const headers = new Headers(compactMap({
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload?.["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload?.["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listEndpointsZdr",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "GET",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, ListEndpointsZdrResponse$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_endpointsListZdrEndpoints = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/endpointsListZdrEndpoints.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/sdk/endpoints.js
-var Endpoints;
-var init_endpoints = __esm({
-  "node_modules/@openrouter/sdk/esm/sdk/endpoints.js"() {
-    init_endpointsList();
-    init_endpointsListZdrEndpoints();
-    init_sdks();
-    init_fp();
-    Endpoints = class extends ClientSDK {
-      /**
-       * List all endpoints for a model
-       */
-      async list(request, options) {
-        return unwrapAsync(endpointsList(this, request, options));
-      }
-      /**
-       * Preview the impact of ZDR on the available endpoints
-       */
-      async listZdrEndpoints(request, options) {
-        return unwrapAsync(endpointsListZdrEndpoints(this, request, options));
-      }
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/generationsGetGeneration.js
-function generationsGetGeneration(client, request, options) {
-  return new APIPromise($do16(client, request, options));
-}
-async function $do16(client, request, options) {
-  const parsed = safeParse3(request, (value) => GetGenerationRequest$outboundSchema.parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = null;
-  const path3 = pathToFunc("/generation")();
-  const query = encodeFormQuery({
-    "id": payload.id
-  });
-  const headers = new Headers(compactMap({
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getGeneration",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "GET",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    query,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: [
-      "401",
-      "402",
-      "404",
-      "429",
-      "4XX",
-      "500",
-      "502",
-      "524",
-      "529",
-      "5XX"
-    ],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, GetGenerationResponse$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(402, PaymentRequiredResponseError$inboundSchema), jsonErr(404, NotFoundResponseError$inboundSchema), jsonErr(429, TooManyRequestsResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), jsonErr(502, BadGatewayResponseError$inboundSchema), jsonErr(524, EdgeNetworkTimeoutResponseError$inboundSchema), jsonErr(529, ProviderOverloadedResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_generationsGetGeneration = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/generationsGetGeneration.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/sdk/generations.js
-var Generations;
-var init_generations = __esm({
-  "node_modules/@openrouter/sdk/esm/sdk/generations.js"() {
-    init_generationsGetGeneration();
-    init_sdks();
-    init_fp();
-    Generations = class extends ClientSDK {
-      /**
-       * Get request & usage metadata for a generation
-       */
-      async getGeneration(request, options) {
-        return unwrapAsync(generationsGetGeneration(this, request, options));
-      }
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/guardrailsBulkAssignKeys.js
-function guardrailsBulkAssignKeys(client, request, options) {
-  return new APIPromise($do17(client, request, options));
-}
-async function $do17(client, request, options) {
-  const parsed = safeParse3(request, (value) => BulkAssignKeysToGuardrailRequest$outboundSchema.parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = encodeJSON("body", payload.RequestBody, { explode: true });
-  const pathParams = {
-    id: encodeSimple("id", payload.id, {
-      explode: false,
-      charEncoding: "percent"
-    })
-  };
-  const path3 = pathToFunc("/guardrails/{id}/assignments/keys")(pathParams);
-  const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "bulkAssignKeysToGuardrail",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "POST",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["400", "401", "404", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, BulkAssignKeysToGuardrailResponse$inboundSchema), jsonErr(400, BadRequestResponseError$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(404, NotFoundResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_guardrailsBulkAssignKeys = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/guardrailsBulkAssignKeys.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/guardrailsBulkAssignMembers.js
-function guardrailsBulkAssignMembers(client, request, options) {
-  return new APIPromise($do18(client, request, options));
-}
-async function $do18(client, request, options) {
-  const parsed = safeParse3(request, (value) => BulkAssignMembersToGuardrailRequest$outboundSchema.parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = encodeJSON("body", payload.RequestBody, { explode: true });
-  const pathParams = {
-    id: encodeSimple("id", payload.id, {
-      explode: false,
-      charEncoding: "percent"
-    })
-  };
-  const path3 = pathToFunc("/guardrails/{id}/assignments/members")(pathParams);
-  const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "bulkAssignMembersToGuardrail",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "POST",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["400", "401", "404", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, BulkAssignMembersToGuardrailResponse$inboundSchema), jsonErr(400, BadRequestResponseError$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(404, NotFoundResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_guardrailsBulkAssignMembers = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/guardrailsBulkAssignMembers.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/guardrailsBulkUnassignKeys.js
-function guardrailsBulkUnassignKeys(client, request, options) {
-  return new APIPromise($do19(client, request, options));
-}
-async function $do19(client, request, options) {
-  const parsed = safeParse3(request, (value) => BulkUnassignKeysFromGuardrailRequest$outboundSchema.parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = encodeJSON("body", payload.RequestBody, { explode: true });
-  const pathParams = {
-    id: encodeSimple("id", payload.id, {
-      explode: false,
-      charEncoding: "percent"
-    })
-  };
-  const path3 = pathToFunc("/guardrails/{id}/assignments/keys/remove")(pathParams);
-  const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "bulkUnassignKeysFromGuardrail",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "POST",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["400", "401", "404", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, BulkUnassignKeysFromGuardrailResponse$inboundSchema), jsonErr(400, BadRequestResponseError$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(404, NotFoundResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_guardrailsBulkUnassignKeys = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/guardrailsBulkUnassignKeys.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/guardrailsBulkUnassignMembers.js
-function guardrailsBulkUnassignMembers(client, request, options) {
-  return new APIPromise($do20(client, request, options));
-}
-async function $do20(client, request, options) {
-  const parsed = safeParse3(request, (value) => BulkUnassignMembersFromGuardrailRequest$outboundSchema.parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = encodeJSON("body", payload.RequestBody, { explode: true });
-  const pathParams = {
-    id: encodeSimple("id", payload.id, {
-      explode: false,
-      charEncoding: "percent"
-    })
-  };
-  const path3 = pathToFunc("/guardrails/{id}/assignments/members/remove")(pathParams);
-  const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "bulkUnassignMembersFromGuardrail",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "POST",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["400", "401", "404", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, BulkUnassignMembersFromGuardrailResponse$inboundSchema), jsonErr(400, BadRequestResponseError$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(404, NotFoundResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_guardrailsBulkUnassignMembers = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/guardrailsBulkUnassignMembers.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/guardrailsCreate.js
-function guardrailsCreate(client, request, options) {
-  return new APIPromise($do21(client, request, options));
-}
-async function $do21(client, request, options) {
-  const parsed = safeParse3(request, (value) => CreateGuardrailRequest$outboundSchema.parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = encodeJSON("body", payload.RequestBody, { explode: true });
-  const path3 = pathToFunc("/guardrails")();
-  const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "createGuardrail",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "POST",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["400", "401", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(201, CreateGuardrailResponse$inboundSchema), jsonErr(400, BadRequestResponseError$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_guardrailsCreate = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/guardrailsCreate.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/guardrailsDelete.js
-function guardrailsDelete(client, request, options) {
-  return new APIPromise($do22(client, request, options));
-}
-async function $do22(client, request, options) {
-  const parsed = safeParse3(request, (value) => DeleteGuardrailRequest$outboundSchema.parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = null;
-  const pathParams = {
-    id: encodeSimple("id", payload.id, {
-      explode: false,
-      charEncoding: "percent"
-    })
-  };
-  const path3 = pathToFunc("/guardrails/{id}")(pathParams);
-  const headers = new Headers(compactMap({
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "deleteGuardrail",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "DELETE",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["401", "404", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, DeleteGuardrailResponse$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(404, NotFoundResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_guardrailsDelete = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/guardrailsDelete.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/guardrailsGet.js
-function guardrailsGet(client, request, options) {
-  return new APIPromise($do23(client, request, options));
-}
-async function $do23(client, request, options) {
-  const parsed = safeParse3(request, (value) => GetGuardrailRequest$outboundSchema.parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = null;
-  const pathParams = {
-    id: encodeSimple("id", payload.id, {
-      explode: false,
-      charEncoding: "percent"
-    })
-  };
-  const path3 = pathToFunc("/guardrails/{id}")(pathParams);
-  const headers = new Headers(compactMap({
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getGuardrail",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "GET",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["401", "404", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, GetGuardrailResponse$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(404, NotFoundResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_guardrailsGet = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/guardrailsGet.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/guardrailsList.js
-function guardrailsList(client, request, options) {
-  return new APIPromise($do24(client, request, options));
-}
-async function $do24(client, request, options) {
-  const parsed = safeParse3(request, (value) => ListGuardrailsRequest$outboundSchema.optional().parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = null;
-  const path3 = pathToFunc("/guardrails")();
-  const query = encodeFormQuery({
-    "limit": payload?.limit,
-    "offset": payload?.offset
-  });
-  const headers = new Headers(compactMap({
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload?.["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload?.["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listGuardrails",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "GET",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    query,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["401", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, ListGuardrailsResponse$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_guardrailsList = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/guardrailsList.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/guardrailsListGuardrailKeyAssignments.js
-function guardrailsListGuardrailKeyAssignments(client, request, options) {
-  return new APIPromise($do25(client, request, options));
-}
-async function $do25(client, request, options) {
-  const parsed = safeParse3(request, (value) => ListGuardrailKeyAssignmentsRequest$outboundSchema.parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = null;
-  const pathParams = {
-    id: encodeSimple("id", payload.id, {
-      explode: false,
-      charEncoding: "percent"
-    })
-  };
-  const path3 = pathToFunc("/guardrails/{id}/assignments/keys")(pathParams);
-  const query = encodeFormQuery({
-    "limit": payload.limit,
-    "offset": payload.offset
-  });
-  const headers = new Headers(compactMap({
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listGuardrailKeyAssignments",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "GET",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    query,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["401", "404", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, ListGuardrailKeyAssignmentsResponse$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(404, NotFoundResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_guardrailsListGuardrailKeyAssignments = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/guardrailsListGuardrailKeyAssignments.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/guardrailsListGuardrailMemberAssignments.js
-function guardrailsListGuardrailMemberAssignments(client, request, options) {
-  return new APIPromise($do26(client, request, options));
-}
-async function $do26(client, request, options) {
-  const parsed = safeParse3(request, (value) => ListGuardrailMemberAssignmentsRequest$outboundSchema.parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = null;
-  const pathParams = {
-    id: encodeSimple("id", payload.id, {
-      explode: false,
-      charEncoding: "percent"
-    })
-  };
-  const path3 = pathToFunc("/guardrails/{id}/assignments/members")(pathParams);
-  const query = encodeFormQuery({
-    "limit": payload.limit,
-    "offset": payload.offset
-  });
-  const headers = new Headers(compactMap({
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listGuardrailMemberAssignments",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "GET",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    query,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["401", "404", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, ListGuardrailMemberAssignmentsResponse$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(404, NotFoundResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_guardrailsListGuardrailMemberAssignments = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/guardrailsListGuardrailMemberAssignments.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/guardrailsListKeyAssignments.js
-function guardrailsListKeyAssignments(client, request, options) {
-  return new APIPromise($do27(client, request, options));
-}
-async function $do27(client, request, options) {
-  const parsed = safeParse3(request, (value) => ListKeyAssignmentsRequest$outboundSchema.optional().parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = null;
-  const path3 = pathToFunc("/guardrails/assignments/keys")();
-  const query = encodeFormQuery({
-    "limit": payload?.limit,
-    "offset": payload?.offset
-  });
-  const headers = new Headers(compactMap({
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload?.["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload?.["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listKeyAssignments",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "GET",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    query,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["401", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, ListKeyAssignmentsResponse$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_guardrailsListKeyAssignments = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/guardrailsListKeyAssignments.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/guardrailsListMemberAssignments.js
-function guardrailsListMemberAssignments(client, request, options) {
-  return new APIPromise($do28(client, request, options));
-}
-async function $do28(client, request, options) {
-  const parsed = safeParse3(request, (value) => ListMemberAssignmentsRequest$outboundSchema.optional().parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = null;
-  const path3 = pathToFunc("/guardrails/assignments/members")();
-  const query = encodeFormQuery({
-    "limit": payload?.limit,
-    "offset": payload?.offset
-  });
-  const headers = new Headers(compactMap({
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload?.["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload?.["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listMemberAssignments",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "GET",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    query,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["401", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, ListMemberAssignmentsResponse$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_guardrailsListMemberAssignments = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/guardrailsListMemberAssignments.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/guardrailsUpdate.js
-function guardrailsUpdate(client, request, options) {
-  return new APIPromise($do29(client, request, options));
-}
-async function $do29(client, request, options) {
-  const parsed = safeParse3(request, (value) => UpdateGuardrailRequest$outboundSchema.parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = encodeJSON("body", payload.RequestBody, { explode: true });
-  const pathParams = {
-    id: encodeSimple("id", payload.id, {
-      explode: false,
-      charEncoding: "percent"
-    })
-  };
-  const path3 = pathToFunc("/guardrails/{id}")(pathParams);
-  const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "updateGuardrail",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "PATCH",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["400", "401", "404", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, UpdateGuardrailResponse$inboundSchema), jsonErr(400, BadRequestResponseError$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(404, NotFoundResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_guardrailsUpdate = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/guardrailsUpdate.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/sdk/guardrails.js
-var Guardrails;
-var init_guardrails = __esm({
-  "node_modules/@openrouter/sdk/esm/sdk/guardrails.js"() {
-    init_guardrailsBulkAssignKeys();
-    init_guardrailsBulkAssignMembers();
-    init_guardrailsBulkUnassignKeys();
-    init_guardrailsBulkUnassignMembers();
-    init_guardrailsCreate();
-    init_guardrailsDelete();
-    init_guardrailsGet();
-    init_guardrailsList();
-    init_guardrailsListGuardrailKeyAssignments();
-    init_guardrailsListGuardrailMemberAssignments();
-    init_guardrailsListKeyAssignments();
-    init_guardrailsListMemberAssignments();
-    init_guardrailsUpdate();
-    init_sdks();
-    init_fp();
-    Guardrails = class extends ClientSDK {
-      /**
-       * List guardrails
-       *
-       * @remarks
-       * List all guardrails for the authenticated user. [Management key](/docs/guides/overview/auth/management-api-keys) required.
-       */
-      async list(request, options) {
-        return unwrapAsync(guardrailsList(this, request, options));
-      }
-      /**
-       * Create a guardrail
-       *
-       * @remarks
-       * Create a new guardrail for the authenticated user. [Management key](/docs/guides/overview/auth/management-api-keys) required.
-       */
-      async create(request, options) {
-        return unwrapAsync(guardrailsCreate(this, request, options));
-      }
-      /**
-       * Get a guardrail
-       *
-       * @remarks
-       * Get a single guardrail by ID. [Management key](/docs/guides/overview/auth/management-api-keys) required.
-       */
-      async get(request, options) {
-        return unwrapAsync(guardrailsGet(this, request, options));
-      }
-      /**
-       * Update a guardrail
-       *
-       * @remarks
-       * Update an existing guardrail. [Management key](/docs/guides/overview/auth/management-api-keys) required.
-       */
-      async update(request, options) {
-        return unwrapAsync(guardrailsUpdate(this, request, options));
-      }
-      /**
-       * Delete a guardrail
-       *
-       * @remarks
-       * Delete an existing guardrail. [Management key](/docs/guides/overview/auth/management-api-keys) required.
-       */
-      async delete(request, options) {
-        return unwrapAsync(guardrailsDelete(this, request, options));
-      }
-      /**
-       * List all key assignments
-       *
-       * @remarks
-       * List all API key guardrail assignments for the authenticated user. [Management key](/docs/guides/overview/auth/management-api-keys) required.
-       */
-      async listKeyAssignments(request, options) {
-        return unwrapAsync(guardrailsListKeyAssignments(this, request, options));
-      }
-      /**
-       * List all member assignments
-       *
-       * @remarks
-       * List all organization member guardrail assignments for the authenticated user. [Management key](/docs/guides/overview/auth/management-api-keys) required.
-       */
-      async listMemberAssignments(request, options) {
-        return unwrapAsync(guardrailsListMemberAssignments(this, request, options));
-      }
-      /**
-       * List key assignments for a guardrail
-       *
-       * @remarks
-       * List all API key assignments for a specific guardrail. [Management key](/docs/guides/overview/auth/management-api-keys) required.
-       */
-      async listGuardrailKeyAssignments(request, options) {
-        return unwrapAsync(guardrailsListGuardrailKeyAssignments(this, request, options));
-      }
-      /**
-       * Bulk assign keys to a guardrail
-       *
-       * @remarks
-       * Assign multiple API keys to a specific guardrail. [Management key](/docs/guides/overview/auth/management-api-keys) required.
-       */
-      async bulkAssignKeys(request, options) {
-        return unwrapAsync(guardrailsBulkAssignKeys(this, request, options));
-      }
-      /**
-       * List member assignments for a guardrail
-       *
-       * @remarks
-       * List all organization member assignments for a specific guardrail. [Management key](/docs/guides/overview/auth/management-api-keys) required.
-       */
-      async listGuardrailMemberAssignments(request, options) {
-        return unwrapAsync(guardrailsListGuardrailMemberAssignments(this, request, options));
-      }
-      /**
-       * Bulk assign members to a guardrail
-       *
-       * @remarks
-       * Assign multiple organization members to a specific guardrail. [Management key](/docs/guides/overview/auth/management-api-keys) required.
-       */
-      async bulkAssignMembers(request, options) {
-        return unwrapAsync(guardrailsBulkAssignMembers(this, request, options));
-      }
-      /**
-       * Bulk unassign keys from a guardrail
-       *
-       * @remarks
-       * Unassign multiple API keys from a specific guardrail. [Management key](/docs/guides/overview/auth/management-api-keys) required.
-       */
-      async bulkUnassignKeys(request, options) {
-        return unwrapAsync(guardrailsBulkUnassignKeys(this, request, options));
-      }
-      /**
-       * Bulk unassign members from a guardrail
-       *
-       * @remarks
-       * Unassign multiple organization members from a specific guardrail. [Management key](/docs/guides/overview/auth/management-api-keys) required.
-       */
-      async bulkUnassignMembers(request, options) {
-        return unwrapAsync(guardrailsBulkUnassignMembers(this, request, options));
-      }
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/modelsCount.js
-function modelsCount(client, request, options) {
-  return new APIPromise($do30(client, request, options));
-}
-async function $do30(client, request, options) {
-  const parsed = safeParse3(request, (value) => ListModelsCountRequest$outboundSchema.optional().parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = null;
-  const path3 = pathToFunc("/models/count")();
-  const headers = new Headers(compactMap({
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload?.["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload?.["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listModelsCount",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "GET",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, ModelsCountResponse$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_modelsCount = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/modelsCount.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_models();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/modelsList.js
-function modelsList(client, request, options) {
-  return new APIPromise($do31(client, request, options));
-}
-async function $do31(client, request, options) {
-  const parsed = safeParse3(request, (value) => GetModelsRequest$outboundSchema.optional().parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = null;
-  const path3 = pathToFunc("/models")();
-  const query = encodeFormQuery({
-    "category": payload?.category,
-    "supported_parameters": payload?.supported_parameters
-  });
-  const headers = new Headers(compactMap({
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload?.["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload?.["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getModels",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "GET",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    query,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["400", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, ModelsListResponse$inboundSchema), jsonErr(400, BadRequestResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_modelsList = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/modelsList.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_models();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/modelsListForUser.js
-function modelsListForUser(client, security, request, options) {
-  return new APIPromise($do32(client, security, request, options));
-}
-async function $do32(client, security, request, options) {
-  const parsed = safeParse3(request, (value) => ListModelsUserRequest$outboundSchema.optional().parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = null;
-  const path3 = pathToFunc("/models/user")();
-  const headers = new Headers(compactMap({
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload?.["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload?.["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const requestSecurity = resolveSecurity([
-    {
-      fieldName: "Authorization",
-      type: "http:bearer",
-      value: security?.bearer
-    }
-  ]);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listModelsUser",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: security,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "GET",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["401", "404", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, ModelsListResponse$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(404, NotFoundResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_modelsListForUser = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/modelsListForUser.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_models();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/sdk/models.js
-var Models;
-var init_models2 = __esm({
-  "node_modules/@openrouter/sdk/esm/sdk/models.js"() {
-    init_modelsCount();
-    init_modelsList();
-    init_modelsListForUser();
-    init_sdks();
-    init_fp();
-    Models = class extends ClientSDK {
-      /**
-       * Get total count of available models
-       */
-      async count(request, options) {
-        return unwrapAsync(modelsCount(this, request, options));
-      }
-      /**
-       * List all models and their properties
-       */
-      async list(request, options) {
-        return unwrapAsync(modelsList(this, request, options));
-      }
-      /**
-       * List models filtered by user provider preferences, privacy settings, and guardrails
-       *
-       * @remarks
-       * List models filtered by user provider preferences, [privacy settings](https://openrouter.ai/docs/guides/privacy/logging), and [guardrails](https://openrouter.ai/docs/guides/features/guardrails). If requesting through `eu.openrouter.ai/api/v1/...` the results will be filtered to models that satisfy [EU in-region routing](https://openrouter.ai/docs/guides/privacy/logging#enterprise-eu-in-region-routing).
-       */
-      async listForUser(security, request, options) {
-        return unwrapAsync(modelsListForUser(this, security, request, options));
-      }
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/oAuthCreateAuthCode.js
-function oAuthCreateAuthCode(client, request, options) {
-  return new APIPromise($do33(client, request, options));
-}
-async function $do33(client, request, options) {
-  const parsed = safeParse3(request, (value) => CreateAuthKeysCodeRequest$outboundSchema.parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = encodeJSON("body", payload.RequestBody, { explode: true });
-  const path3 = pathToFunc("/auth/keys/code")();
-  const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "createAuthKeysCode",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "POST",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["400", "401", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, CreateAuthKeysCodeResponse$inboundSchema), jsonErr(400, BadRequestResponseError$inboundSchema), jsonErr(401, UnauthorizedResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_oAuthCreateAuthCode = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/oAuthCreateAuthCode.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/oAuthExchangeAuthCodeForAPIKey.js
-function oAuthExchangeAuthCodeForAPIKey(client, request, options) {
-  return new APIPromise($do34(client, request, options));
-}
-async function $do34(client, request, options) {
-  const parsed = safeParse3(request, (value) => ExchangeAuthCodeForAPIKeyRequest$outboundSchema.parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = encodeJSON("body", payload.RequestBody, { explode: true });
-  const path3 = pathToFunc("/auth/keys")();
-  const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "exchangeAuthCodeForAPIKey",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "POST",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["400", "403", "4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, ExchangeAuthCodeForAPIKeyResponse$inboundSchema), jsonErr(400, BadRequestResponseError$inboundSchema), jsonErr(403, ForbiddenResponseError$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_oAuthExchangeAuthCodeForAPIKey = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/oAuthExchangeAuthCodeForAPIKey.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/zod/v3/helpers/util.js
-var util, objectUtil, ZodParsedType, getParsedType2;
-var init_util2 = __esm({
-  "node_modules/zod/v3/helpers/util.js"() {
-    (function(util2) {
-      util2.assertEqual = (_) => {
-      };
-      function assertIs2(_arg) {
-      }
-      util2.assertIs = assertIs2;
-      function assertNever2(_x) {
-        throw new Error();
-      }
-      util2.assertNever = assertNever2;
-      util2.arrayToEnum = (items) => {
-        const obj = {};
-        for (const item of items) {
-          obj[item] = item;
-        }
-        return obj;
-      };
-      util2.getValidEnumValues = (obj) => {
-        const validKeys = util2.objectKeys(obj).filter((k) => typeof obj[obj[k]] !== "number");
-        const filtered = {};
-        for (const k of validKeys) {
-          filtered[k] = obj[k];
-        }
-        return util2.objectValues(filtered);
-      };
-      util2.objectValues = (obj) => {
-        return util2.objectKeys(obj).map(function(e) {
-          return obj[e];
-        });
-      };
-      util2.objectKeys = typeof Object.keys === "function" ? (obj) => Object.keys(obj) : (object2) => {
-        const keys = [];
-        for (const key in object2) {
-          if (Object.prototype.hasOwnProperty.call(object2, key)) {
-            keys.push(key);
-          }
-        }
-        return keys;
-      };
-      util2.find = (arr, checker) => {
-        for (const item of arr) {
-          if (checker(item))
-            return item;
-        }
-        return void 0;
-      };
-      util2.isInteger = typeof Number.isInteger === "function" ? (val) => Number.isInteger(val) : (val) => typeof val === "number" && Number.isFinite(val) && Math.floor(val) === val;
-      function joinValues2(array2, separator = " | ") {
-        return array2.map((val) => typeof val === "string" ? `'${val}'` : val).join(separator);
-      }
-      util2.joinValues = joinValues2;
-      util2.jsonStringifyReplacer = (_, value) => {
-        if (typeof value === "bigint") {
-          return value.toString();
-        }
-        return value;
-      };
-    })(util || (util = {}));
-    (function(objectUtil2) {
-      objectUtil2.mergeShapes = (first, second) => {
-        return {
-          ...first,
-          ...second
-          // second overwrites first
-        };
-      };
-    })(objectUtil || (objectUtil = {}));
-    ZodParsedType = util.arrayToEnum([
-      "string",
-      "nan",
-      "number",
-      "integer",
-      "float",
-      "boolean",
-      "date",
-      "bigint",
-      "symbol",
-      "function",
-      "undefined",
-      "null",
-      "array",
-      "object",
-      "unknown",
-      "promise",
-      "void",
-      "never",
-      "map",
-      "set"
-    ]);
-    getParsedType2 = (data) => {
-      const t = typeof data;
-      switch (t) {
-        case "undefined":
-          return ZodParsedType.undefined;
-        case "string":
-          return ZodParsedType.string;
-        case "number":
-          return Number.isNaN(data) ? ZodParsedType.nan : ZodParsedType.number;
-        case "boolean":
-          return ZodParsedType.boolean;
-        case "function":
-          return ZodParsedType.function;
-        case "bigint":
-          return ZodParsedType.bigint;
-        case "symbol":
-          return ZodParsedType.symbol;
-        case "object":
-          if (Array.isArray(data)) {
-            return ZodParsedType.array;
-          }
-          if (data === null) {
-            return ZodParsedType.null;
-          }
-          if (data.then && typeof data.then === "function" && data.catch && typeof data.catch === "function") {
-            return ZodParsedType.promise;
-          }
-          if (typeof Map !== "undefined" && data instanceof Map) {
-            return ZodParsedType.map;
-          }
-          if (typeof Set !== "undefined" && data instanceof Set) {
-            return ZodParsedType.set;
-          }
-          if (typeof Date !== "undefined" && data instanceof Date) {
-            return ZodParsedType.date;
-          }
-          return ZodParsedType.object;
-        default:
-          return ZodParsedType.unknown;
-      }
-    };
-  }
-});
-
-// node_modules/zod/v3/ZodError.js
-var ZodIssueCode2, quotelessJson, ZodError2;
-var init_ZodError = __esm({
-  "node_modules/zod/v3/ZodError.js"() {
-    init_util2();
-    ZodIssueCode2 = util.arrayToEnum([
-      "invalid_type",
-      "invalid_literal",
-      "custom",
-      "invalid_union",
-      "invalid_union_discriminator",
-      "invalid_enum_value",
-      "unrecognized_keys",
-      "invalid_arguments",
-      "invalid_return_type",
-      "invalid_date",
-      "invalid_string",
-      "too_small",
-      "too_big",
-      "invalid_intersection_types",
-      "not_multiple_of",
-      "not_finite"
-    ]);
-    quotelessJson = (obj) => {
-      const json3 = JSON.stringify(obj, null, 2);
-      return json3.replace(/"([^"]+)":/g, "$1:");
-    };
-    ZodError2 = class _ZodError extends Error {
-      get errors() {
-        return this.issues;
-      }
-      constructor(issues) {
-        super();
-        this.issues = [];
-        this.addIssue = (sub) => {
-          this.issues = [...this.issues, sub];
-        };
-        this.addIssues = (subs = []) => {
-          this.issues = [...this.issues, ...subs];
-        };
-        const actualProto = new.target.prototype;
-        if (Object.setPrototypeOf) {
-          Object.setPrototypeOf(this, actualProto);
-        } else {
-          this.__proto__ = actualProto;
-        }
-        this.name = "ZodError";
-        this.issues = issues;
-      }
-      format(_mapper) {
-        const mapper = _mapper || function(issue2) {
-          return issue2.message;
-        };
-        const fieldErrors = { _errors: [] };
-        const processError = (error48) => {
-          for (const issue2 of error48.issues) {
-            if (issue2.code === "invalid_union") {
-              issue2.unionErrors.map(processError);
-            } else if (issue2.code === "invalid_return_type") {
-              processError(issue2.returnTypeError);
-            } else if (issue2.code === "invalid_arguments") {
-              processError(issue2.argumentsError);
-            } else if (issue2.path.length === 0) {
-              fieldErrors._errors.push(mapper(issue2));
-            } else {
-              let curr = fieldErrors;
-              let i = 0;
-              while (i < issue2.path.length) {
-                const el = issue2.path[i];
-                const terminal = i === issue2.path.length - 1;
-                if (!terminal) {
-                  curr[el] = curr[el] || { _errors: [] };
-                } else {
-                  curr[el] = curr[el] || { _errors: [] };
-                  curr[el]._errors.push(mapper(issue2));
-                }
-                curr = curr[el];
-                i++;
-              }
-            }
-          }
-        };
-        processError(this);
-        return fieldErrors;
-      }
-      static assert(value) {
-        if (!(value instanceof _ZodError)) {
-          throw new Error(`Not a ZodError: ${value}`);
-        }
-      }
-      toString() {
-        return this.message;
-      }
-      get message() {
-        return JSON.stringify(this.issues, util.jsonStringifyReplacer, 2);
-      }
-      get isEmpty() {
-        return this.issues.length === 0;
-      }
-      flatten(mapper = (issue2) => issue2.message) {
-        const fieldErrors = /* @__PURE__ */ Object.create(null);
-        const formErrors = [];
-        for (const sub of this.issues) {
-          if (sub.path.length > 0) {
-            const firstEl = sub.path[0];
-            fieldErrors[firstEl] = fieldErrors[firstEl] || [];
-            fieldErrors[firstEl].push(mapper(sub));
-          } else {
-            formErrors.push(mapper(sub));
-          }
-        }
-        return { formErrors, fieldErrors };
-      }
-      get formErrors() {
-        return this.flatten();
-      }
-    };
-    ZodError2.create = (issues) => {
-      const error48 = new ZodError2(issues);
-      return error48;
-    };
-  }
-});
-
-// node_modules/zod/v3/locales/en.js
-var errorMap, en_default2;
-var init_en2 = __esm({
-  "node_modules/zod/v3/locales/en.js"() {
-    init_ZodError();
-    init_util2();
-    errorMap = (issue2, _ctx) => {
-      let message;
-      switch (issue2.code) {
-        case ZodIssueCode2.invalid_type:
-          if (issue2.received === ZodParsedType.undefined) {
-            message = "Required";
-          } else {
-            message = `Expected ${issue2.expected}, received ${issue2.received}`;
-          }
-          break;
-        case ZodIssueCode2.invalid_literal:
-          message = `Invalid literal value, expected ${JSON.stringify(issue2.expected, util.jsonStringifyReplacer)}`;
-          break;
-        case ZodIssueCode2.unrecognized_keys:
-          message = `Unrecognized key(s) in object: ${util.joinValues(issue2.keys, ", ")}`;
-          break;
-        case ZodIssueCode2.invalid_union:
-          message = `Invalid input`;
-          break;
-        case ZodIssueCode2.invalid_union_discriminator:
-          message = `Invalid discriminator value. Expected ${util.joinValues(issue2.options)}`;
-          break;
-        case ZodIssueCode2.invalid_enum_value:
-          message = `Invalid enum value. Expected ${util.joinValues(issue2.options)}, received '${issue2.received}'`;
-          break;
-        case ZodIssueCode2.invalid_arguments:
-          message = `Invalid function arguments`;
-          break;
-        case ZodIssueCode2.invalid_return_type:
-          message = `Invalid function return type`;
-          break;
-        case ZodIssueCode2.invalid_date:
-          message = `Invalid date`;
-          break;
-        case ZodIssueCode2.invalid_string:
-          if (typeof issue2.validation === "object") {
-            if ("includes" in issue2.validation) {
-              message = `Invalid input: must include "${issue2.validation.includes}"`;
-              if (typeof issue2.validation.position === "number") {
-                message = `${message} at one or more positions greater than or equal to ${issue2.validation.position}`;
-              }
-            } else if ("startsWith" in issue2.validation) {
-              message = `Invalid input: must start with "${issue2.validation.startsWith}"`;
-            } else if ("endsWith" in issue2.validation) {
-              message = `Invalid input: must end with "${issue2.validation.endsWith}"`;
-            } else {
-              util.assertNever(issue2.validation);
-            }
-          } else if (issue2.validation !== "regex") {
-            message = `Invalid ${issue2.validation}`;
-          } else {
-            message = "Invalid";
-          }
-          break;
-        case ZodIssueCode2.too_small:
-          if (issue2.type === "array")
-            message = `Array must contain ${issue2.exact ? "exactly" : issue2.inclusive ? `at least` : `more than`} ${issue2.minimum} element(s)`;
-          else if (issue2.type === "string")
-            message = `String must contain ${issue2.exact ? "exactly" : issue2.inclusive ? `at least` : `over`} ${issue2.minimum} character(s)`;
-          else if (issue2.type === "number")
-            message = `Number must be ${issue2.exact ? `exactly equal to ` : issue2.inclusive ? `greater than or equal to ` : `greater than `}${issue2.minimum}`;
-          else if (issue2.type === "bigint")
-            message = `Number must be ${issue2.exact ? `exactly equal to ` : issue2.inclusive ? `greater than or equal to ` : `greater than `}${issue2.minimum}`;
-          else if (issue2.type === "date")
-            message = `Date must be ${issue2.exact ? `exactly equal to ` : issue2.inclusive ? `greater than or equal to ` : `greater than `}${new Date(Number(issue2.minimum))}`;
-          else
-            message = "Invalid input";
-          break;
-        case ZodIssueCode2.too_big:
-          if (issue2.type === "array")
-            message = `Array must contain ${issue2.exact ? `exactly` : issue2.inclusive ? `at most` : `less than`} ${issue2.maximum} element(s)`;
-          else if (issue2.type === "string")
-            message = `String must contain ${issue2.exact ? `exactly` : issue2.inclusive ? `at most` : `under`} ${issue2.maximum} character(s)`;
-          else if (issue2.type === "number")
-            message = `Number must be ${issue2.exact ? `exactly` : issue2.inclusive ? `less than or equal to` : `less than`} ${issue2.maximum}`;
-          else if (issue2.type === "bigint")
-            message = `BigInt must be ${issue2.exact ? `exactly` : issue2.inclusive ? `less than or equal to` : `less than`} ${issue2.maximum}`;
-          else if (issue2.type === "date")
-            message = `Date must be ${issue2.exact ? `exactly` : issue2.inclusive ? `smaller than or equal to` : `smaller than`} ${new Date(Number(issue2.maximum))}`;
-          else
-            message = "Invalid input";
-          break;
-        case ZodIssueCode2.custom:
-          message = `Invalid input`;
-          break;
-        case ZodIssueCode2.invalid_intersection_types:
-          message = `Intersection results could not be merged`;
-          break;
-        case ZodIssueCode2.not_multiple_of:
-          message = `Number must be a multiple of ${issue2.multipleOf}`;
-          break;
-        case ZodIssueCode2.not_finite:
-          message = "Number must be finite";
-          break;
-        default:
-          message = _ctx.defaultError;
-          util.assertNever(issue2);
-      }
-      return { message };
-    };
-    en_default2 = errorMap;
-  }
-});
-
-// node_modules/zod/v3/errors.js
-function setErrorMap2(map2) {
-  overrideErrorMap = map2;
-}
-function getErrorMap2() {
-  return overrideErrorMap;
-}
-var overrideErrorMap;
-var init_errors4 = __esm({
-  "node_modules/zod/v3/errors.js"() {
-    init_en2();
-    overrideErrorMap = en_default2;
-  }
-});
-
-// node_modules/zod/v3/helpers/parseUtil.js
-function addIssueToContext(ctx, issueData) {
-  const overrideMap = getErrorMap2();
-  const issue2 = makeIssue({
-    issueData,
-    data: ctx.data,
-    path: ctx.path,
-    errorMaps: [
-      ctx.common.contextualErrorMap,
-      // contextual error map is first priority
-      ctx.schemaErrorMap,
-      // then schema-bound map if available
-      overrideMap,
-      // then global override map
-      overrideMap === en_default2 ? void 0 : en_default2
-      // then global default map
-    ].filter((x) => !!x)
-  });
-  ctx.common.issues.push(issue2);
-}
-var makeIssue, EMPTY_PATH, ParseStatus, INVALID, DIRTY, OK2, isAborted, isDirty, isValid, isAsync;
-var init_parseUtil = __esm({
-  "node_modules/zod/v3/helpers/parseUtil.js"() {
-    init_errors4();
-    init_en2();
-    makeIssue = (params) => {
-      const { data, path: path3, errorMaps, issueData } = params;
-      const fullPath = [...path3, ...issueData.path || []];
-      const fullIssue = {
-        ...issueData,
-        path: fullPath
-      };
-      if (issueData.message !== void 0) {
-        return {
-          ...issueData,
-          path: fullPath,
-          message: issueData.message
-        };
-      }
-      let errorMessage = "";
-      const maps = errorMaps.filter((m) => !!m).slice().reverse();
-      for (const map2 of maps) {
-        errorMessage = map2(fullIssue, { data, defaultError: errorMessage }).message;
-      }
-      return {
-        ...issueData,
-        path: fullPath,
-        message: errorMessage
-      };
-    };
-    EMPTY_PATH = [];
-    ParseStatus = class _ParseStatus {
-      constructor() {
-        this.value = "valid";
-      }
-      dirty() {
-        if (this.value === "valid")
-          this.value = "dirty";
-      }
-      abort() {
-        if (this.value !== "aborted")
-          this.value = "aborted";
-      }
-      static mergeArray(status, results) {
-        const arrayValue = [];
-        for (const s of results) {
-          if (s.status === "aborted")
-            return INVALID;
-          if (s.status === "dirty")
-            status.dirty();
-          arrayValue.push(s.value);
-        }
-        return { status: status.value, value: arrayValue };
-      }
-      static async mergeObjectAsync(status, pairs) {
-        const syncPairs = [];
-        for (const pair of pairs) {
-          const key = await pair.key;
-          const value = await pair.value;
-          syncPairs.push({
-            key,
-            value
-          });
-        }
-        return _ParseStatus.mergeObjectSync(status, syncPairs);
-      }
-      static mergeObjectSync(status, pairs) {
-        const finalObject = {};
-        for (const pair of pairs) {
-          const { key, value } = pair;
-          if (key.status === "aborted")
-            return INVALID;
-          if (value.status === "aborted")
-            return INVALID;
-          if (key.status === "dirty")
-            status.dirty();
-          if (value.status === "dirty")
-            status.dirty();
-          if (key.value !== "__proto__" && (typeof value.value !== "undefined" || pair.alwaysSet)) {
-            finalObject[key.value] = value.value;
-          }
-        }
-        return { status: status.value, value: finalObject };
-      }
-    };
-    INVALID = Object.freeze({
-      status: "aborted"
-    });
-    DIRTY = (value) => ({ status: "dirty", value });
-    OK2 = (value) => ({ status: "valid", value });
-    isAborted = (x) => x.status === "aborted";
-    isDirty = (x) => x.status === "dirty";
-    isValid = (x) => x.status === "valid";
-    isAsync = (x) => typeof Promise !== "undefined" && x instanceof Promise;
-  }
-});
-
-// node_modules/zod/v3/helpers/typeAliases.js
-var init_typeAliases = __esm({
-  "node_modules/zod/v3/helpers/typeAliases.js"() {
-  }
-});
-
-// node_modules/zod/v3/helpers/errorUtil.js
-var errorUtil;
-var init_errorUtil = __esm({
-  "node_modules/zod/v3/helpers/errorUtil.js"() {
-    (function(errorUtil2) {
-      errorUtil2.errToObj = (message) => typeof message === "string" ? { message } : message || {};
-      errorUtil2.toString = (message) => typeof message === "string" ? message : message?.message;
-    })(errorUtil || (errorUtil = {}));
-  }
-});
-
-// node_modules/zod/v3/types.js
-function processCreateParams(params) {
-  if (!params)
-    return {};
-  const { errorMap: errorMap2, invalid_type_error, required_error, description } = params;
-  if (errorMap2 && (invalid_type_error || required_error)) {
-    throw new Error(`Can't use "invalid_type_error" or "required_error" in conjunction with custom error map.`);
-  }
-  if (errorMap2)
-    return { errorMap: errorMap2, description };
-  const customMap = (iss, ctx) => {
-    const { message } = params;
-    if (iss.code === "invalid_enum_value") {
-      return { message: message ?? ctx.defaultError };
-    }
-    if (typeof ctx.data === "undefined") {
-      return { message: message ?? required_error ?? ctx.defaultError };
-    }
-    if (iss.code !== "invalid_type")
-      return { message: ctx.defaultError };
-    return { message: message ?? invalid_type_error ?? ctx.defaultError };
-  };
-  return { errorMap: customMap, description };
-}
-function timeRegexSource(args) {
-  let secondsRegexSource = `[0-5]\\d`;
-  if (args.precision) {
-    secondsRegexSource = `${secondsRegexSource}\\.\\d{${args.precision}}`;
-  } else if (args.precision == null) {
-    secondsRegexSource = `${secondsRegexSource}(\\.\\d+)?`;
-  }
-  const secondsQuantifier = args.precision ? "+" : "?";
-  return `([01]\\d|2[0-3]):[0-5]\\d(:${secondsRegexSource})${secondsQuantifier}`;
-}
-function timeRegex(args) {
-  return new RegExp(`^${timeRegexSource(args)}$`);
-}
-function datetimeRegex(args) {
-  let regex = `${dateRegexSource}T${timeRegexSource(args)}`;
-  const opts = [];
-  opts.push(args.local ? `Z?` : `Z`);
-  if (args.offset)
-    opts.push(`([+-]\\d{2}:?\\d{2})`);
-  regex = `${regex}(${opts.join("|")})`;
-  return new RegExp(`^${regex}$`);
-}
-function isValidIP(ip, version2) {
-  if ((version2 === "v4" || !version2) && ipv4Regex.test(ip)) {
-    return true;
-  }
-  if ((version2 === "v6" || !version2) && ipv6Regex.test(ip)) {
-    return true;
-  }
-  return false;
-}
-function isValidJWT2(jwt2, alg) {
-  if (!jwtRegex.test(jwt2))
-    return false;
-  try {
-    const [header] = jwt2.split(".");
-    if (!header)
-      return false;
-    const base643 = header.replace(/-/g, "+").replace(/_/g, "/").padEnd(header.length + (4 - header.length % 4) % 4, "=");
-    const decoded = JSON.parse(atob(base643));
-    if (typeof decoded !== "object" || decoded === null)
-      return false;
-    if ("typ" in decoded && decoded?.typ !== "JWT")
-      return false;
-    if (!decoded.alg)
-      return false;
-    if (alg && decoded.alg !== alg)
-      return false;
-    return true;
-  } catch {
-    return false;
-  }
-}
-function isValidCidr(ip, version2) {
-  if ((version2 === "v4" || !version2) && ipv4CidrRegex.test(ip)) {
-    return true;
-  }
-  if ((version2 === "v6" || !version2) && ipv6CidrRegex.test(ip)) {
-    return true;
-  }
-  return false;
-}
-function floatSafeRemainder2(val, step) {
-  const valDecCount = (val.toString().split(".")[1] || "").length;
-  const stepDecCount = (step.toString().split(".")[1] || "").length;
-  const decCount = valDecCount > stepDecCount ? valDecCount : stepDecCount;
-  const valInt = Number.parseInt(val.toFixed(decCount).replace(".", ""));
-  const stepInt = Number.parseInt(step.toFixed(decCount).replace(".", ""));
-  return valInt % stepInt / 10 ** decCount;
-}
-function deepPartialify(schema) {
-  if (schema instanceof ZodObject2) {
-    const newShape = {};
-    for (const key in schema.shape) {
-      const fieldSchema = schema.shape[key];
-      newShape[key] = ZodOptional2.create(deepPartialify(fieldSchema));
-    }
-    return new ZodObject2({
-      ...schema._def,
-      shape: () => newShape
-    });
-  } else if (schema instanceof ZodArray2) {
-    return new ZodArray2({
-      ...schema._def,
-      type: deepPartialify(schema.element)
-    });
-  } else if (schema instanceof ZodOptional2) {
-    return ZodOptional2.create(deepPartialify(schema.unwrap()));
-  } else if (schema instanceof ZodNullable2) {
-    return ZodNullable2.create(deepPartialify(schema.unwrap()));
-  } else if (schema instanceof ZodTuple2) {
-    return ZodTuple2.create(schema.items.map((item) => deepPartialify(item)));
-  } else {
-    return schema;
-  }
-}
-function mergeValues2(a, b) {
-  const aType = getParsedType2(a);
-  const bType = getParsedType2(b);
-  if (a === b) {
-    return { valid: true, data: a };
-  } else if (aType === ZodParsedType.object && bType === ZodParsedType.object) {
-    const bKeys = util.objectKeys(b);
-    const sharedKeys = util.objectKeys(a).filter((key) => bKeys.indexOf(key) !== -1);
-    const newObj = { ...a, ...b };
-    for (const key of sharedKeys) {
-      const sharedValue = mergeValues2(a[key], b[key]);
-      if (!sharedValue.valid) {
-        return { valid: false };
-      }
-      newObj[key] = sharedValue.data;
-    }
-    return { valid: true, data: newObj };
-  } else if (aType === ZodParsedType.array && bType === ZodParsedType.array) {
-    if (a.length !== b.length) {
-      return { valid: false };
-    }
-    const newArray = [];
-    for (let index = 0; index < a.length; index++) {
-      const itemA = a[index];
-      const itemB = b[index];
-      const sharedValue = mergeValues2(itemA, itemB);
-      if (!sharedValue.valid) {
-        return { valid: false };
-      }
-      newArray.push(sharedValue.data);
-    }
-    return { valid: true, data: newArray };
-  } else if (aType === ZodParsedType.date && bType === ZodParsedType.date && +a === +b) {
-    return { valid: true, data: a };
-  } else {
-    return { valid: false };
-  }
-}
-function createZodEnum(values, params) {
-  return new ZodEnum2({
-    values,
-    typeName: ZodFirstPartyTypeKind2.ZodEnum,
-    ...processCreateParams(params)
-  });
-}
-function cleanParams(params, data) {
-  const p = typeof params === "function" ? params(data) : typeof params === "string" ? { message: params } : params;
-  const p2 = typeof p === "string" ? { message: p } : p;
-  return p2;
-}
-function custom2(check2, _params = {}, fatal) {
-  if (check2)
-    return ZodAny2.create().superRefine((data, ctx) => {
-      const r = check2(data);
-      if (r instanceof Promise) {
-        return r.then((r2) => {
-          if (!r2) {
-            const params = cleanParams(_params, data);
-            const _fatal = params.fatal ?? fatal ?? true;
-            ctx.addIssue({ code: "custom", ...params, fatal: _fatal });
-          }
-        });
-      }
-      if (!r) {
-        const params = cleanParams(_params, data);
-        const _fatal = params.fatal ?? fatal ?? true;
-        ctx.addIssue({ code: "custom", ...params, fatal: _fatal });
-      }
-      return;
-    });
-  return ZodAny2.create();
-}
-var ParseInputLazyPath, handleResult, ZodType2, cuidRegex, cuid2Regex, ulidRegex, uuidRegex, nanoidRegex, jwtRegex, durationRegex, emailRegex, _emojiRegex, emojiRegex, ipv4Regex, ipv4CidrRegex, ipv6Regex, ipv6CidrRegex, base64Regex, base64urlRegex, dateRegexSource, dateRegex, ZodString2, ZodNumber2, ZodBigInt2, ZodBoolean2, ZodDate2, ZodSymbol2, ZodUndefined2, ZodNull2, ZodAny2, ZodUnknown2, ZodNever2, ZodVoid2, ZodArray2, ZodObject2, ZodUnion2, getDiscriminator, ZodDiscriminatedUnion2, ZodIntersection2, ZodTuple2, ZodRecord2, ZodMap2, ZodSet2, ZodFunction2, ZodLazy2, ZodLiteral2, ZodEnum2, ZodNativeEnum, ZodPromise2, ZodEffects, ZodOptional2, ZodNullable2, ZodDefault2, ZodCatch2, ZodNaN2, BRAND, ZodBranded, ZodPipeline, ZodReadonly2, late, ZodFirstPartyTypeKind2, instanceOfType, stringType, numberType, nanType, bigIntType, booleanType, dateType, symbolType, undefinedType, nullType, anyType, unknownType, neverType, voidType, arrayType, objectType, strictObjectType, unionType, discriminatedUnionType, intersectionType, tupleType, recordType, mapType, setType, functionType, lazyType, literalType, enumType, nativeEnumType, promiseType, effectsType, optionalType, nullableType, preprocessType, pipelineType, ostring, onumber, oboolean, coerce, NEVER2;
-var init_types = __esm({
-  "node_modules/zod/v3/types.js"() {
-    init_ZodError();
-    init_errors4();
-    init_errorUtil();
-    init_parseUtil();
-    init_util2();
-    ParseInputLazyPath = class {
-      constructor(parent, value, path3, key) {
-        this._cachedPath = [];
-        this.parent = parent;
-        this.data = value;
-        this._path = path3;
-        this._key = key;
-      }
-      get path() {
-        if (!this._cachedPath.length) {
-          if (Array.isArray(this._key)) {
-            this._cachedPath.push(...this._path, ...this._key);
-          } else {
-            this._cachedPath.push(...this._path, this._key);
-          }
-        }
-        return this._cachedPath;
-      }
-    };
-    handleResult = (ctx, result) => {
-      if (isValid(result)) {
-        return { success: true, data: result.value };
-      } else {
-        if (!ctx.common.issues.length) {
-          throw new Error("Validation failed but no issues detected.");
-        }
-        return {
-          success: false,
-          get error() {
-            if (this._error)
-              return this._error;
-            const error48 = new ZodError2(ctx.common.issues);
-            this._error = error48;
-            return this._error;
-          }
-        };
-      }
-    };
-    ZodType2 = class {
-      get description() {
-        return this._def.description;
-      }
-      _getType(input) {
-        return getParsedType2(input.data);
-      }
-      _getOrReturnCtx(input, ctx) {
-        return ctx || {
-          common: input.parent.common,
-          data: input.data,
-          parsedType: getParsedType2(input.data),
-          schemaErrorMap: this._def.errorMap,
-          path: input.path,
-          parent: input.parent
-        };
-      }
-      _processInputParams(input) {
-        return {
-          status: new ParseStatus(),
-          ctx: {
-            common: input.parent.common,
-            data: input.data,
-            parsedType: getParsedType2(input.data),
-            schemaErrorMap: this._def.errorMap,
-            path: input.path,
-            parent: input.parent
-          }
-        };
-      }
-      _parseSync(input) {
-        const result = this._parse(input);
-        if (isAsync(result)) {
-          throw new Error("Synchronous parse encountered promise.");
-        }
-        return result;
-      }
-      _parseAsync(input) {
-        const result = this._parse(input);
-        return Promise.resolve(result);
-      }
-      parse(data, params) {
-        const result = this.safeParse(data, params);
-        if (result.success)
-          return result.data;
-        throw result.error;
-      }
-      safeParse(data, params) {
-        const ctx = {
-          common: {
-            issues: [],
-            async: params?.async ?? false,
-            contextualErrorMap: params?.errorMap
-          },
-          path: params?.path || [],
-          schemaErrorMap: this._def.errorMap,
-          parent: null,
-          data,
-          parsedType: getParsedType2(data)
-        };
-        const result = this._parseSync({ data, path: ctx.path, parent: ctx });
-        return handleResult(ctx, result);
-      }
-      "~validate"(data) {
-        const ctx = {
-          common: {
-            issues: [],
-            async: !!this["~standard"].async
-          },
-          path: [],
-          schemaErrorMap: this._def.errorMap,
-          parent: null,
-          data,
-          parsedType: getParsedType2(data)
-        };
-        if (!this["~standard"].async) {
-          try {
-            const result = this._parseSync({ data, path: [], parent: ctx });
-            return isValid(result) ? {
-              value: result.value
-            } : {
-              issues: ctx.common.issues
-            };
-          } catch (err) {
-            if (err?.message?.toLowerCase()?.includes("encountered")) {
-              this["~standard"].async = true;
-            }
-            ctx.common = {
-              issues: [],
-              async: true
-            };
-          }
-        }
-        return this._parseAsync({ data, path: [], parent: ctx }).then((result) => isValid(result) ? {
-          value: result.value
-        } : {
-          issues: ctx.common.issues
-        });
-      }
-      async parseAsync(data, params) {
-        const result = await this.safeParseAsync(data, params);
-        if (result.success)
-          return result.data;
-        throw result.error;
-      }
-      async safeParseAsync(data, params) {
-        const ctx = {
-          common: {
-            issues: [],
-            contextualErrorMap: params?.errorMap,
-            async: true
-          },
-          path: params?.path || [],
-          schemaErrorMap: this._def.errorMap,
-          parent: null,
-          data,
-          parsedType: getParsedType2(data)
-        };
-        const maybeAsyncResult = this._parse({ data, path: ctx.path, parent: ctx });
-        const result = await (isAsync(maybeAsyncResult) ? maybeAsyncResult : Promise.resolve(maybeAsyncResult));
-        return handleResult(ctx, result);
-      }
-      refine(check2, message) {
-        const getIssueProperties = (val) => {
-          if (typeof message === "string" || typeof message === "undefined") {
-            return { message };
-          } else if (typeof message === "function") {
-            return message(val);
-          } else {
-            return message;
-          }
-        };
-        return this._refinement((val, ctx) => {
-          const result = check2(val);
-          const setError = () => ctx.addIssue({
-            code: ZodIssueCode2.custom,
-            ...getIssueProperties(val)
-          });
-          if (typeof Promise !== "undefined" && result instanceof Promise) {
-            return result.then((data) => {
-              if (!data) {
-                setError();
-                return false;
-              } else {
-                return true;
-              }
-            });
-          }
-          if (!result) {
-            setError();
-            return false;
-          } else {
-            return true;
-          }
-        });
-      }
-      refinement(check2, refinementData) {
-        return this._refinement((val, ctx) => {
-          if (!check2(val)) {
-            ctx.addIssue(typeof refinementData === "function" ? refinementData(val, ctx) : refinementData);
-            return false;
-          } else {
-            return true;
-          }
-        });
-      }
-      _refinement(refinement) {
-        return new ZodEffects({
-          schema: this,
-          typeName: ZodFirstPartyTypeKind2.ZodEffects,
-          effect: { type: "refinement", refinement }
-        });
-      }
-      superRefine(refinement) {
-        return this._refinement(refinement);
-      }
-      constructor(def) {
-        this.spa = this.safeParseAsync;
-        this._def = def;
-        this.parse = this.parse.bind(this);
-        this.safeParse = this.safeParse.bind(this);
-        this.parseAsync = this.parseAsync.bind(this);
-        this.safeParseAsync = this.safeParseAsync.bind(this);
-        this.spa = this.spa.bind(this);
-        this.refine = this.refine.bind(this);
-        this.refinement = this.refinement.bind(this);
-        this.superRefine = this.superRefine.bind(this);
-        this.optional = this.optional.bind(this);
-        this.nullable = this.nullable.bind(this);
-        this.nullish = this.nullish.bind(this);
-        this.array = this.array.bind(this);
-        this.promise = this.promise.bind(this);
-        this.or = this.or.bind(this);
-        this.and = this.and.bind(this);
-        this.transform = this.transform.bind(this);
-        this.brand = this.brand.bind(this);
-        this.default = this.default.bind(this);
-        this.catch = this.catch.bind(this);
-        this.describe = this.describe.bind(this);
-        this.pipe = this.pipe.bind(this);
-        this.readonly = this.readonly.bind(this);
-        this.isNullable = this.isNullable.bind(this);
-        this.isOptional = this.isOptional.bind(this);
-        this["~standard"] = {
-          version: 1,
-          vendor: "zod",
-          validate: (data) => this["~validate"](data)
-        };
-      }
-      optional() {
-        return ZodOptional2.create(this, this._def);
-      }
-      nullable() {
-        return ZodNullable2.create(this, this._def);
-      }
-      nullish() {
-        return this.nullable().optional();
-      }
-      array() {
-        return ZodArray2.create(this);
-      }
-      promise() {
-        return ZodPromise2.create(this, this._def);
-      }
-      or(option) {
-        return ZodUnion2.create([this, option], this._def);
-      }
-      and(incoming) {
-        return ZodIntersection2.create(this, incoming, this._def);
-      }
-      transform(transform2) {
-        return new ZodEffects({
-          ...processCreateParams(this._def),
-          schema: this,
-          typeName: ZodFirstPartyTypeKind2.ZodEffects,
-          effect: { type: "transform", transform: transform2 }
-        });
-      }
-      default(def) {
-        const defaultValueFunc = typeof def === "function" ? def : () => def;
-        return new ZodDefault2({
-          ...processCreateParams(this._def),
-          innerType: this,
-          defaultValue: defaultValueFunc,
-          typeName: ZodFirstPartyTypeKind2.ZodDefault
-        });
-      }
-      brand() {
-        return new ZodBranded({
-          typeName: ZodFirstPartyTypeKind2.ZodBranded,
-          type: this,
-          ...processCreateParams(this._def)
-        });
-      }
-      catch(def) {
-        const catchValueFunc = typeof def === "function" ? def : () => def;
-        return new ZodCatch2({
-          ...processCreateParams(this._def),
-          innerType: this,
-          catchValue: catchValueFunc,
-          typeName: ZodFirstPartyTypeKind2.ZodCatch
-        });
-      }
-      describe(description) {
-        const This = this.constructor;
-        return new This({
-          ...this._def,
-          description
-        });
-      }
-      pipe(target) {
-        return ZodPipeline.create(this, target);
-      }
-      readonly() {
-        return ZodReadonly2.create(this);
-      }
-      isOptional() {
-        return this.safeParse(void 0).success;
-      }
-      isNullable() {
-        return this.safeParse(null).success;
-      }
-    };
-    cuidRegex = /^c[^\s-]{8,}$/i;
-    cuid2Regex = /^[0-9a-z]+$/;
-    ulidRegex = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
-    uuidRegex = /^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/i;
-    nanoidRegex = /^[a-z0-9_-]{21}$/i;
-    jwtRegex = /^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]*$/;
-    durationRegex = /^[-+]?P(?!$)(?:(?:[-+]?\d+Y)|(?:[-+]?\d+[.,]\d+Y$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:(?:[-+]?\d+W)|(?:[-+]?\d+[.,]\d+W$))?(?:(?:[-+]?\d+D)|(?:[-+]?\d+[.,]\d+D$))?(?:T(?=[\d+-])(?:(?:[-+]?\d+H)|(?:[-+]?\d+[.,]\d+H$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:[-+]?\d+(?:[.,]\d+)?S)?)??$/;
-    emailRegex = /^(?!\.)(?!.*\.\.)([A-Z0-9_'+\-\.]*)[A-Z0-9_+-]@([A-Z0-9][A-Z0-9\-]*\.)+[A-Z]{2,}$/i;
-    _emojiRegex = `^(\\p{Extended_Pictographic}|\\p{Emoji_Component})+$`;
-    ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])$/;
-    ipv4CidrRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\/(3[0-2]|[12]?[0-9])$/;
-    ipv6Regex = /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$/;
-    ipv6CidrRegex = /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))\/(12[0-8]|1[01][0-9]|[1-9]?[0-9])$/;
-    base64Regex = /^([0-9a-zA-Z+/]{4})*(([0-9a-zA-Z+/]{2}==)|([0-9a-zA-Z+/]{3}=))?$/;
-    base64urlRegex = /^([0-9a-zA-Z-_]{4})*(([0-9a-zA-Z-_]{2}(==)?)|([0-9a-zA-Z-_]{3}(=)?))?$/;
-    dateRegexSource = `((\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-((0[13578]|1[02])-(0[1-9]|[12]\\d|3[01])|(0[469]|11)-(0[1-9]|[12]\\d|30)|(02)-(0[1-9]|1\\d|2[0-8])))`;
-    dateRegex = new RegExp(`^${dateRegexSource}$`);
-    ZodString2 = class _ZodString2 extends ZodType2 {
-      _parse(input) {
-        if (this._def.coerce) {
-          input.data = String(input.data);
-        }
-        const parsedType2 = this._getType(input);
-        if (parsedType2 !== ZodParsedType.string) {
-          const ctx2 = this._getOrReturnCtx(input);
-          addIssueToContext(ctx2, {
-            code: ZodIssueCode2.invalid_type,
-            expected: ZodParsedType.string,
-            received: ctx2.parsedType
-          });
-          return INVALID;
-        }
-        const status = new ParseStatus();
-        let ctx = void 0;
-        for (const check2 of this._def.checks) {
-          if (check2.kind === "min") {
-            if (input.data.length < check2.value) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                code: ZodIssueCode2.too_small,
-                minimum: check2.value,
-                type: "string",
-                inclusive: true,
-                exact: false,
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "max") {
-            if (input.data.length > check2.value) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                code: ZodIssueCode2.too_big,
-                maximum: check2.value,
-                type: "string",
-                inclusive: true,
-                exact: false,
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "length") {
-            const tooBig = input.data.length > check2.value;
-            const tooSmall = input.data.length < check2.value;
-            if (tooBig || tooSmall) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              if (tooBig) {
-                addIssueToContext(ctx, {
-                  code: ZodIssueCode2.too_big,
-                  maximum: check2.value,
-                  type: "string",
-                  inclusive: true,
-                  exact: true,
-                  message: check2.message
-                });
-              } else if (tooSmall) {
-                addIssueToContext(ctx, {
-                  code: ZodIssueCode2.too_small,
-                  minimum: check2.value,
-                  type: "string",
-                  inclusive: true,
-                  exact: true,
-                  message: check2.message
-                });
-              }
-              status.dirty();
-            }
-          } else if (check2.kind === "email") {
-            if (!emailRegex.test(input.data)) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                validation: "email",
-                code: ZodIssueCode2.invalid_string,
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "emoji") {
-            if (!emojiRegex) {
-              emojiRegex = new RegExp(_emojiRegex, "u");
-            }
-            if (!emojiRegex.test(input.data)) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                validation: "emoji",
-                code: ZodIssueCode2.invalid_string,
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "uuid") {
-            if (!uuidRegex.test(input.data)) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                validation: "uuid",
-                code: ZodIssueCode2.invalid_string,
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "nanoid") {
-            if (!nanoidRegex.test(input.data)) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                validation: "nanoid",
-                code: ZodIssueCode2.invalid_string,
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "cuid") {
-            if (!cuidRegex.test(input.data)) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                validation: "cuid",
-                code: ZodIssueCode2.invalid_string,
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "cuid2") {
-            if (!cuid2Regex.test(input.data)) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                validation: "cuid2",
-                code: ZodIssueCode2.invalid_string,
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "ulid") {
-            if (!ulidRegex.test(input.data)) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                validation: "ulid",
-                code: ZodIssueCode2.invalid_string,
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "url") {
-            try {
-              new URL(input.data);
-            } catch {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                validation: "url",
-                code: ZodIssueCode2.invalid_string,
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "regex") {
-            check2.regex.lastIndex = 0;
-            const testResult = check2.regex.test(input.data);
-            if (!testResult) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                validation: "regex",
-                code: ZodIssueCode2.invalid_string,
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "trim") {
-            input.data = input.data.trim();
-          } else if (check2.kind === "includes") {
-            if (!input.data.includes(check2.value, check2.position)) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                code: ZodIssueCode2.invalid_string,
-                validation: { includes: check2.value, position: check2.position },
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "toLowerCase") {
-            input.data = input.data.toLowerCase();
-          } else if (check2.kind === "toUpperCase") {
-            input.data = input.data.toUpperCase();
-          } else if (check2.kind === "startsWith") {
-            if (!input.data.startsWith(check2.value)) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                code: ZodIssueCode2.invalid_string,
-                validation: { startsWith: check2.value },
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "endsWith") {
-            if (!input.data.endsWith(check2.value)) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                code: ZodIssueCode2.invalid_string,
-                validation: { endsWith: check2.value },
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "datetime") {
-            const regex = datetimeRegex(check2);
-            if (!regex.test(input.data)) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                code: ZodIssueCode2.invalid_string,
-                validation: "datetime",
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "date") {
-            const regex = dateRegex;
-            if (!regex.test(input.data)) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                code: ZodIssueCode2.invalid_string,
-                validation: "date",
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "time") {
-            const regex = timeRegex(check2);
-            if (!regex.test(input.data)) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                code: ZodIssueCode2.invalid_string,
-                validation: "time",
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "duration") {
-            if (!durationRegex.test(input.data)) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                validation: "duration",
-                code: ZodIssueCode2.invalid_string,
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "ip") {
-            if (!isValidIP(input.data, check2.version)) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                validation: "ip",
-                code: ZodIssueCode2.invalid_string,
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "jwt") {
-            if (!isValidJWT2(input.data, check2.alg)) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                validation: "jwt",
-                code: ZodIssueCode2.invalid_string,
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "cidr") {
-            if (!isValidCidr(input.data, check2.version)) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                validation: "cidr",
-                code: ZodIssueCode2.invalid_string,
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "base64") {
-            if (!base64Regex.test(input.data)) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                validation: "base64",
-                code: ZodIssueCode2.invalid_string,
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "base64url") {
-            if (!base64urlRegex.test(input.data)) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                validation: "base64url",
-                code: ZodIssueCode2.invalid_string,
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else {
-            util.assertNever(check2);
-          }
-        }
-        return { status: status.value, value: input.data };
-      }
-      _regex(regex, validation, message) {
-        return this.refinement((data) => regex.test(data), {
-          validation,
-          code: ZodIssueCode2.invalid_string,
-          ...errorUtil.errToObj(message)
-        });
-      }
-      _addCheck(check2) {
-        return new _ZodString2({
-          ...this._def,
-          checks: [...this._def.checks, check2]
-        });
-      }
-      email(message) {
-        return this._addCheck({ kind: "email", ...errorUtil.errToObj(message) });
-      }
-      url(message) {
-        return this._addCheck({ kind: "url", ...errorUtil.errToObj(message) });
-      }
-      emoji(message) {
-        return this._addCheck({ kind: "emoji", ...errorUtil.errToObj(message) });
-      }
-      uuid(message) {
-        return this._addCheck({ kind: "uuid", ...errorUtil.errToObj(message) });
-      }
-      nanoid(message) {
-        return this._addCheck({ kind: "nanoid", ...errorUtil.errToObj(message) });
-      }
-      cuid(message) {
-        return this._addCheck({ kind: "cuid", ...errorUtil.errToObj(message) });
-      }
-      cuid2(message) {
-        return this._addCheck({ kind: "cuid2", ...errorUtil.errToObj(message) });
-      }
-      ulid(message) {
-        return this._addCheck({ kind: "ulid", ...errorUtil.errToObj(message) });
-      }
-      base64(message) {
-        return this._addCheck({ kind: "base64", ...errorUtil.errToObj(message) });
-      }
-      base64url(message) {
-        return this._addCheck({
-          kind: "base64url",
-          ...errorUtil.errToObj(message)
-        });
-      }
-      jwt(options) {
-        return this._addCheck({ kind: "jwt", ...errorUtil.errToObj(options) });
-      }
-      ip(options) {
-        return this._addCheck({ kind: "ip", ...errorUtil.errToObj(options) });
-      }
-      cidr(options) {
-        return this._addCheck({ kind: "cidr", ...errorUtil.errToObj(options) });
-      }
-      datetime(options) {
-        if (typeof options === "string") {
-          return this._addCheck({
-            kind: "datetime",
-            precision: null,
-            offset: false,
-            local: false,
-            message: options
-          });
-        }
-        return this._addCheck({
-          kind: "datetime",
-          precision: typeof options?.precision === "undefined" ? null : options?.precision,
-          offset: options?.offset ?? false,
-          local: options?.local ?? false,
-          ...errorUtil.errToObj(options?.message)
-        });
-      }
-      date(message) {
-        return this._addCheck({ kind: "date", message });
-      }
-      time(options) {
-        if (typeof options === "string") {
-          return this._addCheck({
-            kind: "time",
-            precision: null,
-            message: options
-          });
-        }
-        return this._addCheck({
-          kind: "time",
-          precision: typeof options?.precision === "undefined" ? null : options?.precision,
-          ...errorUtil.errToObj(options?.message)
-        });
-      }
-      duration(message) {
-        return this._addCheck({ kind: "duration", ...errorUtil.errToObj(message) });
-      }
-      regex(regex, message) {
-        return this._addCheck({
-          kind: "regex",
-          regex,
-          ...errorUtil.errToObj(message)
-        });
-      }
-      includes(value, options) {
-        return this._addCheck({
-          kind: "includes",
-          value,
-          position: options?.position,
-          ...errorUtil.errToObj(options?.message)
-        });
-      }
-      startsWith(value, message) {
-        return this._addCheck({
-          kind: "startsWith",
-          value,
-          ...errorUtil.errToObj(message)
-        });
-      }
-      endsWith(value, message) {
-        return this._addCheck({
-          kind: "endsWith",
-          value,
-          ...errorUtil.errToObj(message)
-        });
-      }
-      min(minLength, message) {
-        return this._addCheck({
-          kind: "min",
-          value: minLength,
-          ...errorUtil.errToObj(message)
-        });
-      }
-      max(maxLength, message) {
-        return this._addCheck({
-          kind: "max",
-          value: maxLength,
-          ...errorUtil.errToObj(message)
-        });
-      }
-      length(len, message) {
-        return this._addCheck({
-          kind: "length",
-          value: len,
-          ...errorUtil.errToObj(message)
-        });
-      }
-      /**
-       * Equivalent to `.min(1)`
-       */
-      nonempty(message) {
-        return this.min(1, errorUtil.errToObj(message));
-      }
-      trim() {
-        return new _ZodString2({
-          ...this._def,
-          checks: [...this._def.checks, { kind: "trim" }]
-        });
-      }
-      toLowerCase() {
-        return new _ZodString2({
-          ...this._def,
-          checks: [...this._def.checks, { kind: "toLowerCase" }]
-        });
-      }
-      toUpperCase() {
-        return new _ZodString2({
-          ...this._def,
-          checks: [...this._def.checks, { kind: "toUpperCase" }]
-        });
-      }
-      get isDatetime() {
-        return !!this._def.checks.find((ch) => ch.kind === "datetime");
-      }
-      get isDate() {
-        return !!this._def.checks.find((ch) => ch.kind === "date");
-      }
-      get isTime() {
-        return !!this._def.checks.find((ch) => ch.kind === "time");
-      }
-      get isDuration() {
-        return !!this._def.checks.find((ch) => ch.kind === "duration");
-      }
-      get isEmail() {
-        return !!this._def.checks.find((ch) => ch.kind === "email");
-      }
-      get isURL() {
-        return !!this._def.checks.find((ch) => ch.kind === "url");
-      }
-      get isEmoji() {
-        return !!this._def.checks.find((ch) => ch.kind === "emoji");
-      }
-      get isUUID() {
-        return !!this._def.checks.find((ch) => ch.kind === "uuid");
-      }
-      get isNANOID() {
-        return !!this._def.checks.find((ch) => ch.kind === "nanoid");
-      }
-      get isCUID() {
-        return !!this._def.checks.find((ch) => ch.kind === "cuid");
-      }
-      get isCUID2() {
-        return !!this._def.checks.find((ch) => ch.kind === "cuid2");
-      }
-      get isULID() {
-        return !!this._def.checks.find((ch) => ch.kind === "ulid");
-      }
-      get isIP() {
-        return !!this._def.checks.find((ch) => ch.kind === "ip");
-      }
-      get isCIDR() {
-        return !!this._def.checks.find((ch) => ch.kind === "cidr");
-      }
-      get isBase64() {
-        return !!this._def.checks.find((ch) => ch.kind === "base64");
-      }
-      get isBase64url() {
-        return !!this._def.checks.find((ch) => ch.kind === "base64url");
-      }
-      get minLength() {
-        let min = null;
-        for (const ch of this._def.checks) {
-          if (ch.kind === "min") {
-            if (min === null || ch.value > min)
-              min = ch.value;
-          }
-        }
-        return min;
-      }
-      get maxLength() {
-        let max = null;
-        for (const ch of this._def.checks) {
-          if (ch.kind === "max") {
-            if (max === null || ch.value < max)
-              max = ch.value;
-          }
-        }
-        return max;
-      }
-    };
-    ZodString2.create = (params) => {
-      return new ZodString2({
-        checks: [],
-        typeName: ZodFirstPartyTypeKind2.ZodString,
-        coerce: params?.coerce ?? false,
-        ...processCreateParams(params)
-      });
-    };
-    ZodNumber2 = class _ZodNumber extends ZodType2 {
-      constructor() {
-        super(...arguments);
-        this.min = this.gte;
-        this.max = this.lte;
-        this.step = this.multipleOf;
-      }
-      _parse(input) {
-        if (this._def.coerce) {
-          input.data = Number(input.data);
-        }
-        const parsedType2 = this._getType(input);
-        if (parsedType2 !== ZodParsedType.number) {
-          const ctx2 = this._getOrReturnCtx(input);
-          addIssueToContext(ctx2, {
-            code: ZodIssueCode2.invalid_type,
-            expected: ZodParsedType.number,
-            received: ctx2.parsedType
-          });
-          return INVALID;
-        }
-        let ctx = void 0;
-        const status = new ParseStatus();
-        for (const check2 of this._def.checks) {
-          if (check2.kind === "int") {
-            if (!util.isInteger(input.data)) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                code: ZodIssueCode2.invalid_type,
-                expected: "integer",
-                received: "float",
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "min") {
-            const tooSmall = check2.inclusive ? input.data < check2.value : input.data <= check2.value;
-            if (tooSmall) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                code: ZodIssueCode2.too_small,
-                minimum: check2.value,
-                type: "number",
-                inclusive: check2.inclusive,
-                exact: false,
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "max") {
-            const tooBig = check2.inclusive ? input.data > check2.value : input.data >= check2.value;
-            if (tooBig) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                code: ZodIssueCode2.too_big,
-                maximum: check2.value,
-                type: "number",
-                inclusive: check2.inclusive,
-                exact: false,
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "multipleOf") {
-            if (floatSafeRemainder2(input.data, check2.value) !== 0) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                code: ZodIssueCode2.not_multiple_of,
-                multipleOf: check2.value,
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "finite") {
-            if (!Number.isFinite(input.data)) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                code: ZodIssueCode2.not_finite,
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else {
-            util.assertNever(check2);
-          }
-        }
-        return { status: status.value, value: input.data };
-      }
-      gte(value, message) {
-        return this.setLimit("min", value, true, errorUtil.toString(message));
-      }
-      gt(value, message) {
-        return this.setLimit("min", value, false, errorUtil.toString(message));
-      }
-      lte(value, message) {
-        return this.setLimit("max", value, true, errorUtil.toString(message));
-      }
-      lt(value, message) {
-        return this.setLimit("max", value, false, errorUtil.toString(message));
-      }
-      setLimit(kind, value, inclusive, message) {
-        return new _ZodNumber({
-          ...this._def,
-          checks: [
-            ...this._def.checks,
-            {
-              kind,
-              value,
-              inclusive,
-              message: errorUtil.toString(message)
-            }
-          ]
-        });
-      }
-      _addCheck(check2) {
-        return new _ZodNumber({
-          ...this._def,
-          checks: [...this._def.checks, check2]
-        });
-      }
-      int(message) {
-        return this._addCheck({
-          kind: "int",
-          message: errorUtil.toString(message)
-        });
-      }
-      positive(message) {
-        return this._addCheck({
-          kind: "min",
-          value: 0,
-          inclusive: false,
-          message: errorUtil.toString(message)
-        });
-      }
-      negative(message) {
-        return this._addCheck({
-          kind: "max",
-          value: 0,
-          inclusive: false,
-          message: errorUtil.toString(message)
-        });
-      }
-      nonpositive(message) {
-        return this._addCheck({
-          kind: "max",
-          value: 0,
-          inclusive: true,
-          message: errorUtil.toString(message)
-        });
-      }
-      nonnegative(message) {
-        return this._addCheck({
-          kind: "min",
-          value: 0,
-          inclusive: true,
-          message: errorUtil.toString(message)
-        });
-      }
-      multipleOf(value, message) {
-        return this._addCheck({
-          kind: "multipleOf",
-          value,
-          message: errorUtil.toString(message)
-        });
-      }
-      finite(message) {
-        return this._addCheck({
-          kind: "finite",
-          message: errorUtil.toString(message)
-        });
-      }
-      safe(message) {
-        return this._addCheck({
-          kind: "min",
-          inclusive: true,
-          value: Number.MIN_SAFE_INTEGER,
-          message: errorUtil.toString(message)
-        })._addCheck({
-          kind: "max",
-          inclusive: true,
-          value: Number.MAX_SAFE_INTEGER,
-          message: errorUtil.toString(message)
-        });
-      }
-      get minValue() {
-        let min = null;
-        for (const ch of this._def.checks) {
-          if (ch.kind === "min") {
-            if (min === null || ch.value > min)
-              min = ch.value;
-          }
-        }
-        return min;
-      }
-      get maxValue() {
-        let max = null;
-        for (const ch of this._def.checks) {
-          if (ch.kind === "max") {
-            if (max === null || ch.value < max)
-              max = ch.value;
-          }
-        }
-        return max;
-      }
-      get isInt() {
-        return !!this._def.checks.find((ch) => ch.kind === "int" || ch.kind === "multipleOf" && util.isInteger(ch.value));
-      }
-      get isFinite() {
-        let max = null;
-        let min = null;
-        for (const ch of this._def.checks) {
-          if (ch.kind === "finite" || ch.kind === "int" || ch.kind === "multipleOf") {
-            return true;
-          } else if (ch.kind === "min") {
-            if (min === null || ch.value > min)
-              min = ch.value;
-          } else if (ch.kind === "max") {
-            if (max === null || ch.value < max)
-              max = ch.value;
-          }
-        }
-        return Number.isFinite(min) && Number.isFinite(max);
-      }
-    };
-    ZodNumber2.create = (params) => {
-      return new ZodNumber2({
-        checks: [],
-        typeName: ZodFirstPartyTypeKind2.ZodNumber,
-        coerce: params?.coerce || false,
-        ...processCreateParams(params)
-      });
-    };
-    ZodBigInt2 = class _ZodBigInt extends ZodType2 {
-      constructor() {
-        super(...arguments);
-        this.min = this.gte;
-        this.max = this.lte;
-      }
-      _parse(input) {
-        if (this._def.coerce) {
-          try {
-            input.data = BigInt(input.data);
-          } catch {
-            return this._getInvalidInput(input);
-          }
-        }
-        const parsedType2 = this._getType(input);
-        if (parsedType2 !== ZodParsedType.bigint) {
-          return this._getInvalidInput(input);
-        }
-        let ctx = void 0;
-        const status = new ParseStatus();
-        for (const check2 of this._def.checks) {
-          if (check2.kind === "min") {
-            const tooSmall = check2.inclusive ? input.data < check2.value : input.data <= check2.value;
-            if (tooSmall) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                code: ZodIssueCode2.too_small,
-                type: "bigint",
-                minimum: check2.value,
-                inclusive: check2.inclusive,
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "max") {
-            const tooBig = check2.inclusive ? input.data > check2.value : input.data >= check2.value;
-            if (tooBig) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                code: ZodIssueCode2.too_big,
-                type: "bigint",
-                maximum: check2.value,
-                inclusive: check2.inclusive,
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "multipleOf") {
-            if (input.data % check2.value !== BigInt(0)) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                code: ZodIssueCode2.not_multiple_of,
-                multipleOf: check2.value,
-                message: check2.message
-              });
-              status.dirty();
-            }
-          } else {
-            util.assertNever(check2);
-          }
-        }
-        return { status: status.value, value: input.data };
-      }
-      _getInvalidInput(input) {
-        const ctx = this._getOrReturnCtx(input);
-        addIssueToContext(ctx, {
-          code: ZodIssueCode2.invalid_type,
-          expected: ZodParsedType.bigint,
-          received: ctx.parsedType
-        });
-        return INVALID;
-      }
-      gte(value, message) {
-        return this.setLimit("min", value, true, errorUtil.toString(message));
-      }
-      gt(value, message) {
-        return this.setLimit("min", value, false, errorUtil.toString(message));
-      }
-      lte(value, message) {
-        return this.setLimit("max", value, true, errorUtil.toString(message));
-      }
-      lt(value, message) {
-        return this.setLimit("max", value, false, errorUtil.toString(message));
-      }
-      setLimit(kind, value, inclusive, message) {
-        return new _ZodBigInt({
-          ...this._def,
-          checks: [
-            ...this._def.checks,
-            {
-              kind,
-              value,
-              inclusive,
-              message: errorUtil.toString(message)
-            }
-          ]
-        });
-      }
-      _addCheck(check2) {
-        return new _ZodBigInt({
-          ...this._def,
-          checks: [...this._def.checks, check2]
-        });
-      }
-      positive(message) {
-        return this._addCheck({
-          kind: "min",
-          value: BigInt(0),
-          inclusive: false,
-          message: errorUtil.toString(message)
-        });
-      }
-      negative(message) {
-        return this._addCheck({
-          kind: "max",
-          value: BigInt(0),
-          inclusive: false,
-          message: errorUtil.toString(message)
-        });
-      }
-      nonpositive(message) {
-        return this._addCheck({
-          kind: "max",
-          value: BigInt(0),
-          inclusive: true,
-          message: errorUtil.toString(message)
-        });
-      }
-      nonnegative(message) {
-        return this._addCheck({
-          kind: "min",
-          value: BigInt(0),
-          inclusive: true,
-          message: errorUtil.toString(message)
-        });
-      }
-      multipleOf(value, message) {
-        return this._addCheck({
-          kind: "multipleOf",
-          value,
-          message: errorUtil.toString(message)
-        });
-      }
-      get minValue() {
-        let min = null;
-        for (const ch of this._def.checks) {
-          if (ch.kind === "min") {
-            if (min === null || ch.value > min)
-              min = ch.value;
-          }
-        }
-        return min;
-      }
-      get maxValue() {
-        let max = null;
-        for (const ch of this._def.checks) {
-          if (ch.kind === "max") {
-            if (max === null || ch.value < max)
-              max = ch.value;
-          }
-        }
-        return max;
-      }
-    };
-    ZodBigInt2.create = (params) => {
-      return new ZodBigInt2({
-        checks: [],
-        typeName: ZodFirstPartyTypeKind2.ZodBigInt,
-        coerce: params?.coerce ?? false,
-        ...processCreateParams(params)
-      });
-    };
-    ZodBoolean2 = class extends ZodType2 {
-      _parse(input) {
-        if (this._def.coerce) {
-          input.data = Boolean(input.data);
-        }
-        const parsedType2 = this._getType(input);
-        if (parsedType2 !== ZodParsedType.boolean) {
-          const ctx = this._getOrReturnCtx(input);
-          addIssueToContext(ctx, {
-            code: ZodIssueCode2.invalid_type,
-            expected: ZodParsedType.boolean,
-            received: ctx.parsedType
-          });
-          return INVALID;
-        }
-        return OK2(input.data);
-      }
-    };
-    ZodBoolean2.create = (params) => {
-      return new ZodBoolean2({
-        typeName: ZodFirstPartyTypeKind2.ZodBoolean,
-        coerce: params?.coerce || false,
-        ...processCreateParams(params)
-      });
-    };
-    ZodDate2 = class _ZodDate extends ZodType2 {
-      _parse(input) {
-        if (this._def.coerce) {
-          input.data = new Date(input.data);
-        }
-        const parsedType2 = this._getType(input);
-        if (parsedType2 !== ZodParsedType.date) {
-          const ctx2 = this._getOrReturnCtx(input);
-          addIssueToContext(ctx2, {
-            code: ZodIssueCode2.invalid_type,
-            expected: ZodParsedType.date,
-            received: ctx2.parsedType
-          });
-          return INVALID;
-        }
-        if (Number.isNaN(input.data.getTime())) {
-          const ctx2 = this._getOrReturnCtx(input);
-          addIssueToContext(ctx2, {
-            code: ZodIssueCode2.invalid_date
-          });
-          return INVALID;
-        }
-        const status = new ParseStatus();
-        let ctx = void 0;
-        for (const check2 of this._def.checks) {
-          if (check2.kind === "min") {
-            if (input.data.getTime() < check2.value) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                code: ZodIssueCode2.too_small,
-                message: check2.message,
-                inclusive: true,
-                exact: false,
-                minimum: check2.value,
-                type: "date"
-              });
-              status.dirty();
-            }
-          } else if (check2.kind === "max") {
-            if (input.data.getTime() > check2.value) {
-              ctx = this._getOrReturnCtx(input, ctx);
-              addIssueToContext(ctx, {
-                code: ZodIssueCode2.too_big,
-                message: check2.message,
-                inclusive: true,
-                exact: false,
-                maximum: check2.value,
-                type: "date"
-              });
-              status.dirty();
-            }
-          } else {
-            util.assertNever(check2);
-          }
-        }
-        return {
-          status: status.value,
-          value: new Date(input.data.getTime())
-        };
-      }
-      _addCheck(check2) {
-        return new _ZodDate({
-          ...this._def,
-          checks: [...this._def.checks, check2]
-        });
-      }
-      min(minDate, message) {
-        return this._addCheck({
-          kind: "min",
-          value: minDate.getTime(),
-          message: errorUtil.toString(message)
-        });
-      }
-      max(maxDate, message) {
-        return this._addCheck({
-          kind: "max",
-          value: maxDate.getTime(),
-          message: errorUtil.toString(message)
-        });
-      }
-      get minDate() {
-        let min = null;
-        for (const ch of this._def.checks) {
-          if (ch.kind === "min") {
-            if (min === null || ch.value > min)
-              min = ch.value;
-          }
-        }
-        return min != null ? new Date(min) : null;
-      }
-      get maxDate() {
-        let max = null;
-        for (const ch of this._def.checks) {
-          if (ch.kind === "max") {
-            if (max === null || ch.value < max)
-              max = ch.value;
-          }
-        }
-        return max != null ? new Date(max) : null;
-      }
-    };
-    ZodDate2.create = (params) => {
-      return new ZodDate2({
-        checks: [],
-        coerce: params?.coerce || false,
-        typeName: ZodFirstPartyTypeKind2.ZodDate,
-        ...processCreateParams(params)
-      });
-    };
-    ZodSymbol2 = class extends ZodType2 {
-      _parse(input) {
-        const parsedType2 = this._getType(input);
-        if (parsedType2 !== ZodParsedType.symbol) {
-          const ctx = this._getOrReturnCtx(input);
-          addIssueToContext(ctx, {
-            code: ZodIssueCode2.invalid_type,
-            expected: ZodParsedType.symbol,
-            received: ctx.parsedType
-          });
-          return INVALID;
-        }
-        return OK2(input.data);
-      }
-    };
-    ZodSymbol2.create = (params) => {
-      return new ZodSymbol2({
-        typeName: ZodFirstPartyTypeKind2.ZodSymbol,
-        ...processCreateParams(params)
-      });
-    };
-    ZodUndefined2 = class extends ZodType2 {
-      _parse(input) {
-        const parsedType2 = this._getType(input);
-        if (parsedType2 !== ZodParsedType.undefined) {
-          const ctx = this._getOrReturnCtx(input);
-          addIssueToContext(ctx, {
-            code: ZodIssueCode2.invalid_type,
-            expected: ZodParsedType.undefined,
-            received: ctx.parsedType
-          });
-          return INVALID;
-        }
-        return OK2(input.data);
-      }
-    };
-    ZodUndefined2.create = (params) => {
-      return new ZodUndefined2({
-        typeName: ZodFirstPartyTypeKind2.ZodUndefined,
-        ...processCreateParams(params)
-      });
-    };
-    ZodNull2 = class extends ZodType2 {
-      _parse(input) {
-        const parsedType2 = this._getType(input);
-        if (parsedType2 !== ZodParsedType.null) {
-          const ctx = this._getOrReturnCtx(input);
-          addIssueToContext(ctx, {
-            code: ZodIssueCode2.invalid_type,
-            expected: ZodParsedType.null,
-            received: ctx.parsedType
-          });
-          return INVALID;
-        }
-        return OK2(input.data);
-      }
-    };
-    ZodNull2.create = (params) => {
-      return new ZodNull2({
-        typeName: ZodFirstPartyTypeKind2.ZodNull,
-        ...processCreateParams(params)
-      });
-    };
-    ZodAny2 = class extends ZodType2 {
-      constructor() {
-        super(...arguments);
-        this._any = true;
-      }
-      _parse(input) {
-        return OK2(input.data);
-      }
-    };
-    ZodAny2.create = (params) => {
-      return new ZodAny2({
-        typeName: ZodFirstPartyTypeKind2.ZodAny,
-        ...processCreateParams(params)
-      });
-    };
-    ZodUnknown2 = class extends ZodType2 {
-      constructor() {
-        super(...arguments);
-        this._unknown = true;
-      }
-      _parse(input) {
-        return OK2(input.data);
-      }
-    };
-    ZodUnknown2.create = (params) => {
-      return new ZodUnknown2({
-        typeName: ZodFirstPartyTypeKind2.ZodUnknown,
-        ...processCreateParams(params)
-      });
-    };
-    ZodNever2 = class extends ZodType2 {
-      _parse(input) {
-        const ctx = this._getOrReturnCtx(input);
-        addIssueToContext(ctx, {
-          code: ZodIssueCode2.invalid_type,
-          expected: ZodParsedType.never,
-          received: ctx.parsedType
-        });
-        return INVALID;
-      }
-    };
-    ZodNever2.create = (params) => {
-      return new ZodNever2({
-        typeName: ZodFirstPartyTypeKind2.ZodNever,
-        ...processCreateParams(params)
-      });
-    };
-    ZodVoid2 = class extends ZodType2 {
-      _parse(input) {
-        const parsedType2 = this._getType(input);
-        if (parsedType2 !== ZodParsedType.undefined) {
-          const ctx = this._getOrReturnCtx(input);
-          addIssueToContext(ctx, {
-            code: ZodIssueCode2.invalid_type,
-            expected: ZodParsedType.void,
-            received: ctx.parsedType
-          });
-          return INVALID;
-        }
-        return OK2(input.data);
-      }
-    };
-    ZodVoid2.create = (params) => {
-      return new ZodVoid2({
-        typeName: ZodFirstPartyTypeKind2.ZodVoid,
-        ...processCreateParams(params)
-      });
-    };
-    ZodArray2 = class _ZodArray extends ZodType2 {
-      _parse(input) {
-        const { ctx, status } = this._processInputParams(input);
-        const def = this._def;
-        if (ctx.parsedType !== ZodParsedType.array) {
-          addIssueToContext(ctx, {
-            code: ZodIssueCode2.invalid_type,
-            expected: ZodParsedType.array,
-            received: ctx.parsedType
-          });
-          return INVALID;
-        }
-        if (def.exactLength !== null) {
-          const tooBig = ctx.data.length > def.exactLength.value;
-          const tooSmall = ctx.data.length < def.exactLength.value;
-          if (tooBig || tooSmall) {
-            addIssueToContext(ctx, {
-              code: tooBig ? ZodIssueCode2.too_big : ZodIssueCode2.too_small,
-              minimum: tooSmall ? def.exactLength.value : void 0,
-              maximum: tooBig ? def.exactLength.value : void 0,
-              type: "array",
-              inclusive: true,
-              exact: true,
-              message: def.exactLength.message
-            });
-            status.dirty();
-          }
-        }
-        if (def.minLength !== null) {
-          if (ctx.data.length < def.minLength.value) {
-            addIssueToContext(ctx, {
-              code: ZodIssueCode2.too_small,
-              minimum: def.minLength.value,
-              type: "array",
-              inclusive: true,
-              exact: false,
-              message: def.minLength.message
-            });
-            status.dirty();
-          }
-        }
-        if (def.maxLength !== null) {
-          if (ctx.data.length > def.maxLength.value) {
-            addIssueToContext(ctx, {
-              code: ZodIssueCode2.too_big,
-              maximum: def.maxLength.value,
-              type: "array",
-              inclusive: true,
-              exact: false,
-              message: def.maxLength.message
-            });
-            status.dirty();
-          }
-        }
-        if (ctx.common.async) {
-          return Promise.all([...ctx.data].map((item, i) => {
-            return def.type._parseAsync(new ParseInputLazyPath(ctx, item, ctx.path, i));
-          })).then((result2) => {
-            return ParseStatus.mergeArray(status, result2);
-          });
-        }
-        const result = [...ctx.data].map((item, i) => {
-          return def.type._parseSync(new ParseInputLazyPath(ctx, item, ctx.path, i));
-        });
-        return ParseStatus.mergeArray(status, result);
-      }
-      get element() {
-        return this._def.type;
-      }
-      min(minLength, message) {
-        return new _ZodArray({
-          ...this._def,
-          minLength: { value: minLength, message: errorUtil.toString(message) }
-        });
-      }
-      max(maxLength, message) {
-        return new _ZodArray({
-          ...this._def,
-          maxLength: { value: maxLength, message: errorUtil.toString(message) }
-        });
-      }
-      length(len, message) {
-        return new _ZodArray({
-          ...this._def,
-          exactLength: { value: len, message: errorUtil.toString(message) }
-        });
-      }
-      nonempty(message) {
-        return this.min(1, message);
-      }
-    };
-    ZodArray2.create = (schema, params) => {
-      return new ZodArray2({
-        type: schema,
-        minLength: null,
-        maxLength: null,
-        exactLength: null,
-        typeName: ZodFirstPartyTypeKind2.ZodArray,
-        ...processCreateParams(params)
-      });
-    };
-    ZodObject2 = class _ZodObject extends ZodType2 {
-      constructor() {
-        super(...arguments);
-        this._cached = null;
-        this.nonstrict = this.passthrough;
-        this.augment = this.extend;
-      }
-      _getCached() {
-        if (this._cached !== null)
-          return this._cached;
-        const shape = this._def.shape();
-        const keys = util.objectKeys(shape);
-        this._cached = { shape, keys };
-        return this._cached;
-      }
-      _parse(input) {
-        const parsedType2 = this._getType(input);
-        if (parsedType2 !== ZodParsedType.object) {
-          const ctx2 = this._getOrReturnCtx(input);
-          addIssueToContext(ctx2, {
-            code: ZodIssueCode2.invalid_type,
-            expected: ZodParsedType.object,
-            received: ctx2.parsedType
-          });
-          return INVALID;
-        }
-        const { status, ctx } = this._processInputParams(input);
-        const { shape, keys: shapeKeys } = this._getCached();
-        const extraKeys = [];
-        if (!(this._def.catchall instanceof ZodNever2 && this._def.unknownKeys === "strip")) {
-          for (const key in ctx.data) {
-            if (!shapeKeys.includes(key)) {
-              extraKeys.push(key);
-            }
-          }
-        }
-        const pairs = [];
-        for (const key of shapeKeys) {
-          const keyValidator = shape[key];
-          const value = ctx.data[key];
-          pairs.push({
-            key: { status: "valid", value: key },
-            value: keyValidator._parse(new ParseInputLazyPath(ctx, value, ctx.path, key)),
-            alwaysSet: key in ctx.data
-          });
-        }
-        if (this._def.catchall instanceof ZodNever2) {
-          const unknownKeys = this._def.unknownKeys;
-          if (unknownKeys === "passthrough") {
-            for (const key of extraKeys) {
-              pairs.push({
-                key: { status: "valid", value: key },
-                value: { status: "valid", value: ctx.data[key] }
-              });
-            }
-          } else if (unknownKeys === "strict") {
-            if (extraKeys.length > 0) {
-              addIssueToContext(ctx, {
-                code: ZodIssueCode2.unrecognized_keys,
-                keys: extraKeys
-              });
-              status.dirty();
-            }
-          } else if (unknownKeys === "strip") {
-          } else {
-            throw new Error(`Internal ZodObject error: invalid unknownKeys value.`);
-          }
-        } else {
-          const catchall = this._def.catchall;
-          for (const key of extraKeys) {
-            const value = ctx.data[key];
-            pairs.push({
-              key: { status: "valid", value: key },
-              value: catchall._parse(
-                new ParseInputLazyPath(ctx, value, ctx.path, key)
-                //, ctx.child(key), value, getParsedType(value)
-              ),
-              alwaysSet: key in ctx.data
-            });
-          }
-        }
-        if (ctx.common.async) {
-          return Promise.resolve().then(async () => {
-            const syncPairs = [];
-            for (const pair of pairs) {
-              const key = await pair.key;
-              const value = await pair.value;
-              syncPairs.push({
-                key,
-                value,
-                alwaysSet: pair.alwaysSet
-              });
-            }
-            return syncPairs;
-          }).then((syncPairs) => {
-            return ParseStatus.mergeObjectSync(status, syncPairs);
-          });
-        } else {
-          return ParseStatus.mergeObjectSync(status, pairs);
-        }
-      }
-      get shape() {
-        return this._def.shape();
-      }
-      strict(message) {
-        errorUtil.errToObj;
-        return new _ZodObject({
-          ...this._def,
-          unknownKeys: "strict",
-          ...message !== void 0 ? {
-            errorMap: (issue2, ctx) => {
-              const defaultError = this._def.errorMap?.(issue2, ctx).message ?? ctx.defaultError;
-              if (issue2.code === "unrecognized_keys")
-                return {
-                  message: errorUtil.errToObj(message).message ?? defaultError
-                };
-              return {
-                message: defaultError
-              };
-            }
-          } : {}
-        });
-      }
-      strip() {
-        return new _ZodObject({
-          ...this._def,
-          unknownKeys: "strip"
-        });
-      }
-      passthrough() {
-        return new _ZodObject({
-          ...this._def,
-          unknownKeys: "passthrough"
-        });
-      }
-      // const AugmentFactory =
-      //   <Def extends ZodObjectDef>(def: Def) =>
-      //   <Augmentation extends ZodRawShape>(
-      //     augmentation: Augmentation
-      //   ): ZodObject<
-      //     extendShape<ReturnType<Def["shape"]>, Augmentation>,
-      //     Def["unknownKeys"],
-      //     Def["catchall"]
-      //   > => {
-      //     return new ZodObject({
-      //       ...def,
-      //       shape: () => ({
-      //         ...def.shape(),
-      //         ...augmentation,
-      //       }),
-      //     }) as any;
-      //   };
-      extend(augmentation) {
-        return new _ZodObject({
-          ...this._def,
-          shape: () => ({
-            ...this._def.shape(),
-            ...augmentation
-          })
-        });
-      }
-      /**
-       * Prior to zod@1.0.12 there was a bug in the
-       * inferred type of merged objects. Please
-       * upgrade if you are experiencing issues.
-       */
-      merge(merging) {
-        const merged = new _ZodObject({
-          unknownKeys: merging._def.unknownKeys,
-          catchall: merging._def.catchall,
-          shape: () => ({
-            ...this._def.shape(),
-            ...merging._def.shape()
-          }),
-          typeName: ZodFirstPartyTypeKind2.ZodObject
-        });
-        return merged;
-      }
-      // merge<
-      //   Incoming extends AnyZodObject,
-      //   Augmentation extends Incoming["shape"],
-      //   NewOutput extends {
-      //     [k in keyof Augmentation | keyof Output]: k extends keyof Augmentation
-      //       ? Augmentation[k]["_output"]
-      //       : k extends keyof Output
-      //       ? Output[k]
-      //       : never;
-      //   },
-      //   NewInput extends {
-      //     [k in keyof Augmentation | keyof Input]: k extends keyof Augmentation
-      //       ? Augmentation[k]["_input"]
-      //       : k extends keyof Input
-      //       ? Input[k]
-      //       : never;
-      //   }
-      // >(
-      //   merging: Incoming
-      // ): ZodObject<
-      //   extendShape<T, ReturnType<Incoming["_def"]["shape"]>>,
-      //   Incoming["_def"]["unknownKeys"],
-      //   Incoming["_def"]["catchall"],
-      //   NewOutput,
-      //   NewInput
-      // > {
-      //   const merged: any = new ZodObject({
-      //     unknownKeys: merging._def.unknownKeys,
-      //     catchall: merging._def.catchall,
-      //     shape: () =>
-      //       objectUtil.mergeShapes(this._def.shape(), merging._def.shape()),
-      //     typeName: ZodFirstPartyTypeKind.ZodObject,
-      //   }) as any;
-      //   return merged;
-      // }
-      setKey(key, schema) {
-        return this.augment({ [key]: schema });
-      }
-      // merge<Incoming extends AnyZodObject>(
-      //   merging: Incoming
-      // ): //ZodObject<T & Incoming["_shape"], UnknownKeys, Catchall> = (merging) => {
-      // ZodObject<
-      //   extendShape<T, ReturnType<Incoming["_def"]["shape"]>>,
-      //   Incoming["_def"]["unknownKeys"],
-      //   Incoming["_def"]["catchall"]
-      // > {
-      //   // const mergedShape = objectUtil.mergeShapes(
-      //   //   this._def.shape(),
-      //   //   merging._def.shape()
-      //   // );
-      //   const merged: any = new ZodObject({
-      //     unknownKeys: merging._def.unknownKeys,
-      //     catchall: merging._def.catchall,
-      //     shape: () =>
-      //       objectUtil.mergeShapes(this._def.shape(), merging._def.shape()),
-      //     typeName: ZodFirstPartyTypeKind.ZodObject,
-      //   }) as any;
-      //   return merged;
-      // }
-      catchall(index) {
-        return new _ZodObject({
-          ...this._def,
-          catchall: index
-        });
-      }
-      pick(mask) {
-        const shape = {};
-        for (const key of util.objectKeys(mask)) {
-          if (mask[key] && this.shape[key]) {
-            shape[key] = this.shape[key];
-          }
-        }
-        return new _ZodObject({
-          ...this._def,
-          shape: () => shape
-        });
-      }
-      omit(mask) {
-        const shape = {};
-        for (const key of util.objectKeys(this.shape)) {
-          if (!mask[key]) {
-            shape[key] = this.shape[key];
-          }
-        }
-        return new _ZodObject({
-          ...this._def,
-          shape: () => shape
-        });
-      }
-      /**
-       * @deprecated
-       */
-      deepPartial() {
-        return deepPartialify(this);
-      }
-      partial(mask) {
-        const newShape = {};
-        for (const key of util.objectKeys(this.shape)) {
-          const fieldSchema = this.shape[key];
-          if (mask && !mask[key]) {
-            newShape[key] = fieldSchema;
-          } else {
-            newShape[key] = fieldSchema.optional();
-          }
-        }
-        return new _ZodObject({
-          ...this._def,
-          shape: () => newShape
-        });
-      }
-      required(mask) {
-        const newShape = {};
-        for (const key of util.objectKeys(this.shape)) {
-          if (mask && !mask[key]) {
-            newShape[key] = this.shape[key];
-          } else {
-            const fieldSchema = this.shape[key];
-            let newField = fieldSchema;
-            while (newField instanceof ZodOptional2) {
-              newField = newField._def.innerType;
-            }
-            newShape[key] = newField;
-          }
-        }
-        return new _ZodObject({
-          ...this._def,
-          shape: () => newShape
-        });
-      }
-      keyof() {
-        return createZodEnum(util.objectKeys(this.shape));
-      }
-    };
-    ZodObject2.create = (shape, params) => {
-      return new ZodObject2({
-        shape: () => shape,
-        unknownKeys: "strip",
-        catchall: ZodNever2.create(),
-        typeName: ZodFirstPartyTypeKind2.ZodObject,
-        ...processCreateParams(params)
-      });
-    };
-    ZodObject2.strictCreate = (shape, params) => {
-      return new ZodObject2({
-        shape: () => shape,
-        unknownKeys: "strict",
-        catchall: ZodNever2.create(),
-        typeName: ZodFirstPartyTypeKind2.ZodObject,
-        ...processCreateParams(params)
-      });
-    };
-    ZodObject2.lazycreate = (shape, params) => {
-      return new ZodObject2({
-        shape,
-        unknownKeys: "strip",
-        catchall: ZodNever2.create(),
-        typeName: ZodFirstPartyTypeKind2.ZodObject,
-        ...processCreateParams(params)
-      });
-    };
-    ZodUnion2 = class extends ZodType2 {
-      _parse(input) {
-        const { ctx } = this._processInputParams(input);
-        const options = this._def.options;
-        function handleResults(results) {
-          for (const result of results) {
-            if (result.result.status === "valid") {
-              return result.result;
-            }
-          }
-          for (const result of results) {
-            if (result.result.status === "dirty") {
-              ctx.common.issues.push(...result.ctx.common.issues);
-              return result.result;
-            }
-          }
-          const unionErrors = results.map((result) => new ZodError2(result.ctx.common.issues));
-          addIssueToContext(ctx, {
-            code: ZodIssueCode2.invalid_union,
-            unionErrors
-          });
-          return INVALID;
-        }
-        if (ctx.common.async) {
-          return Promise.all(options.map(async (option) => {
-            const childCtx = {
-              ...ctx,
-              common: {
-                ...ctx.common,
-                issues: []
-              },
-              parent: null
-            };
-            return {
-              result: await option._parseAsync({
-                data: ctx.data,
-                path: ctx.path,
-                parent: childCtx
-              }),
-              ctx: childCtx
-            };
-          })).then(handleResults);
-        } else {
-          let dirty = void 0;
-          const issues = [];
-          for (const option of options) {
-            const childCtx = {
-              ...ctx,
-              common: {
-                ...ctx.common,
-                issues: []
-              },
-              parent: null
-            };
-            const result = option._parseSync({
-              data: ctx.data,
-              path: ctx.path,
-              parent: childCtx
-            });
-            if (result.status === "valid") {
-              return result;
-            } else if (result.status === "dirty" && !dirty) {
-              dirty = { result, ctx: childCtx };
-            }
-            if (childCtx.common.issues.length) {
-              issues.push(childCtx.common.issues);
-            }
-          }
-          if (dirty) {
-            ctx.common.issues.push(...dirty.ctx.common.issues);
-            return dirty.result;
-          }
-          const unionErrors = issues.map((issues2) => new ZodError2(issues2));
-          addIssueToContext(ctx, {
-            code: ZodIssueCode2.invalid_union,
-            unionErrors
-          });
-          return INVALID;
-        }
-      }
-      get options() {
-        return this._def.options;
-      }
-    };
-    ZodUnion2.create = (types, params) => {
-      return new ZodUnion2({
-        options: types,
-        typeName: ZodFirstPartyTypeKind2.ZodUnion,
-        ...processCreateParams(params)
-      });
-    };
-    getDiscriminator = (type) => {
-      if (type instanceof ZodLazy2) {
-        return getDiscriminator(type.schema);
-      } else if (type instanceof ZodEffects) {
-        return getDiscriminator(type.innerType());
-      } else if (type instanceof ZodLiteral2) {
-        return [type.value];
-      } else if (type instanceof ZodEnum2) {
-        return type.options;
-      } else if (type instanceof ZodNativeEnum) {
-        return util.objectValues(type.enum);
-      } else if (type instanceof ZodDefault2) {
-        return getDiscriminator(type._def.innerType);
-      } else if (type instanceof ZodUndefined2) {
-        return [void 0];
-      } else if (type instanceof ZodNull2) {
-        return [null];
-      } else if (type instanceof ZodOptional2) {
-        return [void 0, ...getDiscriminator(type.unwrap())];
-      } else if (type instanceof ZodNullable2) {
-        return [null, ...getDiscriminator(type.unwrap())];
-      } else if (type instanceof ZodBranded) {
-        return getDiscriminator(type.unwrap());
-      } else if (type instanceof ZodReadonly2) {
-        return getDiscriminator(type.unwrap());
-      } else if (type instanceof ZodCatch2) {
-        return getDiscriminator(type._def.innerType);
-      } else {
-        return [];
-      }
-    };
-    ZodDiscriminatedUnion2 = class _ZodDiscriminatedUnion extends ZodType2 {
-      _parse(input) {
-        const { ctx } = this._processInputParams(input);
-        if (ctx.parsedType !== ZodParsedType.object) {
-          addIssueToContext(ctx, {
-            code: ZodIssueCode2.invalid_type,
-            expected: ZodParsedType.object,
-            received: ctx.parsedType
-          });
-          return INVALID;
-        }
-        const discriminator = this.discriminator;
-        const discriminatorValue = ctx.data[discriminator];
-        const option = this.optionsMap.get(discriminatorValue);
-        if (!option) {
-          addIssueToContext(ctx, {
-            code: ZodIssueCode2.invalid_union_discriminator,
-            options: Array.from(this.optionsMap.keys()),
-            path: [discriminator]
-          });
-          return INVALID;
-        }
-        if (ctx.common.async) {
-          return option._parseAsync({
-            data: ctx.data,
-            path: ctx.path,
-            parent: ctx
-          });
-        } else {
-          return option._parseSync({
-            data: ctx.data,
-            path: ctx.path,
-            parent: ctx
-          });
-        }
-      }
-      get discriminator() {
-        return this._def.discriminator;
-      }
-      get options() {
-        return this._def.options;
-      }
-      get optionsMap() {
-        return this._def.optionsMap;
-      }
-      /**
-       * The constructor of the discriminated union schema. Its behaviour is very similar to that of the normal z.union() constructor.
-       * However, it only allows a union of objects, all of which need to share a discriminator property. This property must
-       * have a different value for each object in the union.
-       * @param discriminator the name of the discriminator property
-       * @param types an array of object schemas
-       * @param params
-       */
-      static create(discriminator, options, params) {
-        const optionsMap = /* @__PURE__ */ new Map();
-        for (const type of options) {
-          const discriminatorValues = getDiscriminator(type.shape[discriminator]);
-          if (!discriminatorValues.length) {
-            throw new Error(`A discriminator value for key \`${discriminator}\` could not be extracted from all schema options`);
-          }
-          for (const value of discriminatorValues) {
-            if (optionsMap.has(value)) {
-              throw new Error(`Discriminator property ${String(discriminator)} has duplicate value ${String(value)}`);
-            }
-            optionsMap.set(value, type);
-          }
-        }
-        return new _ZodDiscriminatedUnion({
-          typeName: ZodFirstPartyTypeKind2.ZodDiscriminatedUnion,
-          discriminator,
-          options,
-          optionsMap,
-          ...processCreateParams(params)
-        });
-      }
-    };
-    ZodIntersection2 = class extends ZodType2 {
-      _parse(input) {
-        const { status, ctx } = this._processInputParams(input);
-        const handleParsed = (parsedLeft, parsedRight) => {
-          if (isAborted(parsedLeft) || isAborted(parsedRight)) {
-            return INVALID;
-          }
-          const merged = mergeValues2(parsedLeft.value, parsedRight.value);
-          if (!merged.valid) {
-            addIssueToContext(ctx, {
-              code: ZodIssueCode2.invalid_intersection_types
-            });
-            return INVALID;
-          }
-          if (isDirty(parsedLeft) || isDirty(parsedRight)) {
-            status.dirty();
-          }
-          return { status: status.value, value: merged.data };
-        };
-        if (ctx.common.async) {
-          return Promise.all([
-            this._def.left._parseAsync({
-              data: ctx.data,
-              path: ctx.path,
-              parent: ctx
-            }),
-            this._def.right._parseAsync({
-              data: ctx.data,
-              path: ctx.path,
-              parent: ctx
-            })
-          ]).then(([left, right]) => handleParsed(left, right));
-        } else {
-          return handleParsed(this._def.left._parseSync({
-            data: ctx.data,
-            path: ctx.path,
-            parent: ctx
-          }), this._def.right._parseSync({
-            data: ctx.data,
-            path: ctx.path,
-            parent: ctx
-          }));
-        }
-      }
-    };
-    ZodIntersection2.create = (left, right, params) => {
-      return new ZodIntersection2({
-        left,
-        right,
-        typeName: ZodFirstPartyTypeKind2.ZodIntersection,
-        ...processCreateParams(params)
-      });
-    };
-    ZodTuple2 = class _ZodTuple extends ZodType2 {
-      _parse(input) {
-        const { status, ctx } = this._processInputParams(input);
-        if (ctx.parsedType !== ZodParsedType.array) {
-          addIssueToContext(ctx, {
-            code: ZodIssueCode2.invalid_type,
-            expected: ZodParsedType.array,
-            received: ctx.parsedType
-          });
-          return INVALID;
-        }
-        if (ctx.data.length < this._def.items.length) {
-          addIssueToContext(ctx, {
-            code: ZodIssueCode2.too_small,
-            minimum: this._def.items.length,
-            inclusive: true,
-            exact: false,
-            type: "array"
-          });
-          return INVALID;
-        }
-        const rest = this._def.rest;
-        if (!rest && ctx.data.length > this._def.items.length) {
-          addIssueToContext(ctx, {
-            code: ZodIssueCode2.too_big,
-            maximum: this._def.items.length,
-            inclusive: true,
-            exact: false,
-            type: "array"
-          });
-          status.dirty();
-        }
-        const items = [...ctx.data].map((item, itemIndex) => {
-          const schema = this._def.items[itemIndex] || this._def.rest;
-          if (!schema)
-            return null;
-          return schema._parse(new ParseInputLazyPath(ctx, item, ctx.path, itemIndex));
-        }).filter((x) => !!x);
-        if (ctx.common.async) {
-          return Promise.all(items).then((results) => {
-            return ParseStatus.mergeArray(status, results);
-          });
-        } else {
-          return ParseStatus.mergeArray(status, items);
-        }
-      }
-      get items() {
-        return this._def.items;
-      }
-      rest(rest) {
-        return new _ZodTuple({
-          ...this._def,
-          rest
-        });
-      }
-    };
-    ZodTuple2.create = (schemas, params) => {
-      if (!Array.isArray(schemas)) {
-        throw new Error("You must pass an array of schemas to z.tuple([ ... ])");
-      }
-      return new ZodTuple2({
-        items: schemas,
-        typeName: ZodFirstPartyTypeKind2.ZodTuple,
-        rest: null,
-        ...processCreateParams(params)
-      });
-    };
-    ZodRecord2 = class _ZodRecord extends ZodType2 {
-      get keySchema() {
-        return this._def.keyType;
-      }
-      get valueSchema() {
-        return this._def.valueType;
-      }
-      _parse(input) {
-        const { status, ctx } = this._processInputParams(input);
-        if (ctx.parsedType !== ZodParsedType.object) {
-          addIssueToContext(ctx, {
-            code: ZodIssueCode2.invalid_type,
-            expected: ZodParsedType.object,
-            received: ctx.parsedType
-          });
-          return INVALID;
-        }
-        const pairs = [];
-        const keyType = this._def.keyType;
-        const valueType = this._def.valueType;
-        for (const key in ctx.data) {
-          pairs.push({
-            key: keyType._parse(new ParseInputLazyPath(ctx, key, ctx.path, key)),
-            value: valueType._parse(new ParseInputLazyPath(ctx, ctx.data[key], ctx.path, key)),
-            alwaysSet: key in ctx.data
-          });
-        }
-        if (ctx.common.async) {
-          return ParseStatus.mergeObjectAsync(status, pairs);
-        } else {
-          return ParseStatus.mergeObjectSync(status, pairs);
-        }
-      }
-      get element() {
-        return this._def.valueType;
-      }
-      static create(first, second, third) {
-        if (second instanceof ZodType2) {
-          return new _ZodRecord({
-            keyType: first,
-            valueType: second,
-            typeName: ZodFirstPartyTypeKind2.ZodRecord,
-            ...processCreateParams(third)
-          });
-        }
-        return new _ZodRecord({
-          keyType: ZodString2.create(),
-          valueType: first,
-          typeName: ZodFirstPartyTypeKind2.ZodRecord,
-          ...processCreateParams(second)
-        });
-      }
-    };
-    ZodMap2 = class extends ZodType2 {
-      get keySchema() {
-        return this._def.keyType;
-      }
-      get valueSchema() {
-        return this._def.valueType;
-      }
-      _parse(input) {
-        const { status, ctx } = this._processInputParams(input);
-        if (ctx.parsedType !== ZodParsedType.map) {
-          addIssueToContext(ctx, {
-            code: ZodIssueCode2.invalid_type,
-            expected: ZodParsedType.map,
-            received: ctx.parsedType
-          });
-          return INVALID;
-        }
-        const keyType = this._def.keyType;
-        const valueType = this._def.valueType;
-        const pairs = [...ctx.data.entries()].map(([key, value], index) => {
-          return {
-            key: keyType._parse(new ParseInputLazyPath(ctx, key, ctx.path, [index, "key"])),
-            value: valueType._parse(new ParseInputLazyPath(ctx, value, ctx.path, [index, "value"]))
-          };
-        });
-        if (ctx.common.async) {
-          const finalMap = /* @__PURE__ */ new Map();
-          return Promise.resolve().then(async () => {
-            for (const pair of pairs) {
-              const key = await pair.key;
-              const value = await pair.value;
-              if (key.status === "aborted" || value.status === "aborted") {
-                return INVALID;
-              }
-              if (key.status === "dirty" || value.status === "dirty") {
-                status.dirty();
-              }
-              finalMap.set(key.value, value.value);
-            }
-            return { status: status.value, value: finalMap };
-          });
-        } else {
-          const finalMap = /* @__PURE__ */ new Map();
-          for (const pair of pairs) {
-            const key = pair.key;
-            const value = pair.value;
-            if (key.status === "aborted" || value.status === "aborted") {
-              return INVALID;
-            }
-            if (key.status === "dirty" || value.status === "dirty") {
-              status.dirty();
-            }
-            finalMap.set(key.value, value.value);
-          }
-          return { status: status.value, value: finalMap };
-        }
-      }
-    };
-    ZodMap2.create = (keyType, valueType, params) => {
-      return new ZodMap2({
-        valueType,
-        keyType,
-        typeName: ZodFirstPartyTypeKind2.ZodMap,
-        ...processCreateParams(params)
-      });
-    };
-    ZodSet2 = class _ZodSet extends ZodType2 {
-      _parse(input) {
-        const { status, ctx } = this._processInputParams(input);
-        if (ctx.parsedType !== ZodParsedType.set) {
-          addIssueToContext(ctx, {
-            code: ZodIssueCode2.invalid_type,
-            expected: ZodParsedType.set,
-            received: ctx.parsedType
-          });
-          return INVALID;
-        }
-        const def = this._def;
-        if (def.minSize !== null) {
-          if (ctx.data.size < def.minSize.value) {
-            addIssueToContext(ctx, {
-              code: ZodIssueCode2.too_small,
-              minimum: def.minSize.value,
-              type: "set",
-              inclusive: true,
-              exact: false,
-              message: def.minSize.message
-            });
-            status.dirty();
-          }
-        }
-        if (def.maxSize !== null) {
-          if (ctx.data.size > def.maxSize.value) {
-            addIssueToContext(ctx, {
-              code: ZodIssueCode2.too_big,
-              maximum: def.maxSize.value,
-              type: "set",
-              inclusive: true,
-              exact: false,
-              message: def.maxSize.message
-            });
-            status.dirty();
-          }
-        }
-        const valueType = this._def.valueType;
-        function finalizeSet(elements2) {
-          const parsedSet = /* @__PURE__ */ new Set();
-          for (const element of elements2) {
-            if (element.status === "aborted")
-              return INVALID;
-            if (element.status === "dirty")
-              status.dirty();
-            parsedSet.add(element.value);
-          }
-          return { status: status.value, value: parsedSet };
-        }
-        const elements = [...ctx.data.values()].map((item, i) => valueType._parse(new ParseInputLazyPath(ctx, item, ctx.path, i)));
-        if (ctx.common.async) {
-          return Promise.all(elements).then((elements2) => finalizeSet(elements2));
-        } else {
-          return finalizeSet(elements);
-        }
-      }
-      min(minSize, message) {
-        return new _ZodSet({
-          ...this._def,
-          minSize: { value: minSize, message: errorUtil.toString(message) }
-        });
-      }
-      max(maxSize, message) {
-        return new _ZodSet({
-          ...this._def,
-          maxSize: { value: maxSize, message: errorUtil.toString(message) }
-        });
-      }
-      size(size, message) {
-        return this.min(size, message).max(size, message);
-      }
-      nonempty(message) {
-        return this.min(1, message);
-      }
-    };
-    ZodSet2.create = (valueType, params) => {
-      return new ZodSet2({
-        valueType,
-        minSize: null,
-        maxSize: null,
-        typeName: ZodFirstPartyTypeKind2.ZodSet,
-        ...processCreateParams(params)
-      });
-    };
-    ZodFunction2 = class _ZodFunction extends ZodType2 {
-      constructor() {
-        super(...arguments);
-        this.validate = this.implement;
-      }
-      _parse(input) {
-        const { ctx } = this._processInputParams(input);
-        if (ctx.parsedType !== ZodParsedType.function) {
-          addIssueToContext(ctx, {
-            code: ZodIssueCode2.invalid_type,
-            expected: ZodParsedType.function,
-            received: ctx.parsedType
-          });
-          return INVALID;
-        }
-        function makeArgsIssue(args, error48) {
-          return makeIssue({
-            data: args,
-            path: ctx.path,
-            errorMaps: [ctx.common.contextualErrorMap, ctx.schemaErrorMap, getErrorMap2(), en_default2].filter((x) => !!x),
-            issueData: {
-              code: ZodIssueCode2.invalid_arguments,
-              argumentsError: error48
-            }
-          });
-        }
-        function makeReturnsIssue(returns, error48) {
-          return makeIssue({
-            data: returns,
-            path: ctx.path,
-            errorMaps: [ctx.common.contextualErrorMap, ctx.schemaErrorMap, getErrorMap2(), en_default2].filter((x) => !!x),
-            issueData: {
-              code: ZodIssueCode2.invalid_return_type,
-              returnTypeError: error48
-            }
-          });
-        }
-        const params = { errorMap: ctx.common.contextualErrorMap };
-        const fn = ctx.data;
-        if (this._def.returns instanceof ZodPromise2) {
-          const me = this;
-          return OK2(async function(...args) {
-            const error48 = new ZodError2([]);
-            const parsedArgs = await me._def.args.parseAsync(args, params).catch((e) => {
-              error48.addIssue(makeArgsIssue(args, e));
-              throw error48;
-            });
-            const result = await Reflect.apply(fn, this, parsedArgs);
-            const parsedReturns = await me._def.returns._def.type.parseAsync(result, params).catch((e) => {
-              error48.addIssue(makeReturnsIssue(result, e));
-              throw error48;
-            });
-            return parsedReturns;
-          });
-        } else {
-          const me = this;
-          return OK2(function(...args) {
-            const parsedArgs = me._def.args.safeParse(args, params);
-            if (!parsedArgs.success) {
-              throw new ZodError2([makeArgsIssue(args, parsedArgs.error)]);
-            }
-            const result = Reflect.apply(fn, this, parsedArgs.data);
-            const parsedReturns = me._def.returns.safeParse(result, params);
-            if (!parsedReturns.success) {
-              throw new ZodError2([makeReturnsIssue(result, parsedReturns.error)]);
-            }
-            return parsedReturns.data;
-          });
-        }
-      }
-      parameters() {
-        return this._def.args;
-      }
-      returnType() {
-        return this._def.returns;
-      }
-      args(...items) {
-        return new _ZodFunction({
-          ...this._def,
-          args: ZodTuple2.create(items).rest(ZodUnknown2.create())
-        });
-      }
-      returns(returnType) {
-        return new _ZodFunction({
-          ...this._def,
-          returns: returnType
-        });
-      }
-      implement(func) {
-        const validatedFunc = this.parse(func);
-        return validatedFunc;
-      }
-      strictImplement(func) {
-        const validatedFunc = this.parse(func);
-        return validatedFunc;
-      }
-      static create(args, returns, params) {
-        return new _ZodFunction({
-          args: args ? args : ZodTuple2.create([]).rest(ZodUnknown2.create()),
-          returns: returns || ZodUnknown2.create(),
-          typeName: ZodFirstPartyTypeKind2.ZodFunction,
-          ...processCreateParams(params)
-        });
-      }
-    };
-    ZodLazy2 = class extends ZodType2 {
-      get schema() {
-        return this._def.getter();
-      }
-      _parse(input) {
-        const { ctx } = this._processInputParams(input);
-        const lazySchema = this._def.getter();
-        return lazySchema._parse({ data: ctx.data, path: ctx.path, parent: ctx });
-      }
-    };
-    ZodLazy2.create = (getter, params) => {
-      return new ZodLazy2({
-        getter,
-        typeName: ZodFirstPartyTypeKind2.ZodLazy,
-        ...processCreateParams(params)
-      });
-    };
-    ZodLiteral2 = class extends ZodType2 {
-      _parse(input) {
-        if (input.data !== this._def.value) {
-          const ctx = this._getOrReturnCtx(input);
-          addIssueToContext(ctx, {
-            received: ctx.data,
-            code: ZodIssueCode2.invalid_literal,
-            expected: this._def.value
-          });
-          return INVALID;
-        }
-        return { status: "valid", value: input.data };
-      }
-      get value() {
-        return this._def.value;
-      }
-    };
-    ZodLiteral2.create = (value, params) => {
-      return new ZodLiteral2({
-        value,
-        typeName: ZodFirstPartyTypeKind2.ZodLiteral,
-        ...processCreateParams(params)
-      });
-    };
-    ZodEnum2 = class _ZodEnum extends ZodType2 {
-      _parse(input) {
-        if (typeof input.data !== "string") {
-          const ctx = this._getOrReturnCtx(input);
-          const expectedValues = this._def.values;
-          addIssueToContext(ctx, {
-            expected: util.joinValues(expectedValues),
-            received: ctx.parsedType,
-            code: ZodIssueCode2.invalid_type
-          });
-          return INVALID;
-        }
-        if (!this._cache) {
-          this._cache = new Set(this._def.values);
-        }
-        if (!this._cache.has(input.data)) {
-          const ctx = this._getOrReturnCtx(input);
-          const expectedValues = this._def.values;
-          addIssueToContext(ctx, {
-            received: ctx.data,
-            code: ZodIssueCode2.invalid_enum_value,
-            options: expectedValues
-          });
-          return INVALID;
-        }
-        return OK2(input.data);
-      }
-      get options() {
-        return this._def.values;
-      }
-      get enum() {
-        const enumValues = {};
-        for (const val of this._def.values) {
-          enumValues[val] = val;
-        }
-        return enumValues;
-      }
-      get Values() {
-        const enumValues = {};
-        for (const val of this._def.values) {
-          enumValues[val] = val;
-        }
-        return enumValues;
-      }
-      get Enum() {
-        const enumValues = {};
-        for (const val of this._def.values) {
-          enumValues[val] = val;
-        }
-        return enumValues;
-      }
-      extract(values, newDef = this._def) {
-        return _ZodEnum.create(values, {
-          ...this._def,
-          ...newDef
-        });
-      }
-      exclude(values, newDef = this._def) {
-        return _ZodEnum.create(this.options.filter((opt) => !values.includes(opt)), {
-          ...this._def,
-          ...newDef
-        });
-      }
-    };
-    ZodEnum2.create = createZodEnum;
-    ZodNativeEnum = class extends ZodType2 {
-      _parse(input) {
-        const nativeEnumValues = util.getValidEnumValues(this._def.values);
-        const ctx = this._getOrReturnCtx(input);
-        if (ctx.parsedType !== ZodParsedType.string && ctx.parsedType !== ZodParsedType.number) {
-          const expectedValues = util.objectValues(nativeEnumValues);
-          addIssueToContext(ctx, {
-            expected: util.joinValues(expectedValues),
-            received: ctx.parsedType,
-            code: ZodIssueCode2.invalid_type
-          });
-          return INVALID;
-        }
-        if (!this._cache) {
-          this._cache = new Set(util.getValidEnumValues(this._def.values));
-        }
-        if (!this._cache.has(input.data)) {
-          const expectedValues = util.objectValues(nativeEnumValues);
-          addIssueToContext(ctx, {
-            received: ctx.data,
-            code: ZodIssueCode2.invalid_enum_value,
-            options: expectedValues
-          });
-          return INVALID;
-        }
-        return OK2(input.data);
-      }
-      get enum() {
-        return this._def.values;
-      }
-    };
-    ZodNativeEnum.create = (values, params) => {
-      return new ZodNativeEnum({
-        values,
-        typeName: ZodFirstPartyTypeKind2.ZodNativeEnum,
-        ...processCreateParams(params)
-      });
-    };
-    ZodPromise2 = class extends ZodType2 {
-      unwrap() {
-        return this._def.type;
-      }
-      _parse(input) {
-        const { ctx } = this._processInputParams(input);
-        if (ctx.parsedType !== ZodParsedType.promise && ctx.common.async === false) {
-          addIssueToContext(ctx, {
-            code: ZodIssueCode2.invalid_type,
-            expected: ZodParsedType.promise,
-            received: ctx.parsedType
-          });
-          return INVALID;
-        }
-        const promisified = ctx.parsedType === ZodParsedType.promise ? ctx.data : Promise.resolve(ctx.data);
-        return OK2(promisified.then((data) => {
-          return this._def.type.parseAsync(data, {
-            path: ctx.path,
-            errorMap: ctx.common.contextualErrorMap
-          });
-        }));
-      }
-    };
-    ZodPromise2.create = (schema, params) => {
-      return new ZodPromise2({
-        type: schema,
-        typeName: ZodFirstPartyTypeKind2.ZodPromise,
-        ...processCreateParams(params)
-      });
-    };
-    ZodEffects = class extends ZodType2 {
-      innerType() {
-        return this._def.schema;
-      }
-      sourceType() {
-        return this._def.schema._def.typeName === ZodFirstPartyTypeKind2.ZodEffects ? this._def.schema.sourceType() : this._def.schema;
-      }
-      _parse(input) {
-        const { status, ctx } = this._processInputParams(input);
-        const effect = this._def.effect || null;
-        const checkCtx = {
-          addIssue: (arg) => {
-            addIssueToContext(ctx, arg);
-            if (arg.fatal) {
-              status.abort();
-            } else {
-              status.dirty();
-            }
-          },
-          get path() {
-            return ctx.path;
-          }
-        };
-        checkCtx.addIssue = checkCtx.addIssue.bind(checkCtx);
-        if (effect.type === "preprocess") {
-          const processed = effect.transform(ctx.data, checkCtx);
-          if (ctx.common.async) {
-            return Promise.resolve(processed).then(async (processed2) => {
-              if (status.value === "aborted")
-                return INVALID;
-              const result = await this._def.schema._parseAsync({
-                data: processed2,
-                path: ctx.path,
-                parent: ctx
-              });
-              if (result.status === "aborted")
-                return INVALID;
-              if (result.status === "dirty")
-                return DIRTY(result.value);
-              if (status.value === "dirty")
-                return DIRTY(result.value);
-              return result;
-            });
-          } else {
-            if (status.value === "aborted")
-              return INVALID;
-            const result = this._def.schema._parseSync({
-              data: processed,
-              path: ctx.path,
-              parent: ctx
-            });
-            if (result.status === "aborted")
-              return INVALID;
-            if (result.status === "dirty")
-              return DIRTY(result.value);
-            if (status.value === "dirty")
-              return DIRTY(result.value);
-            return result;
-          }
-        }
-        if (effect.type === "refinement") {
-          const executeRefinement = (acc) => {
-            const result = effect.refinement(acc, checkCtx);
-            if (ctx.common.async) {
-              return Promise.resolve(result);
-            }
-            if (result instanceof Promise) {
-              throw new Error("Async refinement encountered during synchronous parse operation. Use .parseAsync instead.");
-            }
-            return acc;
-          };
-          if (ctx.common.async === false) {
-            const inner = this._def.schema._parseSync({
-              data: ctx.data,
-              path: ctx.path,
-              parent: ctx
-            });
-            if (inner.status === "aborted")
-              return INVALID;
-            if (inner.status === "dirty")
-              status.dirty();
-            executeRefinement(inner.value);
-            return { status: status.value, value: inner.value };
-          } else {
-            return this._def.schema._parseAsync({ data: ctx.data, path: ctx.path, parent: ctx }).then((inner) => {
-              if (inner.status === "aborted")
-                return INVALID;
-              if (inner.status === "dirty")
-                status.dirty();
-              return executeRefinement(inner.value).then(() => {
-                return { status: status.value, value: inner.value };
-              });
-            });
-          }
-        }
-        if (effect.type === "transform") {
-          if (ctx.common.async === false) {
-            const base = this._def.schema._parseSync({
-              data: ctx.data,
-              path: ctx.path,
-              parent: ctx
-            });
-            if (!isValid(base))
-              return INVALID;
-            const result = effect.transform(base.value, checkCtx);
-            if (result instanceof Promise) {
-              throw new Error(`Asynchronous transform encountered during synchronous parse operation. Use .parseAsync instead.`);
-            }
-            return { status: status.value, value: result };
-          } else {
-            return this._def.schema._parseAsync({ data: ctx.data, path: ctx.path, parent: ctx }).then((base) => {
-              if (!isValid(base))
-                return INVALID;
-              return Promise.resolve(effect.transform(base.value, checkCtx)).then((result) => ({
-                status: status.value,
-                value: result
-              }));
-            });
-          }
-        }
-        util.assertNever(effect);
-      }
-    };
-    ZodEffects.create = (schema, effect, params) => {
-      return new ZodEffects({
-        schema,
-        typeName: ZodFirstPartyTypeKind2.ZodEffects,
-        effect,
-        ...processCreateParams(params)
-      });
-    };
-    ZodEffects.createWithPreprocess = (preprocess2, schema, params) => {
-      return new ZodEffects({
-        schema,
-        effect: { type: "preprocess", transform: preprocess2 },
-        typeName: ZodFirstPartyTypeKind2.ZodEffects,
-        ...processCreateParams(params)
-      });
-    };
-    ZodOptional2 = class extends ZodType2 {
-      _parse(input) {
-        const parsedType2 = this._getType(input);
-        if (parsedType2 === ZodParsedType.undefined) {
-          return OK2(void 0);
-        }
-        return this._def.innerType._parse(input);
-      }
-      unwrap() {
-        return this._def.innerType;
-      }
-    };
-    ZodOptional2.create = (type, params) => {
-      return new ZodOptional2({
-        innerType: type,
-        typeName: ZodFirstPartyTypeKind2.ZodOptional,
-        ...processCreateParams(params)
-      });
-    };
-    ZodNullable2 = class extends ZodType2 {
-      _parse(input) {
-        const parsedType2 = this._getType(input);
-        if (parsedType2 === ZodParsedType.null) {
-          return OK2(null);
-        }
-        return this._def.innerType._parse(input);
-      }
-      unwrap() {
-        return this._def.innerType;
-      }
-    };
-    ZodNullable2.create = (type, params) => {
-      return new ZodNullable2({
-        innerType: type,
-        typeName: ZodFirstPartyTypeKind2.ZodNullable,
-        ...processCreateParams(params)
-      });
-    };
-    ZodDefault2 = class extends ZodType2 {
-      _parse(input) {
-        const { ctx } = this._processInputParams(input);
-        let data = ctx.data;
-        if (ctx.parsedType === ZodParsedType.undefined) {
-          data = this._def.defaultValue();
-        }
-        return this._def.innerType._parse({
-          data,
-          path: ctx.path,
-          parent: ctx
-        });
-      }
-      removeDefault() {
-        return this._def.innerType;
-      }
-    };
-    ZodDefault2.create = (type, params) => {
-      return new ZodDefault2({
-        innerType: type,
-        typeName: ZodFirstPartyTypeKind2.ZodDefault,
-        defaultValue: typeof params.default === "function" ? params.default : () => params.default,
-        ...processCreateParams(params)
-      });
-    };
-    ZodCatch2 = class extends ZodType2 {
-      _parse(input) {
-        const { ctx } = this._processInputParams(input);
-        const newCtx = {
-          ...ctx,
-          common: {
-            ...ctx.common,
-            issues: []
-          }
-        };
-        const result = this._def.innerType._parse({
-          data: newCtx.data,
-          path: newCtx.path,
-          parent: {
-            ...newCtx
-          }
-        });
-        if (isAsync(result)) {
-          return result.then((result2) => {
-            return {
-              status: "valid",
-              value: result2.status === "valid" ? result2.value : this._def.catchValue({
-                get error() {
-                  return new ZodError2(newCtx.common.issues);
-                },
-                input: newCtx.data
-              })
-            };
-          });
-        } else {
-          return {
-            status: "valid",
-            value: result.status === "valid" ? result.value : this._def.catchValue({
-              get error() {
-                return new ZodError2(newCtx.common.issues);
-              },
-              input: newCtx.data
-            })
-          };
-        }
-      }
-      removeCatch() {
-        return this._def.innerType;
-      }
-    };
-    ZodCatch2.create = (type, params) => {
-      return new ZodCatch2({
-        innerType: type,
-        typeName: ZodFirstPartyTypeKind2.ZodCatch,
-        catchValue: typeof params.catch === "function" ? params.catch : () => params.catch,
-        ...processCreateParams(params)
-      });
-    };
-    ZodNaN2 = class extends ZodType2 {
-      _parse(input) {
-        const parsedType2 = this._getType(input);
-        if (parsedType2 !== ZodParsedType.nan) {
-          const ctx = this._getOrReturnCtx(input);
-          addIssueToContext(ctx, {
-            code: ZodIssueCode2.invalid_type,
-            expected: ZodParsedType.nan,
-            received: ctx.parsedType
-          });
-          return INVALID;
-        }
-        return { status: "valid", value: input.data };
-      }
-    };
-    ZodNaN2.create = (params) => {
-      return new ZodNaN2({
-        typeName: ZodFirstPartyTypeKind2.ZodNaN,
-        ...processCreateParams(params)
-      });
-    };
-    BRAND = Symbol("zod_brand");
-    ZodBranded = class extends ZodType2 {
-      _parse(input) {
-        const { ctx } = this._processInputParams(input);
-        const data = ctx.data;
-        return this._def.type._parse({
-          data,
-          path: ctx.path,
-          parent: ctx
-        });
-      }
-      unwrap() {
-        return this._def.type;
-      }
-    };
-    ZodPipeline = class _ZodPipeline extends ZodType2 {
-      _parse(input) {
-        const { status, ctx } = this._processInputParams(input);
-        if (ctx.common.async) {
-          const handleAsync = async () => {
-            const inResult = await this._def.in._parseAsync({
-              data: ctx.data,
-              path: ctx.path,
-              parent: ctx
-            });
-            if (inResult.status === "aborted")
-              return INVALID;
-            if (inResult.status === "dirty") {
-              status.dirty();
-              return DIRTY(inResult.value);
-            } else {
-              return this._def.out._parseAsync({
-                data: inResult.value,
-                path: ctx.path,
-                parent: ctx
-              });
-            }
-          };
-          return handleAsync();
-        } else {
-          const inResult = this._def.in._parseSync({
-            data: ctx.data,
-            path: ctx.path,
-            parent: ctx
-          });
-          if (inResult.status === "aborted")
-            return INVALID;
-          if (inResult.status === "dirty") {
-            status.dirty();
-            return {
-              status: "dirty",
-              value: inResult.value
-            };
-          } else {
-            return this._def.out._parseSync({
-              data: inResult.value,
-              path: ctx.path,
-              parent: ctx
-            });
-          }
-        }
-      }
-      static create(a, b) {
-        return new _ZodPipeline({
-          in: a,
-          out: b,
-          typeName: ZodFirstPartyTypeKind2.ZodPipeline
-        });
-      }
-    };
-    ZodReadonly2 = class extends ZodType2 {
-      _parse(input) {
-        const result = this._def.innerType._parse(input);
-        const freeze = (data) => {
-          if (isValid(data)) {
-            data.value = Object.freeze(data.value);
-          }
-          return data;
-        };
-        return isAsync(result) ? result.then((data) => freeze(data)) : freeze(result);
-      }
-      unwrap() {
-        return this._def.innerType;
-      }
-    };
-    ZodReadonly2.create = (type, params) => {
-      return new ZodReadonly2({
-        innerType: type,
-        typeName: ZodFirstPartyTypeKind2.ZodReadonly,
-        ...processCreateParams(params)
-      });
-    };
-    late = {
-      object: ZodObject2.lazycreate
-    };
-    (function(ZodFirstPartyTypeKind3) {
-      ZodFirstPartyTypeKind3["ZodString"] = "ZodString";
-      ZodFirstPartyTypeKind3["ZodNumber"] = "ZodNumber";
-      ZodFirstPartyTypeKind3["ZodNaN"] = "ZodNaN";
-      ZodFirstPartyTypeKind3["ZodBigInt"] = "ZodBigInt";
-      ZodFirstPartyTypeKind3["ZodBoolean"] = "ZodBoolean";
-      ZodFirstPartyTypeKind3["ZodDate"] = "ZodDate";
-      ZodFirstPartyTypeKind3["ZodSymbol"] = "ZodSymbol";
-      ZodFirstPartyTypeKind3["ZodUndefined"] = "ZodUndefined";
-      ZodFirstPartyTypeKind3["ZodNull"] = "ZodNull";
-      ZodFirstPartyTypeKind3["ZodAny"] = "ZodAny";
-      ZodFirstPartyTypeKind3["ZodUnknown"] = "ZodUnknown";
-      ZodFirstPartyTypeKind3["ZodNever"] = "ZodNever";
-      ZodFirstPartyTypeKind3["ZodVoid"] = "ZodVoid";
-      ZodFirstPartyTypeKind3["ZodArray"] = "ZodArray";
-      ZodFirstPartyTypeKind3["ZodObject"] = "ZodObject";
-      ZodFirstPartyTypeKind3["ZodUnion"] = "ZodUnion";
-      ZodFirstPartyTypeKind3["ZodDiscriminatedUnion"] = "ZodDiscriminatedUnion";
-      ZodFirstPartyTypeKind3["ZodIntersection"] = "ZodIntersection";
-      ZodFirstPartyTypeKind3["ZodTuple"] = "ZodTuple";
-      ZodFirstPartyTypeKind3["ZodRecord"] = "ZodRecord";
-      ZodFirstPartyTypeKind3["ZodMap"] = "ZodMap";
-      ZodFirstPartyTypeKind3["ZodSet"] = "ZodSet";
-      ZodFirstPartyTypeKind3["ZodFunction"] = "ZodFunction";
-      ZodFirstPartyTypeKind3["ZodLazy"] = "ZodLazy";
-      ZodFirstPartyTypeKind3["ZodLiteral"] = "ZodLiteral";
-      ZodFirstPartyTypeKind3["ZodEnum"] = "ZodEnum";
-      ZodFirstPartyTypeKind3["ZodEffects"] = "ZodEffects";
-      ZodFirstPartyTypeKind3["ZodNativeEnum"] = "ZodNativeEnum";
-      ZodFirstPartyTypeKind3["ZodOptional"] = "ZodOptional";
-      ZodFirstPartyTypeKind3["ZodNullable"] = "ZodNullable";
-      ZodFirstPartyTypeKind3["ZodDefault"] = "ZodDefault";
-      ZodFirstPartyTypeKind3["ZodCatch"] = "ZodCatch";
-      ZodFirstPartyTypeKind3["ZodPromise"] = "ZodPromise";
-      ZodFirstPartyTypeKind3["ZodBranded"] = "ZodBranded";
-      ZodFirstPartyTypeKind3["ZodPipeline"] = "ZodPipeline";
-      ZodFirstPartyTypeKind3["ZodReadonly"] = "ZodReadonly";
-    })(ZodFirstPartyTypeKind2 || (ZodFirstPartyTypeKind2 = {}));
-    instanceOfType = (cls, params = {
-      message: `Input not instance of ${cls.name}`
-    }) => custom2((data) => data instanceof cls, params);
-    stringType = ZodString2.create;
-    numberType = ZodNumber2.create;
-    nanType = ZodNaN2.create;
-    bigIntType = ZodBigInt2.create;
-    booleanType = ZodBoolean2.create;
-    dateType = ZodDate2.create;
-    symbolType = ZodSymbol2.create;
-    undefinedType = ZodUndefined2.create;
-    nullType = ZodNull2.create;
-    anyType = ZodAny2.create;
-    unknownType = ZodUnknown2.create;
-    neverType = ZodNever2.create;
-    voidType = ZodVoid2.create;
-    arrayType = ZodArray2.create;
-    objectType = ZodObject2.create;
-    strictObjectType = ZodObject2.strictCreate;
-    unionType = ZodUnion2.create;
-    discriminatedUnionType = ZodDiscriminatedUnion2.create;
-    intersectionType = ZodIntersection2.create;
-    tupleType = ZodTuple2.create;
-    recordType = ZodRecord2.create;
-    mapType = ZodMap2.create;
-    setType = ZodSet2.create;
-    functionType = ZodFunction2.create;
-    lazyType = ZodLazy2.create;
-    literalType = ZodLiteral2.create;
-    enumType = ZodEnum2.create;
-    nativeEnumType = ZodNativeEnum.create;
-    promiseType = ZodPromise2.create;
-    effectsType = ZodEffects.create;
-    optionalType = ZodOptional2.create;
-    nullableType = ZodNullable2.create;
-    preprocessType = ZodEffects.createWithPreprocess;
-    pipelineType = ZodPipeline.create;
-    ostring = () => stringType().optional();
-    onumber = () => numberType().optional();
-    oboolean = () => booleanType().optional();
-    coerce = {
-      string: ((arg) => ZodString2.create({ ...arg, coerce: true })),
-      number: ((arg) => ZodNumber2.create({ ...arg, coerce: true })),
-      boolean: ((arg) => ZodBoolean2.create({
-        ...arg,
-        coerce: true
-      })),
-      bigint: ((arg) => ZodBigInt2.create({ ...arg, coerce: true })),
-      date: ((arg) => ZodDate2.create({ ...arg, coerce: true }))
-    };
-    NEVER2 = INVALID;
-  }
-});
-
-// node_modules/zod/v3/external.js
-var external_exports2 = {};
-__export(external_exports2, {
-  BRAND: () => BRAND,
-  DIRTY: () => DIRTY,
-  EMPTY_PATH: () => EMPTY_PATH,
-  INVALID: () => INVALID,
-  NEVER: () => NEVER2,
-  OK: () => OK2,
-  ParseStatus: () => ParseStatus,
-  Schema: () => ZodType2,
-  ZodAny: () => ZodAny2,
-  ZodArray: () => ZodArray2,
-  ZodBigInt: () => ZodBigInt2,
-  ZodBoolean: () => ZodBoolean2,
-  ZodBranded: () => ZodBranded,
-  ZodCatch: () => ZodCatch2,
-  ZodDate: () => ZodDate2,
-  ZodDefault: () => ZodDefault2,
-  ZodDiscriminatedUnion: () => ZodDiscriminatedUnion2,
-  ZodEffects: () => ZodEffects,
-  ZodEnum: () => ZodEnum2,
-  ZodError: () => ZodError2,
-  ZodFirstPartyTypeKind: () => ZodFirstPartyTypeKind2,
-  ZodFunction: () => ZodFunction2,
-  ZodIntersection: () => ZodIntersection2,
-  ZodIssueCode: () => ZodIssueCode2,
-  ZodLazy: () => ZodLazy2,
-  ZodLiteral: () => ZodLiteral2,
-  ZodMap: () => ZodMap2,
-  ZodNaN: () => ZodNaN2,
-  ZodNativeEnum: () => ZodNativeEnum,
-  ZodNever: () => ZodNever2,
-  ZodNull: () => ZodNull2,
-  ZodNullable: () => ZodNullable2,
-  ZodNumber: () => ZodNumber2,
-  ZodObject: () => ZodObject2,
-  ZodOptional: () => ZodOptional2,
-  ZodParsedType: () => ZodParsedType,
-  ZodPipeline: () => ZodPipeline,
-  ZodPromise: () => ZodPromise2,
-  ZodReadonly: () => ZodReadonly2,
-  ZodRecord: () => ZodRecord2,
-  ZodSchema: () => ZodType2,
-  ZodSet: () => ZodSet2,
-  ZodString: () => ZodString2,
-  ZodSymbol: () => ZodSymbol2,
-  ZodTransformer: () => ZodEffects,
-  ZodTuple: () => ZodTuple2,
-  ZodType: () => ZodType2,
-  ZodUndefined: () => ZodUndefined2,
-  ZodUnion: () => ZodUnion2,
-  ZodUnknown: () => ZodUnknown2,
-  ZodVoid: () => ZodVoid2,
-  addIssueToContext: () => addIssueToContext,
-  any: () => anyType,
-  array: () => arrayType,
-  bigint: () => bigIntType,
-  boolean: () => booleanType,
-  coerce: () => coerce,
-  custom: () => custom2,
-  date: () => dateType,
-  datetimeRegex: () => datetimeRegex,
-  defaultErrorMap: () => en_default2,
-  discriminatedUnion: () => discriminatedUnionType,
-  effect: () => effectsType,
-  enum: () => enumType,
-  function: () => functionType,
-  getErrorMap: () => getErrorMap2,
-  getParsedType: () => getParsedType2,
-  instanceof: () => instanceOfType,
-  intersection: () => intersectionType,
-  isAborted: () => isAborted,
-  isAsync: () => isAsync,
-  isDirty: () => isDirty,
-  isValid: () => isValid,
-  late: () => late,
-  lazy: () => lazyType,
-  literal: () => literalType,
-  makeIssue: () => makeIssue,
-  map: () => mapType,
-  nan: () => nanType,
-  nativeEnum: () => nativeEnumType,
-  never: () => neverType,
-  null: () => nullType,
-  nullable: () => nullableType,
-  number: () => numberType,
-  object: () => objectType,
-  objectUtil: () => objectUtil,
-  oboolean: () => oboolean,
-  onumber: () => onumber,
-  optional: () => optionalType,
-  ostring: () => ostring,
-  pipeline: () => pipelineType,
-  preprocess: () => preprocessType,
-  promise: () => promiseType,
-  quotelessJson: () => quotelessJson,
-  record: () => recordType,
-  set: () => setType,
-  setErrorMap: () => setErrorMap2,
-  strictObject: () => strictObjectType,
-  string: () => stringType,
-  symbol: () => symbolType,
-  transformer: () => effectsType,
-  tuple: () => tupleType,
-  undefined: () => undefinedType,
-  union: () => unionType,
-  unknown: () => unknownType,
-  util: () => util,
-  void: () => voidType
-});
-var init_external2 = __esm({
-  "node_modules/zod/v3/external.js"() {
-    init_errors4();
-    init_parseUtil();
-    init_typeAliases();
-    init_util2();
-    init_types();
-    init_ZodError();
-  }
-});
-
-// node_modules/zod/v3/index.js
-var v3_default;
-var init_v3 = __esm({
-  "node_modules/zod/v3/index.js"() {
-    init_external2();
-    init_external2();
-    v3_default = external_exports2;
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/oAuthCreateAuthorizationUrl.js
-function oAuthCreateAuthorizationUrl(client, params) {
-  const parsedParams = CreateAuthorizationurlParamsSchema.safeParse(params);
-  if (!parsedParams.success) {
-    return {
-      ok: false,
-      error: parsedParams.error
-    };
-  }
-  const baseURL = serverURLFromOptions(client._options);
-  if (!baseURL) {
-    return {
-      ok: false,
-      error: new Error("No server URL configured")
-    };
-  }
-  const authURL = new URL("/auth", baseURL);
-  authURL.searchParams.set("callback_url", parsedParams.data.callbackUrl.toString());
-  if ("codeChallengeMethod" in parsedParams.data) {
-    authURL.searchParams.set("code_challenge", parsedParams.data.codeChallenge);
-    authURL.searchParams.set("code_challenge_method", parsedParams.data.codeChallengeMethod);
-  }
-  if (parsedParams.data.limit !== void 0) {
-    authURL.searchParams.set("limit", parsedParams.data.limit.toString());
-  }
-  return {
-    ok: true,
-    value: authURL.toString()
-  };
-}
-var CreateAuthorizationUrlBaseSchema, CreateAuthorizationurlParamsSchema;
-var init_oAuthCreateAuthorizationUrl = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/oAuthCreateAuthorizationUrl.js"() {
-    init_v3();
-    init_config();
-    CreateAuthorizationUrlBaseSchema = v3_default.object({
-      callbackUrl: v3_default.union([
-        v3_default.string().url(),
-        v3_default.instanceof(URL)
-      ]),
-      limit: v3_default.number().optional()
-    });
-    CreateAuthorizationurlParamsSchema = v3_default.union([
-      CreateAuthorizationUrlBaseSchema.extend({
-        codeChallengeMethod: v3_default.enum([
-          "S256",
-          "plain"
-        ]),
-        codeChallenge: v3_default.string()
-      }),
-      CreateAuthorizationUrlBaseSchema
-    ]);
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/oAuthCreateSHA256CodeChallenge.js
-function arrayBufferToBase64Url(buffer) {
-  let binary = "";
-  for (let i = 0; i < buffer.length; i++) {
-    binary += String.fromCharCode(buffer[i]);
-  }
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-function generateCodeVerifier() {
-  const randomBytes = crypto.getRandomValues(new Uint8Array(32));
-  return arrayBufferToBase64Url(randomBytes);
-}
-async function oAuthCreateSHA256CodeChallenge(params = {}) {
-  const parsedParams = CreateSHA256CodeChallengeRequestSchema.safeParse(params);
-  if (!parsedParams.success) {
-    return {
-      ok: false,
-      error: parsedParams.error
-    };
-  }
-  const { codeVerifier = generateCodeVerifier() } = parsedParams.data;
-  const encoder = new TextEncoder();
-  const data = encoder.encode(codeVerifier);
-  const hash2 = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = new Uint8Array(hash2);
-  const codeChallenge = arrayBufferToBase64Url(hashArray);
-  return {
-    ok: true,
-    value: {
-      codeChallenge,
-      codeVerifier
-    }
-  };
-}
-var CreateSHA256CodeChallengeRequestSchema;
-var init_oAuthCreateSHA256CodeChallenge = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/oAuthCreateSHA256CodeChallenge.js"() {
-    init_v3();
-    CreateSHA256CodeChallengeRequestSchema = v3_default.object({
-      /**
-       * If not provided, a random code verifier will be generated.
-       * If provided, must be 43-128 characters and contain only unreserved
-       * characters [A-Za-z0-9-._~] per RFC 7636.
-       */
-      codeVerifier: v3_default.string().min(43, "Code verifier must be at least 43 characters").max(128, "Code verifier must be at most 128 characters").regex(/^[A-Za-z0-9\-._~]+$/, "Code verifier must only contain unreserved characters: [A-Za-z0-9-._~]").optional()
-    });
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/sdk/oauth.js
-var OAuth;
-var init_oauth = __esm({
-  "node_modules/@openrouter/sdk/esm/sdk/oauth.js"() {
-    init_oAuthCreateAuthCode();
-    init_oAuthExchangeAuthCodeForAPIKey();
-    init_sdks();
-    init_fp();
-    init_oAuthCreateAuthorizationUrl();
-    init_oAuthCreateSHA256CodeChallenge();
-    OAuth = class extends ClientSDK {
-      // #region sdk-class-body
-      /**
-       * Generate a OAuth2 authorization URL
-       *
-       * @remarks
-       * Generates a URL to redirect users to for authorizing your application. The
-       * URL includes the provided callback URL and, if applicable, the code
-       * challenge parameters for PKCE.
-       *
-       * @see {@link https://openrouter.ai/docs/use-cases/oauth-pkce}
-       */
-      async createAuthorizationUrl(request) {
-        const result = oAuthCreateAuthorizationUrl(this, request);
-        if (!result.ok) {
-          throw result.error;
-        }
-        return result.value;
-      }
-      /**
-       * Generate a SHA-256 code challenge for PKCE
-       *
-       * @remarks
-       * Generates a SHA-256 code challenge and corresponding code verifier for use
-       * in the PKCE extension to OAuth2. If no code verifier is provided, a random
-       * one will be generated according to RFC 7636 (32 random bytes, base64url
-       * encoded). If a code verifier is provided, it must be 43-128 characters and
-       * contain only unreserved characters [A-Za-z0-9-._~].
-       *
-       * @see {@link https://openrouter.ai/docs/use-cases/oauth-pkce}
-       * @see {@link https://datatracker.ietf.org/doc/html/rfc7636}
-       */
-      async createSHA256CodeChallenge() {
-        return unwrapAsync(oAuthCreateSHA256CodeChallenge());
-      }
-      // #endregion sdk-class-body
-      /**
-       * Exchange authorization code for API key
-       *
-       * @remarks
-       * Exchange an authorization code from the PKCE flow for a user-controlled API key
-       */
-      async exchangeAuthCodeForAPIKey(request, options) {
-        return unwrapAsync(oAuthExchangeAuthCodeForAPIKey(this, request, options));
-      }
-      /**
-       * Create authorization code
-       *
-       * @remarks
-       * Create an authorization code for the PKCE flow to generate a user-controlled API key
-       */
-      async createAuthCode(request, options) {
-        return unwrapAsync(oAuthCreateAuthCode(this, request, options));
-      }
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/providersList.js
-function providersList(client, request, options) {
-  return new APIPromise($do35(client, request, options));
-}
-async function $do35(client, request, options) {
-  const parsed = safeParse3(request, (value) => ListProvidersRequest$outboundSchema.optional().parse(value), "Input validation failed");
-  if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
-  }
-  const payload = parsed.value;
-  const body = null;
-  const path3 = pathToFunc("/providers")();
-  const headers = new Headers(compactMap({
-    Accept: "application/json",
-    "HTTP-Referer": encodeSimple("HTTP-Referer", payload?.["HTTP-Referer"] ?? client._options.httpReferer, { explode: false, charEncoding: "none" }),
-    "X-Title": encodeSimple("X-Title", payload?.["X-Title"] ?? client._options.xTitle, { explode: false, charEncoding: "none" })
-  }));
-  const secConfig = await extractSecurity(client._options.apiKey);
-  const securityInput = secConfig == null ? {} : { apiKey: secConfig };
-  const requestSecurity = resolveGlobalSecurity(securityInput);
-  const context = {
-    options: client._options,
-    baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listProviders",
-    oAuth2Scopes: null,
-    resolvedSecurity: requestSecurity,
-    securitySource: client._options.apiKey,
-    retryConfig: options?.retries || client._options.retryConfig || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["429", "500", "502", "503", "504"]
-  };
-  const requestRes = client._createRequest(context, {
-    security: requestSecurity,
-    method: "GET",
-    baseURL: options?.serverURL,
-    path: path3,
-    headers,
-    body,
-    userAgent: client._options.userAgent,
-    timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1
-  }, options);
-  if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
-  }
-  const req = requestRes.value;
-  const doResult = await client._do(req, {
-    context,
-    errorCodes: ["4XX", "500", "5XX"],
-    retryConfig: context.retryConfig,
-    retryCodes: context.retryCodes
-  });
-  if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
-  }
-  const response = doResult.value;
-  const responseFields = {
-    HttpMeta: { Response: response, Request: req }
-  };
-  const [result] = await match(json2(200, ListProvidersResponse$inboundSchema), jsonErr(500, InternalServerResponseError$inboundSchema), fail("4XX"), fail("5XX"))(response, req, { extraFields: responseFields });
-  if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
-  }
-  return [result, { status: "complete", request: req, response }];
-}
-var init_providersList = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/providersList.js"() {
-    init_encodings();
-    init_matchers();
-    init_primitives();
-    init_schemas3();
-    init_security2();
-    init_url();
-    init_errors3();
-    init_operations();
-    init_async();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/sdk/providers.js
-var Providers;
-var init_providers = __esm({
-  "node_modules/@openrouter/sdk/esm/sdk/providers.js"() {
-    init_providersList();
-    init_sdks();
-    init_fp();
-    Providers = class extends ClientSDK {
-      /**
-       * List all providers
-       */
-      async list(request, options) {
-        return unwrapAsync(providersList(this, request, options));
-      }
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/reusable-stream.js
-var ReusableReadableStream;
-var init_reusable_stream = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/reusable-stream.js"() {
-    ReusableReadableStream = class {
-      constructor(sourceStream) {
-        this.sourceStream = sourceStream;
-        this.buffer = [];
-        this.consumers = /* @__PURE__ */ new Map();
-        this.nextConsumerId = 0;
-        this.sourceReader = null;
-        this.sourceComplete = false;
-        this.sourceError = null;
-        this.pumpStarted = false;
-      }
-      /**
-       * Create a new consumer that can independently iterate over the stream.
-       * Multiple consumers can be created and will all receive the same data.
-       */
-      createConsumer() {
-        const consumerId = this.nextConsumerId++;
-        const state = {
-          position: 0,
-          waitingPromise: null,
-          cancelled: false
-        };
-        this.consumers.set(consumerId, state);
-        if (!this.pumpStarted) {
-          this.startPump();
-        }
-        const self = this;
-        return {
-          async next() {
-            const consumer = self.consumers.get(consumerId);
-            if (!consumer) {
-              return {
-                done: true,
-                value: void 0
-              };
-            }
-            if (consumer.cancelled) {
-              return {
-                done: true,
-                value: void 0
-              };
-            }
-            if (consumer.position < self.buffer.length) {
-              const value = self.buffer[consumer.position];
-              consumer.position++;
-              return {
-                done: false,
-                value
-              };
-            }
-            if (self.sourceComplete) {
-              self.consumers.delete(consumerId);
-              return {
-                done: true,
-                value: void 0
-              };
-            }
-            if (self.sourceError) {
-              self.consumers.delete(consumerId);
-              throw self.sourceError;
-            }
-            const waitPromise = new Promise((resolve, reject) => {
-              consumer.waitingPromise = {
-                resolve,
-                reject
-              };
-              if (self.sourceComplete || self.sourceError || consumer.position < self.buffer.length) {
-                resolve();
-              }
-            });
-            await waitPromise;
-            consumer.waitingPromise = null;
-            return this.next();
-          },
-          async return() {
-            const consumer = self.consumers.get(consumerId);
-            if (consumer) {
-              consumer.cancelled = true;
-              self.consumers.delete(consumerId);
-            }
-            return {
-              done: true,
-              value: void 0
-            };
-          },
-          async throw(e) {
-            const consumer = self.consumers.get(consumerId);
-            if (consumer) {
-              consumer.cancelled = true;
-              self.consumers.delete(consumerId);
-            }
-            throw e;
-          },
-          [Symbol.asyncIterator]() {
-            return this;
-          }
-        };
-      }
-      /**
-       * Start pumping data from the source stream into the buffer
-       */
-      startPump() {
-        if (this.pumpStarted) {
-          return;
-        }
-        this.pumpStarted = true;
-        this.sourceReader = this.sourceStream.getReader();
-        void (async () => {
-          try {
-            while (true) {
-              const result = await this.sourceReader.read();
-              if (result.done) {
-                this.sourceComplete = true;
-                this.notifyAllConsumers();
-                break;
-              }
-              this.buffer.push(result.value);
-              this.notifyAllConsumers();
-            }
-          } catch (error48) {
-            this.sourceError = error48 instanceof Error ? error48 : new Error(String(error48));
-            this.notifyAllConsumers();
-          } finally {
-            if (this.sourceReader) {
-              this.sourceReader.releaseLock();
-            }
-          }
-        })();
-      }
-      /**
-       * Notify all waiting consumers that new data is available
-       */
-      notifyAllConsumers() {
-        for (const consumer of this.consumers.values()) {
-          if (consumer.waitingPromise) {
-            if (this.sourceError) {
-              consumer.waitingPromise.reject(this.sourceError);
-            } else {
-              consumer.waitingPromise.resolve();
-            }
-            consumer.waitingPromise = null;
-          }
-        }
-      }
-      /**
-       * Cancel the source stream and all consumers
-       */
-      async cancel() {
-        for (const consumer of this.consumers.values()) {
-          consumer.cancelled = true;
-          if (consumer.waitingPromise) {
-            consumer.waitingPromise.resolve();
-          }
-        }
-        this.consumers.clear();
-        if (this.sourceReader) {
-          await this.sourceReader.cancel();
-          this.sourceReader.releaseLock();
-        }
-      }
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/tool-executor.js
-function isNonNullObject(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function sanitizeJsonSchema(obj) {
-  if (obj === null || typeof obj !== "object") {
-    return obj;
-  }
-  if (Array.isArray(obj)) {
-    return obj.map(sanitizeJsonSchema);
-  }
-  if (!isNonNullObject(obj)) {
-    return obj;
-  }
-  const result = {};
-  for (const key of Object.keys(obj)) {
-    if (!key.startsWith("~")) {
-      result[key] = sanitizeJsonSchema(obj[key]);
-    }
-  }
-  return result;
-}
-function isZodSchema(value) {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-  if (!("_zod" in value)) {
-    return false;
-  }
-  return typeof value._zod === "object";
-}
-function convertZodToJsonSchema(zodSchema) {
-  if (!isZodSchema(zodSchema)) {
-    throw new Error("Invalid Zod schema provided");
-  }
-  const jsonSchema = toJSONSchema(zodSchema, {
-    target: "draft-7"
-  });
-  return sanitizeJsonSchema(jsonSchema);
-}
-function convertToolsToAPIFormat(tools) {
-  return tools.map((tool) => ({
-    type: "function",
-    name: tool.function.name,
-    description: tool.function.description || null,
-    strict: null,
-    parameters: convertZodToJsonSchema(tool.function.inputSchema)
-  }));
-}
-function validateToolInput(schema, args) {
-  return parse2(schema, args);
-}
-function validateToolOutput(schema, result) {
-  return parse2(schema, result);
-}
-function tryValidate(schema, value) {
-  const result = safeParse2(schema, value);
-  return result.success;
-}
-async function executeRegularTool(tool, toolCall, context) {
-  if (!isRegularExecuteTool(tool)) {
-    throw new Error(`Tool "${toolCall.name}" is not a regular execute tool or has no execute function`);
-  }
-  try {
-    const validatedInput = validateToolInput(tool.function.inputSchema, toolCall.arguments);
-    const result = await Promise.resolve(tool.function.execute(validatedInput, context));
-    if (tool.function.outputSchema) {
-      const validatedOutput = validateToolOutput(tool.function.outputSchema, result);
-      return {
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
-        result: validatedOutput
-      };
-    }
-    return {
-      toolCallId: toolCall.id,
-      toolName: toolCall.name,
-      result
-    };
-  } catch (error48) {
-    return {
-      toolCallId: toolCall.id,
-      toolName: toolCall.name,
-      result: null,
-      error: error48 instanceof Error ? error48 : new Error(String(error48))
-    };
-  }
-}
-async function executeGeneratorTool(tool, toolCall, context, onPreliminaryResult) {
-  if (!isGeneratorTool(tool)) {
-    throw new Error(`Tool "${toolCall.name}" is not a generator tool`);
-  }
-  try {
-    const validatedInput = validateToolInput(tool.function.inputSchema, toolCall.arguments);
-    const preliminaryResults = [];
-    let finalResult = void 0;
-    let hasFinalResult = false;
-    let lastEmittedValue = void 0;
-    let hasEmittedValue = false;
-    const iterator = tool.function.execute(validatedInput, context);
-    let iterResult = await iterator.next();
-    while (!iterResult.done) {
-      const event = iterResult.value;
-      lastEmittedValue = event;
-      hasEmittedValue = true;
-      const matchesOutputSchema = tryValidate(tool.function.outputSchema, event);
-      const matchesEventSchema = tryValidate(tool.function.eventSchema, event);
-      if (matchesOutputSchema && !matchesEventSchema && !hasFinalResult) {
-        finalResult = validateToolOutput(tool.function.outputSchema, event);
-        hasFinalResult = true;
-      } else {
-        const validatedPreliminary = validateToolOutput(tool.function.eventSchema, event);
-        preliminaryResults.push(validatedPreliminary);
-        if (onPreliminaryResult) {
-          onPreliminaryResult(toolCall.id, validatedPreliminary);
-        }
-      }
-      iterResult = await iterator.next();
-    }
-    if (iterResult.value !== void 0) {
-      finalResult = validateToolOutput(tool.function.outputSchema, iterResult.value);
-      hasFinalResult = true;
-    }
-    if (!hasFinalResult) {
-      if (!hasEmittedValue) {
-        throw new Error(`Generator tool "${toolCall.name}" completed without emitting any values or returning a result`);
-      }
-      finalResult = validateToolOutput(tool.function.outputSchema, lastEmittedValue);
-    }
-    return {
-      toolCallId: toolCall.id,
-      toolName: toolCall.name,
-      result: finalResult,
-      preliminaryResults
-    };
-  } catch (error48) {
-    return {
-      toolCallId: toolCall.id,
-      toolName: toolCall.name,
-      result: null,
-      error: error48 instanceof Error ? error48 : new Error(String(error48))
-    };
-  }
-}
-async function executeTool(tool, toolCall, context, onPreliminaryResult) {
-  if (!hasExecuteFunction(tool)) {
-    throw new Error(`Tool "${toolCall.name}" has no execute function. Use manual tool execution.`);
-  }
-  if (isGeneratorTool(tool)) {
-    return executeGeneratorTool(tool, toolCall, context, onPreliminaryResult);
-  }
-  return executeRegularTool(tool, toolCall, context);
-}
-var init_tool_executor = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/tool-executor.js"() {
-    init_v4();
-    init_tool_types();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/lib/model-result.js
-function isEventStream(value) {
-  if (value === null || typeof value !== "object") {
-    return false;
-  }
-  const constructorName = Object.getPrototypeOf(value)?.constructor?.name;
-  if (constructorName === "EventStream") {
-    return true;
-  }
-  const maybeStream = value;
-  return typeof maybeStream.toReadableStream === "function";
-}
-var DEFAULT_MAX_STEPS, ModelResult;
-var init_model_result = __esm({
-  "node_modules/@openrouter/sdk/esm/lib/model-result.js"() {
-    init_tool_event_broadcaster();
-    init_betaResponsesSend();
-    init_async_params();
-    init_conversation_state();
-    init_reusable_stream();
-    init_stream_transformers();
-    init_tool_executor();
-    init_next_turn_params();
-    init_tool_types();
-    init_stop_conditions();
-    init_stream_type_guards();
-    DEFAULT_MAX_STEPS = 5;
-    ModelResult = class {
-      constructor(options) {
-        this.reusableStream = null;
-        this.textPromise = null;
-        this.initPromise = null;
-        this.toolExecutionPromise = null;
-        this.finalResponse = null;
-        this.toolEventBroadcaster = null;
-        this.allToolExecutionRounds = [];
-        this.resolvedRequest = null;
-        this.stateAccessor = null;
-        this.currentState = null;
-        this.requireApprovalFn = null;
-        this.approvedToolCalls = [];
-        this.rejectedToolCalls = [];
-        this.isResumingFromApproval = false;
-        this.options = options;
-        const hasApprovalDecisions = options.approveToolCalls && options.approveToolCalls.length > 0 || options.rejectToolCalls && options.rejectToolCalls.length > 0;
-        if (hasApprovalDecisions && !options.state) {
-          throw new Error('approveToolCalls and rejectToolCalls require a state accessor. Provide a StateAccessor via the "state" parameter to persist approval decisions.');
-        }
-        this.stateAccessor = options.state ?? null;
-        this.requireApprovalFn = options.requireApproval ?? null;
-        this.approvedToolCalls = options.approveToolCalls ?? [];
-        this.rejectedToolCalls = options.rejectToolCalls ?? [];
-      }
-      /**
-       * Get or create the tool event broadcaster (lazy initialization).
-       * Ensures only one broadcaster exists for the lifetime of this ModelResult.
-       * Broadcasts both preliminary results and final tool results.
-       */
-      ensureBroadcaster() {
-        if (!this.toolEventBroadcaster) {
-          this.toolEventBroadcaster = new ToolEventBroadcaster();
-        }
-        return this.toolEventBroadcaster;
-      }
-      /**
-       * Type guard to check if a value is a non-streaming response
-       * Only requires 'output' field and absence of 'toReadableStream' method
-       */
-      isNonStreamingResponse(value) {
-        return value !== null && typeof value === "object" && "output" in value && !("toReadableStream" in value);
-      }
-      // =========================================================================
-      // Extracted Helper Methods for executeToolsIfNeeded
-      // =========================================================================
-      /**
-       * Get initial response from stream or cached final response.
-       * Consumes the stream to completion if needed to extract the response.
-       *
-       * @returns The complete non-streaming response
-       * @throws Error if neither stream nor response has been initialized
-       */
-      async getInitialResponse() {
-        if (this.finalResponse) {
-          return this.finalResponse;
-        }
-        if (this.reusableStream) {
-          return consumeStreamForCompletion(this.reusableStream);
-        }
-        throw new Error("Neither stream nor response initialized");
-      }
-      /**
-       * Save response output to state.
-       * Appends the response output to the message history and records the response ID.
-       *
-       * @param response - The API response to save
-       */
-      async saveResponseToState(response) {
-        if (!this.stateAccessor || !this.currentState)
-          return;
-        const outputItems = Array.isArray(response.output) ? response.output : [response.output];
-        await this.saveStateSafely({
-          messages: appendToMessages(this.currentState.messages, outputItems),
-          previousResponseId: response.id
-        });
-      }
-      /**
-       * Mark state as complete.
-       * Sets the conversation status to 'complete' indicating no further tool execution is needed.
-       */
-      async markStateComplete() {
-        await this.saveStateSafely({ status: "complete" });
-      }
-      /**
-       * Save tool results to state.
-       * Appends tool execution results to the message history for multi-turn context.
-       *
-       * @param toolResults - The tool execution results to save
-       */
-      async saveToolResultsToState(toolResults) {
-        if (!this.currentState)
-          return;
-        await this.saveStateSafely({
-          messages: appendToMessages(this.currentState.messages, toolResults)
-        });
-      }
-      /**
-       * Check if execution should be interrupted by external signal.
-       * Polls the state accessor for interruption flags set by external processes.
-       *
-       * @param currentResponse - The current response to save as partial state
-       * @returns True if interrupted and caller should exit, false to continue
-       */
-      async checkForInterruption(currentResponse) {
-        if (!this.stateAccessor)
-          return false;
-        const freshState = await this.stateAccessor.load();
-        if (!freshState?.interruptedBy)
-          return false;
-        if (this.currentState) {
-          const currentToolCalls = extractToolCallsFromResponse(currentResponse);
-          await this.saveStateSafely({
-            status: "interrupted",
-            partialResponse: {
-              text: extractTextFromResponse2(currentResponse),
-              toolCalls: currentToolCalls
-            }
-          });
-        }
-        this.finalResponse = currentResponse;
-        return true;
-      }
-      /**
-       * Check if stop conditions are met.
-       * Returns true if execution should stop.
-       *
-       * @remarks
-       * Default: stepCountIs(DEFAULT_MAX_STEPS) if no stopWhen is specified.
-       * This evaluates stop conditions against the complete step history.
-       */
-      async shouldStopExecution() {
-        const stopWhen = this.options.stopWhen ?? stepCountIs(DEFAULT_MAX_STEPS);
-        const stopConditions = Array.isArray(stopWhen) ? stopWhen : [stopWhen];
-        return isStopConditionMet({
-          stopConditions,
-          steps: this.allToolExecutionRounds.map((round) => ({
-            stepType: "continue",
-            text: extractTextFromResponse(round.response),
-            toolCalls: round.toolCalls,
-            toolResults: round.toolResults.map((tr) => ({
-              toolCallId: tr.callId,
-              toolName: round.toolCalls.find((tc) => tc.id === tr.callId)?.name ?? "",
-              result: JSON.parse(tr.output)
-            })),
-            response: round.response,
-            usage: round.response.usage,
-            finishReason: void 0
-          }))
-        });
-      }
-      /**
-       * Check if any tool calls have execute functions.
-       * Used to determine if automatic tool execution should be attempted.
-       *
-       * @param toolCalls - The tool calls to check
-       * @returns True if at least one tool call has an executable function
-       */
-      hasExecutableToolCalls(toolCalls) {
-        return toolCalls.some((toolCall) => {
-          const tool = this.options.tools?.find((t) => t.function.name === toolCall.name);
-          return tool && hasExecuteFunction(tool);
-        });
-      }
-      /**
-       * Execute tools that can auto-execute (don't require approval) in parallel.
-       *
-       * @param toolCalls - The tool calls to execute
-       * @param turnContext - The current turn context
-       * @returns Array of unsent tool results for later submission
-       */
-      async executeAutoApproveTools(toolCalls, turnContext) {
-        const toolCallPromises = toolCalls.map(async (tc) => {
-          const tool = this.options.tools?.find((t) => t.function.name === tc.name);
-          if (!tool || !hasExecuteFunction(tool)) {
-            return null;
-          }
-          const result = await executeTool(tool, tc, turnContext);
-          if (result.error) {
-            return createRejectedResult(tc.id, String(tc.name), result.error.message);
-          }
-          return createUnsentResult(tc.id, String(tc.name), result.result);
-        });
-        const settledResults = await Promise.allSettled(toolCallPromises);
-        const results = [];
-        for (let i = 0; i < settledResults.length; i++) {
-          const settled = settledResults[i];
-          const tc = toolCalls[i];
-          if (!settled || !tc)
-            continue;
-          if (settled.status === "rejected") {
-            const errorMessage = settled.reason instanceof Error ? settled.reason.message : String(settled.reason);
-            results.push(createRejectedResult(tc.id, String(tc.name), errorMessage));
-            continue;
-          }
-          if (settled.value) {
-            results.push(settled.value);
-          }
-        }
-        return results;
-      }
-      /**
-       * Check for tools requiring approval and handle accordingly.
-       * Partitions tool calls into those needing approval and those that can auto-execute.
-       *
-       * @param toolCalls - The tool calls to check
-       * @param currentRound - The current execution round (1-indexed)
-       * @param currentResponse - The current response to save if pausing
-       * @returns True if execution should pause for approval, false to continue
-       * @throws Error if approval is required but no state accessor is configured
-       */
-      async handleApprovalCheck(toolCalls, currentRound, currentResponse) {
-        if (!this.options.tools)
-          return false;
-        const turnContext = { numberOfTurns: currentRound };
-        const { requiresApproval: needsApproval, autoExecute } = await partitionToolCalls(toolCalls, this.options.tools, turnContext, this.requireApprovalFn ?? void 0);
-        if (needsApproval.length === 0)
-          return false;
-        if (!this.stateAccessor) {
-          const toolNames = needsApproval.map((tc) => tc.name).join(", ");
-          throw new Error(`Tool(s) require approval but no state accessor is configured: ${toolNames}. Provide a StateAccessor via the "state" parameter to enable approval workflows.`);
-        }
-        const unsentResults = await this.executeAutoApproveTools(autoExecute, turnContext);
-        const stateUpdates = {
-          pendingToolCalls: needsApproval,
-          status: "awaiting_approval"
-        };
-        if (unsentResults.length > 0) {
-          stateUpdates.unsentToolResults = unsentResults;
-        }
-        await this.saveStateSafely(stateUpdates);
-        this.finalResponse = currentResponse;
-        return true;
-      }
-      /**
-       * Execute all tools in a single round in parallel.
-       * Emits tool.result events after tool execution completes.
-       *
-       * @param toolCalls - The tool calls to execute
-       * @param turnContext - The current turn context
-       * @returns Array of function call outputs formatted for the API
-       */
-      async executeToolRound(toolCalls, turnContext) {
-        const toolCallPromises = toolCalls.map(async (toolCall) => {
-          const tool = this.options.tools?.find((t) => t.function.name === toolCall.name);
-          if (!tool || !hasExecuteFunction(tool)) {
-            return null;
-          }
-          const args = toolCall.arguments;
-          if (typeof args === "string") {
-            const rawArgs = args;
-            const errorMessage = `Failed to parse tool call arguments for "${toolCall.name}": The model provided invalid JSON. Raw arguments received: "${rawArgs}". Please provide valid JSON arguments for this tool call.`;
-            if (this.toolEventBroadcaster) {
-              this.toolEventBroadcaster.push({
-                type: "tool_result",
-                toolCallId: toolCall.id,
-                result: { error: errorMessage }
-              });
-            }
-            return {
-              type: "parse_error",
-              toolCall,
-              output: {
-                type: "function_call_output",
-                id: `output_${toolCall.id}`,
-                callId: toolCall.id,
-                output: JSON.stringify({ error: errorMessage })
-              }
-            };
-          }
-          const preliminaryResultsForCall = [];
-          const onPreliminaryResult = this.toolEventBroadcaster ? (callId, resultValue) => {
-            const typedResult = resultValue;
-            preliminaryResultsForCall.push(typedResult);
-            this.toolEventBroadcaster?.push({
-              type: "preliminary_result",
-              toolCallId: callId,
-              result: typedResult
-            });
-          } : void 0;
-          const result = await executeTool(tool, toolCall, turnContext, onPreliminaryResult);
-          return {
-            type: "execution",
-            toolCall,
-            tool,
-            result,
-            preliminaryResultsForCall
-          };
-        });
-        const settledResults = await Promise.allSettled(toolCallPromises);
-        const toolResults = [];
-        for (let i = 0; i < settledResults.length; i++) {
-          const settled = settledResults[i];
-          const originalToolCall = toolCalls[i];
-          if (!settled || !originalToolCall)
-            continue;
-          if (settled.status === "rejected") {
-            const errorMessage = settled.reason instanceof Error ? settled.reason.message : String(settled.reason);
-            if (this.toolEventBroadcaster) {
-              this.toolEventBroadcaster.push({
-                type: "tool_result",
-                toolCallId: originalToolCall.id,
-                result: { error: errorMessage }
-              });
-            }
-            toolResults.push({
-              type: "function_call_output",
-              id: `output_${originalToolCall.id}`,
-              callId: originalToolCall.id,
-              output: JSON.stringify({ error: errorMessage })
-            });
-            continue;
-          }
-          const value = settled.value;
-          if (!value)
-            continue;
-          if (value.type === "parse_error") {
-            toolResults.push(value.output);
-            continue;
-          }
-          if (this.toolEventBroadcaster) {
-            this.toolEventBroadcaster.push({
-              type: "tool_result",
-              toolCallId: value.toolCall.id,
-              result: value.result.error ? { error: value.result.error.message } : value.result.result,
-              ...value.preliminaryResultsForCall.length > 0 && {
-                preliminaryResults: value.preliminaryResultsForCall
-              }
-            });
-          }
-          toolResults.push({
-            type: "function_call_output",
-            id: `output_${value.toolCall.id}`,
-            callId: value.toolCall.id,
-            output: value.result.error ? JSON.stringify({ error: value.result.error.message }) : JSON.stringify(value.result.result)
-          });
-        }
-        return toolResults;
-      }
-      /**
-       * Resolve async functions for the current turn.
-       * Updates the resolved request with turn-specific parameter values.
-       *
-       * @param turnContext - The turn context for parameter resolution
-       */
-      async resolveAsyncFunctionsForTurn(turnContext) {
-        if (hasAsyncFunctions(this.options.request)) {
-          const resolved = await resolveAsyncFunctions(this.options.request, turnContext);
-          const preservedInput = this.resolvedRequest?.input;
-          this.resolvedRequest = {
-            ...resolved,
-            stream: false,
-            ...preservedInput !== void 0 && { input: preservedInput }
-          };
-        }
-      }
-      /**
-       * Apply nextTurnParams from executed tools.
-       * Allows tools to modify request parameters for subsequent turns.
-       *
-       * @param toolCalls - The tool calls that were just executed
-       */
-      async applyNextTurnParams(toolCalls) {
-        if (!this.options.tools || toolCalls.length === 0 || !this.resolvedRequest) {
-          return;
-        }
-        const computedParams = await executeNextTurnParamsFunctions(toolCalls, this.options.tools, this.resolvedRequest);
-        if (Object.keys(computedParams).length > 0) {
-          this.resolvedRequest = applyNextTurnParamsToRequest(this.resolvedRequest, computedParams);
-        }
-      }
-      /**
-       * Make a follow-up API request with tool results.
-       * Continues the conversation after tool execution.
-       *
-       * @param currentResponse - The response that contained tool calls
-       * @param toolResults - The results from executing those tools
-       * @returns The new response from the API
-       */
-      async makeFollowupRequest(currentResponse, toolResults) {
-        const originalInput = this.resolvedRequest?.input;
-        const normalizedOriginalInput = Array.isArray(originalInput) ? originalInput : originalInput ? [{ role: "user", content: originalInput }] : [];
-        const newInput = [
-          ...normalizedOriginalInput,
-          ...Array.isArray(currentResponse.output) ? currentResponse.output : [currentResponse.output],
-          ...toolResults
-        ];
-        if (!this.resolvedRequest) {
-          throw new Error("Request not initialized");
-        }
-        this.resolvedRequest = {
-          ...this.resolvedRequest,
-          input: newInput
-        };
-        const newRequest = {
-          ...this.resolvedRequest,
-          stream: false
-        };
-        const newResult = await betaResponsesSend(this.options.client, { openResponsesRequest: newRequest }, this.options.options);
-        if (!newResult.ok) {
-          throw newResult.error;
-        }
-        const value = newResult.value;
-        if (isEventStream(value)) {
-          const stream = new ReusableReadableStream(value);
-          return consumeStreamForCompletion(stream);
-        } else if (this.isNonStreamingResponse(value)) {
-          return value;
-        } else {
-          throw new Error("Unexpected response type from API");
-        }
-      }
-      /**
-       * Validate the final response has required fields.
-       *
-       * @param response - The response to validate
-       * @throws Error if response is missing required fields or has invalid output
-       */
-      validateFinalResponse(response) {
-        if (!response?.id || !response?.output) {
-          throw new Error("Invalid final response: missing required fields");
-        }
-        if (!Array.isArray(response.output) || response.output.length === 0) {
-          throw new Error("Invalid final response: empty or invalid output");
-        }
-      }
-      /**
-       * Resolve async functions in the request for a given turn context.
-       * Extracts non-function fields and resolves any async parameter functions.
-       *
-       * @param context - The turn context for parameter resolution
-       * @returns The resolved request without async functions
-       */
-      async resolveRequestForContext(context) {
-        if (hasAsyncFunctions(this.options.request)) {
-          return resolveAsyncFunctions(this.options.request, context);
-        }
-        const { stopWhen: _, state: _s, requireApproval: _r, approveToolCalls: _a3, rejectToolCalls: _rj, ...rest } = this.options.request;
-        return rest;
-      }
-      /**
-       * Safely persist state with error handling.
-       * Wraps state save operations to ensure failures are properly reported.
-       *
-       * @param updates - Optional partial state updates to apply before saving
-       * @throws Error if state persistence fails
-       */
-      async saveStateSafely(updates) {
-        if (!this.stateAccessor || !this.currentState)
-          return;
-        if (updates) {
-          this.currentState = updateState(this.currentState, updates);
-        }
-        try {
-          await this.stateAccessor.save(this.currentState);
-        } catch (error48) {
-          const message = error48 instanceof Error ? error48.message : String(error48);
-          throw new Error(`Failed to persist conversation state: ${message}`);
-        }
-      }
-      /**
-       * Remove optional properties from state when they should be cleared.
-       * Uses delete to properly remove optional properties rather than setting undefined.
-       *
-       * @param props - Array of property names to remove from current state
-       */
-      clearOptionalStateProperties(props) {
-        if (!this.currentState)
-          return;
-        for (const prop of props) {
-          delete this.currentState[prop];
-        }
-      }
-      // =========================================================================
-      // Core Methods
-      // =========================================================================
-      /**
-       * Initialize the stream if not already started
-       * This is idempotent - multiple calls will return the same promise
-       */
-      initStream() {
-        if (this.initPromise) {
-          return this.initPromise;
-        }
-        this.initPromise = (async () => {
-          if (this.stateAccessor) {
-            const loadedState = await this.stateAccessor.load();
-            if (loadedState) {
-              this.currentState = loadedState;
-              if (loadedState.status === "awaiting_approval" && (this.approvedToolCalls.length > 0 || this.rejectedToolCalls.length > 0)) {
-                this.isResumingFromApproval = true;
-                await this.processApprovalDecisions();
-                return;
-              }
-              if (loadedState.interruptedBy) {
-                this.currentState = updateState(loadedState, { status: "in_progress" });
-                this.clearOptionalStateProperties(["interruptedBy"]);
-                await this.saveStateSafely();
-              }
-            } else {
-              this.currentState = createInitialState();
-            }
-            await this.saveStateSafely({ status: "in_progress" });
-          }
-          const initialContext = {
-            numberOfTurns: 0
-          };
-          let baseRequest = await this.resolveRequestForContext(initialContext);
-          if (this.currentState && this.currentState.messages && Array.isArray(this.currentState.messages) && this.currentState.messages.length > 0) {
-            const newInput = baseRequest.input;
-            if (newInput) {
-              const inputArray = Array.isArray(newInput) ? newInput : [newInput];
-              baseRequest = {
-                ...baseRequest,
-                input: appendToMessages(this.currentState.messages, inputArray)
-              };
-            } else {
-              baseRequest = {
-                ...baseRequest,
-                input: this.currentState.messages
-              };
-            }
-          }
-          this.resolvedRequest = {
-            ...baseRequest,
-            stream: true
-          };
-          const request = this.resolvedRequest;
-          const apiResult = await betaResponsesSend(this.options.client, { openResponsesRequest: request }, this.options.options);
-          if (!apiResult.ok) {
-            throw apiResult.error;
-          }
-          if (isEventStream(apiResult.value)) {
-            this.reusableStream = new ReusableReadableStream(apiResult.value);
-          } else if (this.isNonStreamingResponse(apiResult.value)) {
-            this.finalResponse = apiResult.value;
-          } else {
-            throw new Error("Unexpected response type from API");
-          }
-        })();
-        return this.initPromise;
-      }
-      /**
-       * Process approval/rejection decisions and resume execution
-       */
-      async processApprovalDecisions() {
-        if (!this.currentState || !this.stateAccessor) {
-          throw new Error("Cannot process approval decisions without state");
-        }
-        const pendingCalls = this.currentState.pendingToolCalls ?? [];
-        const unsentResults = [...this.currentState.unsentToolResults ?? []];
-        const turnContext = {
-          numberOfTurns: this.allToolExecutionRounds.length + 1
-        };
-        for (const callId of this.approvedToolCalls) {
-          const toolCall = pendingCalls.find((tc) => tc.id === callId);
-          if (!toolCall)
-            continue;
-          const tool = this.options.tools?.find((t) => t.function.name === toolCall.name);
-          if (!tool || !hasExecuteFunction(tool)) {
-            unsentResults.push(createRejectedResult(callId, String(toolCall.name), "Tool not found or not executable"));
-            continue;
-          }
-          const result = await executeTool(tool, toolCall, turnContext);
-          if (result.error) {
-            unsentResults.push(createRejectedResult(callId, String(toolCall.name), result.error.message));
-          } else {
-            unsentResults.push(createUnsentResult(callId, String(toolCall.name), result.result));
-          }
-        }
-        for (const callId of this.rejectedToolCalls) {
-          const toolCall = pendingCalls.find((tc) => tc.id === callId);
-          if (!toolCall)
-            continue;
-          unsentResults.push(createRejectedResult(callId, String(toolCall.name), "Rejected by user"));
-        }
-        const processedIds = /* @__PURE__ */ new Set([...this.approvedToolCalls, ...this.rejectedToolCalls]);
-        const remainingPending = pendingCalls.filter((tc) => !processedIds.has(tc.id));
-        const stateUpdates = {
-          status: remainingPending.length > 0 ? "awaiting_approval" : "in_progress"
-        };
-        if (remainingPending.length > 0) {
-          stateUpdates.pendingToolCalls = remainingPending;
-        }
-        if (unsentResults.length > 0) {
-          stateUpdates.unsentToolResults = unsentResults;
-        }
-        await this.saveStateSafely(stateUpdates);
-        const propsToClear = [];
-        if (remainingPending.length === 0)
-          propsToClear.push("pendingToolCalls");
-        if (unsentResults.length === 0)
-          propsToClear.push("unsentToolResults");
-        if (propsToClear.length > 0) {
-          this.clearOptionalStateProperties(propsToClear);
-          await this.saveStateSafely();
-        }
-        if (remainingPending.length > 0) {
-          return;
-        }
-        await this.continueWithUnsentResults();
-      }
-      /**
-       * Continue execution with unsent tool results
-       */
-      async continueWithUnsentResults() {
-        if (!this.currentState || !this.stateAccessor)
-          return;
-        const unsentResults = this.currentState.unsentToolResults ?? [];
-        if (unsentResults.length === 0)
-          return;
-        const toolOutputs = unsentResultsToAPIFormat(unsentResults);
-        const currentMessages = this.currentState.messages;
-        const newInput = appendToMessages(currentMessages, toolOutputs);
-        this.currentState = updateState(this.currentState, {
-          messages: newInput
-        });
-        this.clearOptionalStateProperties(["unsentToolResults"]);
-        await this.saveStateSafely();
-        const turnContext = {
-          numberOfTurns: this.allToolExecutionRounds.length + 1
-        };
-        const baseRequest = await this.resolveRequestForContext(turnContext);
-        const request = {
-          ...baseRequest,
-          input: newInput,
-          stream: true
-        };
-        this.resolvedRequest = request;
-        const apiResult = await betaResponsesSend(this.options.client, { openResponsesRequest: request }, this.options.options);
-        if (!apiResult.ok) {
-          throw apiResult.error;
-        }
-        if (isEventStream(apiResult.value)) {
-          this.reusableStream = new ReusableReadableStream(apiResult.value);
-        } else if (this.isNonStreamingResponse(apiResult.value)) {
-          this.finalResponse = apiResult.value;
-        } else {
-          throw new Error("Unexpected response type from API");
-        }
-      }
-      /**
-       * Execute tools automatically if they are provided and have execute functions
-       * This is idempotent - multiple calls will return the same promise
-       */
-      async executeToolsIfNeeded() {
-        if (this.toolExecutionPromise) {
-          return this.toolExecutionPromise;
-        }
-        this.toolExecutionPromise = (async () => {
-          await this.initStream();
-          if (this.isResumingFromApproval && this.currentState?.status === "awaiting_approval") {
-            return;
-          }
-          let currentResponse = await this.getInitialResponse();
-          await this.saveResponseToState(currentResponse);
-          const hasToolCalls = currentResponse.output.some((item) => hasTypeProperty(item) && item.type === "function_call");
-          if (!this.options.tools?.length || !hasToolCalls) {
-            this.finalResponse = currentResponse;
-            await this.markStateComplete();
-            return;
-          }
-          const toolCalls = extractToolCallsFromResponse(currentResponse);
-          if (await this.handleApprovalCheck(toolCalls, 0, currentResponse)) {
-            return;
-          }
-          if (!this.hasExecutableToolCalls(toolCalls)) {
-            this.finalResponse = currentResponse;
-            await this.markStateComplete();
-            return;
-          }
-          let currentRound = 0;
-          while (true) {
-            if (await this.checkForInterruption(currentResponse)) {
-              return;
-            }
-            if (await this.shouldStopExecution()) {
-              break;
-            }
-            const currentToolCalls = extractToolCallsFromResponse(currentResponse);
-            if (currentToolCalls.length === 0) {
-              break;
-            }
-            if (await this.handleApprovalCheck(currentToolCalls, currentRound + 1, currentResponse)) {
-              return;
-            }
-            if (!this.hasExecutableToolCalls(currentToolCalls)) {
-              break;
-            }
-            const turnContext = { numberOfTurns: currentRound + 1 };
-            await this.resolveAsyncFunctionsForTurn(turnContext);
-            const toolResults = await this.executeToolRound(currentToolCalls, turnContext);
-            this.allToolExecutionRounds.push({
-              round: currentRound,
-              toolCalls: currentToolCalls,
-              response: currentResponse,
-              toolResults
-            });
-            await this.saveToolResultsToState(toolResults);
-            await this.applyNextTurnParams(currentToolCalls);
-            currentResponse = await this.makeFollowupRequest(currentResponse, toolResults);
-            await this.saveResponseToState(currentResponse);
-            currentRound++;
-          }
-          this.validateFinalResponse(currentResponse);
-          this.finalResponse = currentResponse;
-          await this.markStateComplete();
-        })();
-        return this.toolExecutionPromise;
-      }
-      /**
-       * Internal helper to get the text after tool execution
-       */
-      async getTextInternal() {
-        await this.executeToolsIfNeeded();
-        if (!this.finalResponse) {
-          throw new Error("Response not available");
-        }
-        return extractTextFromResponse(this.finalResponse);
-      }
-      /**
-       * Get just the text content from the response.
-       * This will consume the stream until completion, execute any tools, and extract the text.
-       */
-      getText() {
-        if (this.textPromise) {
-          return this.textPromise;
-        }
-        this.textPromise = this.getTextInternal();
-        return this.textPromise;
-      }
-      /**
-       * Get the complete response object including usage information.
-       * This will consume the stream until completion and execute any tools.
-       * Returns the full OpenResponsesNonStreamingResponse with usage data (inputTokens, outputTokens, cachedTokens, etc.)
-       */
-      async getResponse() {
-        await this.executeToolsIfNeeded();
-        if (!this.finalResponse) {
-          throw new Error("Response not available");
-        }
-        return this.finalResponse;
-      }
-      /**
-       * Stream all response events as they arrive.
-       * Multiple consumers can iterate over this stream concurrently.
-       * Preliminary tool results and tool results are streamed in REAL-TIME as generator tools yield.
-       */
-      getFullResponsesStream() {
-        return async function* () {
-          await this.initStream();
-          if (!this.reusableStream) {
-            throw new Error("Stream not initialized");
-          }
-          const broadcaster = this.ensureBroadcaster();
-          const toolEventConsumer = broadcaster.createConsumer();
-          const executionPromise = this.executeToolsIfNeeded().finally(() => {
-            broadcaster.complete();
-          });
-          const consumer = this.reusableStream.createConsumer();
-          for await (const event of consumer) {
-            yield event;
-          }
-          for await (const event of toolEventConsumer) {
-            if (event.type === "preliminary_result") {
-              yield {
-                type: "tool.preliminary_result",
-                toolCallId: event.toolCallId,
-                result: event.result,
-                timestamp: Date.now()
-              };
-            } else if (event.type === "tool_result") {
-              yield {
-                type: "tool.result",
-                toolCallId: event.toolCallId,
-                result: event.result,
-                timestamp: Date.now(),
-                ...event.preliminaryResults && { preliminaryResults: event.preliminaryResults }
-              };
-            }
-          }
-          await executionPromise;
-        }.call(this);
-      }
-      /**
-       * Stream only text deltas as they arrive.
-       * This filters the full event stream to only yield text content.
-       */
-      getTextStream() {
-        return async function* () {
-          await this.initStream();
-          if (!this.reusableStream) {
-            throw new Error("Stream not initialized");
-          }
-          yield* extractTextDeltas(this.reusableStream);
-        }.call(this);
-      }
-      /**
-       * Stream all output items cumulatively as they arrive.
-       * Items are emitted with the same ID but progressively updated content as streaming progresses.
-       * Also yields tool results (function_call_output) after tool execution completes.
-       *
-       * Item types include:
-       * - message: Assistant text responses (emitted cumulatively as text streams)
-       * - function_call: Tool calls (emitted cumulatively as arguments stream)
-       * - reasoning: Model reasoning (emitted cumulatively as thinking streams)
-       * - web_search_call: Web search operations
-       * - file_search_call: File search operations
-       * - image_generation_call: Image generation operations
-       * - function_call_output: Results from executed tools
-       */
-      getItemsStream() {
-        return async function* () {
-          await this.initStream();
-          if (!this.reusableStream) {
-            throw new Error("Stream not initialized");
-          }
-          yield* buildItemsStream(this.reusableStream);
-          await this.executeToolsIfNeeded();
-          for (const round of this.allToolExecutionRounds) {
-            if (round.round > 0) {
-              for (const item of round.response.output) {
-                if (isFunctionCallItem(item)) {
-                  yield item;
-                }
-              }
-            }
-            for (const toolResult of round.toolResults) {
-              yield toolResult;
-            }
-          }
-          if (this.finalResponse && this.allToolExecutionRounds.length > 0) {
-            for (const item of this.finalResponse.output) {
-              if (isOutputMessage(item) || isFunctionCallItem(item) || isReasoningOutputItem(item) || isWebSearchCallOutputItem(item) || isFileSearchCallOutputItem(item) || isImageGenerationCallOutputItem(item)) {
-                yield item;
-              }
-            }
-          }
-        }.call(this);
-      }
-      /**
-       * @deprecated Use `getItemsStream()` instead. This method only streams messages,
-       * while `getItemsStream()` streams all output item types (messages, function_calls,
-       * reasoning, etc.) with cumulative updates.
-       *
-       * Stream incremental message updates as content is added in responses format.
-       * Each iteration yields an updated version of the message with new content.
-       * Also yields function_call items and OpenResponsesFunctionCallOutput after tool execution completes.
-       * Returns ResponsesOutputMessage, ResponsesOutputItemFunctionCall, or OpenResponsesFunctionCallOutput
-       * compatible with OpenAI Responses API format.
-       */
-      getNewMessagesStream() {
-        return async function* () {
-          await this.initStream();
-          if (!this.reusableStream) {
-            throw new Error("Stream not initialized");
-          }
-          yield* buildResponsesMessageStream(this.reusableStream);
-          await this.executeToolsIfNeeded();
-          for (const round of this.allToolExecutionRounds) {
-            for (const item of round.response.output) {
-              if (isFunctionCallItem(item)) {
-                yield item;
-              }
-            }
-            for (const toolResult of round.toolResults) {
-              yield toolResult;
-            }
-          }
-          if (this.finalResponse && this.allToolExecutionRounds.length > 0) {
-            const hasMessage = this.finalResponse.output.some((item) => hasTypeProperty(item) && item.type === "message");
-            if (hasMessage) {
-              yield extractResponsesMessageFromResponse(this.finalResponse);
-            }
-          }
-        }.call(this);
-      }
-      /**
-       * Stream only reasoning deltas as they arrive.
-       * This filters the full event stream to only yield reasoning content.
-       */
-      getReasoningStream() {
-        return async function* () {
-          await this.initStream();
-          if (!this.reusableStream) {
-            throw new Error("Stream not initialized");
-          }
-          yield* extractReasoningDeltas(this.reusableStream);
-        }.call(this);
-      }
-      /**
-       * Stream tool call argument deltas and preliminary results.
-       * Preliminary results are streamed in REAL-TIME as generator tools yield.
-       * - Tool call argument deltas as { type: "delta", content: string }
-       * - Preliminary results as { type: "preliminary_result", toolCallId, result }
-       */
-      getToolStream() {
-        return async function* () {
-          await this.initStream();
-          if (!this.reusableStream) {
-            throw new Error("Stream not initialized");
-          }
-          const broadcaster = this.ensureBroadcaster();
-          const toolEventConsumer = broadcaster.createConsumer();
-          const executionPromise = this.executeToolsIfNeeded().finally(() => {
-            broadcaster.complete();
-          });
-          for await (const delta of extractToolDeltas(this.reusableStream)) {
-            yield {
-              type: "delta",
-              content: delta
-            };
-          }
-          for await (const event of toolEventConsumer) {
-            if (event.type === "preliminary_result") {
-              yield event;
-            }
-          }
-          await executionPromise;
-        }.call(this);
-      }
-      /**
-       * Get all tool calls from the completed response (before auto-execution).
-       * Note: If tools have execute functions, they will be automatically executed
-       * and this will return the tool calls from the initial response.
-       * Returns structured tool calls with parsed arguments.
-       */
-      async getToolCalls() {
-        await this.initStream();
-        if (this.finalResponse) {
-          return extractToolCallsFromResponse(this.finalResponse);
-        }
-        if (!this.reusableStream) {
-          throw new Error("Stream not initialized");
-        }
-        const completedResponse = await consumeStreamForCompletion(this.reusableStream);
-        return extractToolCallsFromResponse(completedResponse);
-      }
-      /**
-       * Stream structured tool call objects as they're completed.
-       * Each iteration yields a complete tool call with parsed arguments.
-       */
-      getToolCallsStream() {
-        return async function* () {
-          await this.initStream();
-          if (!this.reusableStream) {
-            throw new Error("Stream not initialized");
-          }
-          yield* buildToolCallStream(this.reusableStream);
-        }.call(this);
-      }
-      /**
-       * Cancel the underlying stream and all consumers
-       */
-      async cancel() {
-        if (this.reusableStream) {
-          await this.reusableStream.cancel();
-        }
-      }
-      // =========================================================================
-      // Multi-Turn Conversation State Methods
-      // =========================================================================
-      /**
-       * Check if the conversation requires human approval to continue.
-       * Returns true if there are pending tool calls awaiting approval.
-       */
-      async requiresApproval() {
-        await this.initStream();
-        if (this.currentState?.status === "awaiting_approval") {
-          return true;
-        }
-        return (this.currentState?.pendingToolCalls?.length ?? 0) > 0;
-      }
-      /**
-       * Get the pending tool calls that require approval.
-       * Returns empty array if no approvals needed.
-       */
-      async getPendingToolCalls() {
-        await this.initStream();
-        if (!this.isResumingFromApproval) {
-          await this.executeToolsIfNeeded();
-        }
-        return this.currentState?.pendingToolCalls ?? [];
-      }
-      /**
-       * Get the current conversation state.
-       * Useful for inspection, debugging, or custom persistence.
-       * Note: This returns the raw ConversationState for inspection only.
-       * To resume a conversation, use the StateAccessor pattern.
-       */
-      async getState() {
-        await this.initStream();
-        if (!this.isResumingFromApproval) {
-          await this.executeToolsIfNeeded();
-        }
-        if (!this.currentState) {
-          throw new Error("State not initialized. Make sure a StateAccessor was provided to callModel.");
-        }
-        return this.currentState;
-      }
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/funcs/call-model.js
-function callModel(client, request, options) {
-  const { tools, stopWhen, state, requireApproval, approveToolCalls, rejectToolCalls, ...apiRequest } = request;
-  const apiTools = tools ? convertToolsToAPIFormat(tools) : void 0;
-  const finalRequest = {
-    ...apiRequest
-  };
-  if (apiTools !== void 0) {
-    finalRequest["tools"] = apiTools;
-  }
-  return new ModelResult({
-    client,
-    request: finalRequest,
-    options: options ?? {},
-    tools,
-    ...stopWhen !== void 0 && { stopWhen },
-    // Pass state management options
-    ...state !== void 0 && { state },
-    ...requireApproval !== void 0 && { requireApproval },
-    ...approveToolCalls !== void 0 && { approveToolCalls },
-    ...rejectToolCalls !== void 0 && { rejectToolCalls }
-  });
-}
-var init_call_model = __esm({
-  "node_modules/@openrouter/sdk/esm/funcs/call-model.js"() {
-    init_model_result();
-    init_tool_executor();
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/sdk/sdk.js
-var OpenRouter;
-var init_sdk = __esm({
-  "node_modules/@openrouter/sdk/esm/sdk/sdk.js"() {
-    init_sdks();
-    init_analytics();
-    init_apikeys();
-    init_beta();
-    init_chat();
-    init_credits();
-    init_embeddings();
-    init_endpoints();
-    init_generations();
-    init_guardrails();
-    init_models2();
-    init_oauth();
-    init_providers();
-    init_call_model();
-    OpenRouter = class extends ClientSDK {
-      get beta() {
-        return this._beta ?? (this._beta = new Beta(this._options));
-      }
-      get analytics() {
-        return this._analytics ?? (this._analytics = new Analytics(this._options));
-      }
-      get credits() {
-        return this._credits ?? (this._credits = new Credits(this._options));
-      }
-      get embeddings() {
-        return this._embeddings ?? (this._embeddings = new Embeddings(this._options));
-      }
-      get generations() {
-        return this._generations ?? (this._generations = new Generations(this._options));
-      }
-      get models() {
-        return this._models ?? (this._models = new Models(this._options));
-      }
-      get endpoints() {
-        return this._endpoints ?? (this._endpoints = new Endpoints(this._options));
-      }
-      get providers() {
-        return this._providers ?? (this._providers = new Providers(this._options));
-      }
-      get apiKeys() {
-        return this._apiKeys ?? (this._apiKeys = new APIKeys(this._options));
-      }
-      get guardrails() {
-        return this._guardrails ?? (this._guardrails = new Guardrails(this._options));
-      }
-      get oAuth() {
-        return this._oAuth ?? (this._oAuth = new OAuth(this._options));
-      }
-      get chat() {
-        return this._chat ?? (this._chat = new Chat(this._options));
-      }
-      // #region sdk-class-body
-      callModel(request, options) {
-        return callModel(this, request, options);
-      }
-    };
-  }
-});
-
-// node_modules/@openrouter/sdk/esm/index.js
-var init_esm = __esm({
-  "node_modules/@openrouter/sdk/esm/index.js"() {
-    init_config();
-    init_files();
-    init_tool_types();
-    init_sdk();
-  }
-});
-
 // src/lib/request-context.ts
 var import_node_async_hooks, RequestContext, requestContext;
 var init_request_context = __esm({
@@ -34593,22 +15483,17 @@ function writePretty(level, msg, bindings, ctx) {
   const color = LEVEL_COLORS[level];
   const time3 = (/* @__PURE__ */ new Date()).toISOString().slice(11, 23);
   const tag = level.toUpperCase().padEnd(5);
-  const bindingStr = Object.keys(bindings).length > 0 ? ` ${DIM}${formatBindings(bindings)}${RESET}` : "";
-  let line = `${DIM}${time3}${RESET} ${color}${tag}${RESET}${bindingStr} ${msg}`;
-  if (ctx && Object.keys(ctx).length > 0) {
-    const ctxStr = formatContext(ctx);
-    if (ctxStr) {
-      line += ` ${DIM}${ctxStr}${RESET}`;
-    }
-  }
+  let line = `${DIM}${time3}${RESET} ${color}${tag}${RESET} ${msg}`;
   const reqCtx = requestContext.get();
   if (reqCtx) {
     line += ` ${DIM}[${reqCtx.requestId.slice(0, 8)}]${RESET}`;
   }
+  const merged = { ...bindings, ...ctx ?? {} };
+  const pairs = formatContext(merged);
+  if (pairs) {
+    line += ` ${DIM}${pairs}${RESET}`;
+  }
   process.stderr.write(line + "\n");
-}
-function formatBindings(bindings) {
-  return Object.entries(bindings).map(([k, v]) => `${k}=${String(v)}`).join(" ");
 }
 function formatContext(ctx) {
   const parts = [];
@@ -34633,24 +15518,24 @@ function formatContext(ctx) {
   return parts.join(" ");
 }
 function createLoggerInternal(bindings) {
-  const write = IS_PRODUCTION ? writeJson : writePretty;
-  function log31(level, msg, ctx) {
+  const write = USE_JSON ? writeJson : writePretty;
+  function log32(level, msg, ctx) {
     if (LEVEL_VALUES[level] < MIN_LEVEL) return;
     write(level, msg, bindings, normalizeContext(ctx));
   }
   return {
-    debug: (msg, ctx) => log31("debug", msg, ctx),
-    info: (msg, ctx) => log31("info", msg, ctx),
-    warn: (msg, ctx) => log31("warn", msg, ctx),
-    error: (msg, ctx) => log31("error", msg, ctx),
-    fatal: (msg, ctx) => log31("fatal", msg, ctx),
+    debug: (msg, ctx) => log32("debug", msg, ctx),
+    info: (msg, ctx) => log32("info", msg, ctx),
+    warn: (msg, ctx) => log32("warn", msg, ctx),
+    error: (msg, ctx) => log32("error", msg, ctx),
+    fatal: (msg, ctx) => log32("fatal", msg, ctx),
     child: (childBindings) => createLoggerInternal({ ...bindings, ...childBindings })
   };
 }
 function createLogger(bindings = {}) {
   return createLoggerInternal(bindings);
 }
-var LEVEL_VALUES, LEVEL_COLORS, RESET, DIM, IS_PRODUCTION, LOG_LEVEL, MIN_LEVEL, logger;
+var LEVEL_VALUES, LEVEL_COLORS, RESET, DIM, IS_PRODUCTION, USE_JSON, LOG_LEVEL, MIN_LEVEL, logger;
 var init_logger = __esm({
   "src/lib/logger.ts"() {
     "use strict";
@@ -34677,6 +15562,7 @@ var init_logger = __esm({
     RESET = "\x1B[0m";
     DIM = "\x1B[2m";
     IS_PRODUCTION = process.env.NODE_ENV === "production";
+    USE_JSON = process.env.LOG_FORMAT === "json" || process.env.LOG_FORMAT !== "pretty" && IS_PRODUCTION;
     LOG_LEVEL = process.env.LOG_LEVEL ?? (IS_PRODUCTION ? "info" : "debug");
     MIN_LEVEL = LEVEL_VALUES[LOG_LEVEL] ?? LEVEL_VALUES.info;
     logger = createLoggerInternal({ service: "subcult" });
@@ -34806,6 +15692,37 @@ function normalizeModel(id) {
   if (id.startsWith("openrouter/")) return id.slice("openrouter/".length);
   return id;
 }
+function repairTruncatedJson(raw) {
+  let s = raw.trim();
+  if (!s.startsWith("{")) return {};
+  const unescapedQuotes = s.match(/(?<!\\)"/g);
+  if (unescapedQuotes && unescapedQuotes.length % 2 !== 0) {
+    s += '"';
+  }
+  s = s.replace(/,\s*$/, "");
+  let braces = 0;
+  let brackets = 0;
+  let inString = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === "\\" && inString) {
+      i++;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (ch === "{") braces++;
+    else if (ch === "}") braces--;
+    else if (ch === "[") brackets++;
+    else if (ch === "]") brackets--;
+  }
+  for (let i = 0; i < brackets; i++) s += "]";
+  for (let i = 0; i < braces; i++) s += "}";
+  return JSON.parse(s);
+}
 async function resolveModelsWithEnv(context) {
   const models = await resolveModels(context);
   if (!LLM_MODEL_ENV) return models;
@@ -34821,7 +15738,7 @@ function getClient() {
         "Missing OPENROUTER_API_KEY environment variable. Set it in .env.local"
       );
     }
-    _client = new OpenRouter({ apiKey: OPENROUTER_API_KEY });
+    _client = new import_sdk.OpenRouter({ apiKey: OPENROUTER_API_KEY });
   }
   return _client;
 }
@@ -34854,8 +15771,8 @@ function getOllamaModels() {
   }
   return models;
 }
-function stripThinking(text2) {
-  return text2.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+function stripThinking(text) {
+  return text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
 }
 async function ollamaChat(messages, temperature, options) {
   const models = getOllamaModels();
@@ -34933,10 +15850,10 @@ async function ollamaChatWithModel(spec, messages, temperature, maxTokens, tools
       const pendingToolCalls = msg.tool_calls;
       if (!pendingToolCalls || pendingToolCalls.length === 0) {
         const raw = msg.content ?? "";
-        const text2 = extractFromXml(stripThinking(raw)).trim();
-        if (text2.length === 0 && toolCallRecords.length === 0)
+        const text = extractFromXml(stripThinking(raw)).trim();
+        if (text.length === 0 && toolCallRecords.length === 0)
           return null;
-        return { text: text2, toolCalls: toolCallRecords, model, usage: data.usage };
+        return { text, toolCalls: toolCallRecords, model, usage: data.usage };
       }
       workingMessages.push({
         role: "assistant",
@@ -34951,7 +15868,19 @@ async function ollamaChatWithModel(spec, messages, temperature, maxTokens, tools
           try {
             args = JSON.parse(tc.function.arguments);
           } catch {
-            args = {};
+            try {
+              args = repairTruncatedJson(tc.function.arguments);
+              log.warn("Repaired truncated tool call JSON", {
+                tool: tc.function.name,
+                original: tc.function.arguments.slice(0, 200)
+              });
+            } catch {
+              log.warn("Unrecoverable malformed tool call JSON", {
+                tool: tc.function.name,
+                arguments: tc.function.arguments.slice(0, 200)
+              });
+              args = {};
+            }
           }
           const result = await tool.execute(args);
           toolCallRecords.push({
@@ -35015,7 +15944,7 @@ function jsonSchemaToZod(schema) {
 }
 function toOpenRouterTools(tools) {
   return tools.map((tool) => ({
-    type: ToolType.Function,
+    type: import_sdk.ToolType.Function,
     function: {
       name: tool.name,
       description: tool.description,
@@ -35127,18 +16056,18 @@ async function llmGenerate(options) {
       buildCallOpts(spec)
     );
     const rawText = (await result.getText())?.trim() ?? "";
-    const text2 = extractFromXml(rawText);
+    const text = extractFromXml(rawText);
     const durationMs = Date.now() - startTime;
     const response = await result.getResponse();
     const usedModel = response.model || "unknown";
     const usage = response.usage;
     void trackUsage(usedModel, usage, durationMs, trackingContext);
-    return text2.length > 0 ? text2 : null;
+    return text.length > 0 ? text : null;
   }
   let openRouterError = null;
   try {
-    const text2 = await tryCall(modelList);
-    if (text2) return text2;
+    const text = await tryCall(modelList);
+    if (text) return text;
   } catch (error48) {
     openRouterError = error48;
     if (openRouterError.statusCode === 401) {
@@ -35150,8 +16079,8 @@ async function llmGenerate(options) {
   if (!openRouterError || openRouterError.statusCode !== 402 && openRouterError.statusCode !== 429) {
     for (const fallback of resolved.slice(MAX_MODELS_ARRAY)) {
       try {
-        const text2 = await tryCall(fallback);
-        if (text2) return text2;
+        const text = await tryCall(fallback);
+        if (text) return text;
       } catch {
       }
     }
@@ -35221,58 +16150,157 @@ async function llmGenerateWithTools(options) {
       };
     }
   }
-  const client = getClient();
   const resolved = model ? [normalizeModel(model)] : await resolveModelsWithEnv(trackingContext?.context);
   const modelList = resolved.slice(0, MAX_MODELS_ARRAY);
-  const systemMessage = messages.find((m) => m.role === "system");
-  const conversationMessages = messages.filter((m) => m.role !== "system");
   const toolCallRecords = [];
-  const wrappedTools = tools.map((tool) => ({
-    type: ToolType.Function,
+  const openaiTools = tools.map((t) => ({
+    type: "function",
     function: {
-      name: tool.name,
-      description: tool.description,
-      inputSchema: jsonSchemaToZod(tool.parameters),
-      ...tool.execute ? {
-        execute: async (params) => {
-          const result = await tool.execute(params);
-          toolCallRecords.push({
-            name: tool.name,
-            arguments: params,
-            result
-          });
-          return result;
-        }
-      } : {}
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters
     }
   }));
+  const workingMessages = messages.map((m) => ({
+    role: m.role,
+    content: m.content
+  }));
   try {
-    const callOptions = {
-      models: modelList,
-      provider: { allowFallbacks: true },
-      ...systemMessage ? { instructions: systemMessage.content } : {},
-      input: conversationMessages.map((m) => ({
-        role: m.role,
-        content: m.content
-      })),
-      temperature,
-      maxOutputTokens: maxTokens
-    };
-    if (wrappedTools.length > 0) {
-      callOptions.tools = wrappedTools;
-      callOptions.maxToolRounds = maxToolRounds;
+    let lastModel = "unknown";
+    let lastUsage = null;
+    for (let round = 0; round <= maxToolRounds; round++) {
+      const body = {
+        messages: workingMessages,
+        temperature,
+        max_tokens: maxTokens
+      };
+      if (modelList.length > 1) {
+        body.models = modelList;
+        body.provider = { allow_fallbacks: true };
+      } else {
+        body.model = modelList[0];
+      }
+      if (openaiTools.length > 0 && round < maxToolRounds) {
+        body.tools = openaiTools;
+      }
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12e4);
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+          "HTTP-Referer": "https://subcult.org"
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      if (!response.ok) {
+        const errBody = await response.text().catch(() => "");
+        const statusCode = response.status;
+        throw Object.assign(
+          new Error(`OpenRouter API error: ${statusCode} ${errBody.slice(0, 200)}`),
+          { statusCode }
+        );
+      }
+      const data = await response.json();
+      lastModel = data.model ?? "unknown";
+      if (data.usage) {
+        lastUsage = {
+          inputTokens: data.usage.prompt_tokens ?? 0,
+          outputTokens: data.usage.completion_tokens ?? 0,
+          totalTokens: (data.usage.prompt_tokens ?? 0) + (data.usage.completion_tokens ?? 0)
+        };
+      }
+      const msg = data.choices?.[0]?.message;
+      if (!msg) {
+        log.warn("OpenRouter returned empty message", { round, model: lastModel });
+        break;
+      }
+      let pendingToolCalls = msg.tool_calls;
+      if ((!pendingToolCalls || pendingToolCalls.length === 0) && msg.content) {
+        const dsmlCalls = parseDsmlToolCalls(msg.content, tools);
+        if (dsmlCalls.length > 0) {
+          pendingToolCalls = dsmlCalls;
+          log.debug("Recovered tool calls from DSML text", {
+            count: dsmlCalls.length,
+            tools: dsmlCalls.map((tc) => tc.function.name),
+            model: lastModel
+          });
+        }
+      }
+      if (!pendingToolCalls || pendingToolCalls.length === 0) {
+        const raw = msg.content ?? "";
+        const text = extractFromXml(raw).trim();
+        const durationMs2 = Date.now() - startTime;
+        void trackUsage(lastModel, lastUsage, durationMs2, trackingContext);
+        return { text, toolCalls: toolCallRecords };
+      }
+      workingMessages.push({
+        role: "assistant",
+        content: msg.content ?? null,
+        tool_calls: pendingToolCalls.map((tc) => ({
+          id: tc.id,
+          type: "function",
+          function: tc.function
+        }))
+      });
+      for (const tc of pendingToolCalls) {
+        const tool = tools.find((t) => t.name === tc.function.name);
+        let resultStr;
+        if (tool?.execute) {
+          let args;
+          try {
+            args = JSON.parse(tc.function.arguments);
+          } catch {
+            try {
+              args = repairTruncatedJson(tc.function.arguments);
+              log.warn("Repaired truncated tool call JSON", {
+                tool: tc.function.name,
+                original: tc.function.arguments.slice(0, 200)
+              });
+            } catch {
+              log.warn("Unrecoverable malformed tool call JSON", {
+                tool: tc.function.name,
+                arguments: tc.function.arguments.slice(0, 200)
+              });
+              args = {};
+            }
+          }
+          const required2 = tool.parameters?.required ?? [];
+          const missing = required2.filter((p) => !(p in args) || args[p] == null);
+          if (missing.length > 0) {
+            log.warn("Tool call missing required params after parse/repair", {
+              tool: tc.function.name,
+              missing,
+              argsKeys: Object.keys(args)
+            });
+            resultStr = JSON.stringify({
+              error: `Missing required parameters: ${missing.join(", ")}. Your tool call output was truncated before these fields were emitted. If writing long content, split into smaller chunks using the "append" parameter or reduce the content length.`
+            });
+          } else {
+            const result = await tool.execute(args);
+            toolCallRecords.push({
+              name: tool.name,
+              arguments: args,
+              result
+            });
+            resultStr = typeof result === "string" ? result : JSON.stringify(result);
+          }
+        } else {
+          resultStr = `Tool ${tc.function.name} not available`;
+        }
+        workingMessages.push({
+          role: "tool",
+          content: resultStr,
+          tool_call_id: tc.id
+        });
+      }
     }
-    const result = client.callModel(
-      callOptions
-    );
-    const rawText = (await result.getText())?.trim() ?? "";
-    const text2 = extractFromXml(rawText);
     const durationMs = Date.now() - startTime;
-    const response = await result.getResponse();
-    const usedModel = response.model || "unknown";
-    const usage = response.usage;
-    void trackUsage(usedModel, usage, durationMs, trackingContext);
-    return { text: text2, toolCalls: toolCallRecords };
+    void trackUsage(lastModel, lastUsage, durationMs, trackingContext);
+    return { text: "", toolCalls: toolCallRecords };
   } catch (error48) {
     const err = error48;
     if (OLLAMA_API_KEY || OLLAMA_LOCAL_URL) {
@@ -35312,33 +16340,69 @@ async function llmGenerateWithTools(options) {
     throw new Error(`LLM API error: ${err.message ?? "unknown error"}`);
   }
 }
-function extractFromXml(text2) {
-  if (!/<(?:function_?calls?|invoke|parameter)\b/i.test(text2)) {
-    return text2;
+function parseDsmlToolCalls(text, availableTools) {
+  const normalized = text.replace(/<[｜|]DSML[｜|]/g, "<").replace(/<\/[｜|]DSML[｜|]/g, "</");
+  const invokePattern = /<invoke\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)<\/invoke>/gi;
+  const calls = [];
+  const toolNames = new Set(availableTools.map((t) => t.name));
+  let match;
+  while ((match = invokePattern.exec(normalized)) !== null) {
+    const toolName = match[1];
+    const body = match[2];
+    if (!toolNames.has(toolName)) continue;
+    const args = {};
+    const paramPattern = /<parameter\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)<\/parameter>/gi;
+    let paramMatch;
+    while ((paramMatch = paramPattern.exec(body)) !== null) {
+      args[paramMatch[1]] = paramMatch[2].trim();
+    }
+    if (Object.keys(args).length === 0) {
+      const barePattern = /<([a-z_][a-z0-9_]*)>([\s\S]*?)<\/\1>/gi;
+      let bareMatch;
+      while ((bareMatch = barePattern.exec(body)) !== null) {
+        args[bareMatch[1]] = bareMatch[2].trim();
+      }
+    }
+    if (Object.keys(args).length > 0) {
+      calls.push({
+        id: `dsml_${Date.now()}_${calls.length}`,
+        function: {
+          name: toolName,
+          arguments: JSON.stringify(args)
+        }
+      });
+    }
   }
-  const contentMatch = text2.match(
+  return calls;
+}
+function extractFromXml(text) {
+  text = text.replace(/<[｜|]DSML[｜|]/g, "<").replace(/<\/[｜|]DSML[｜|]/g, "</");
+  if (!/<(?:function_?calls?|invoke|parameter)\b/i.test(text)) {
+    return text;
+  }
+  const contentMatch = text.match(
     /<parameter\s+name=["']content["'][^>]*>([\s\S]*?)<\/parameter>/i
   );
   if (contentMatch?.[1]) {
     return contentMatch[1].trim();
   }
   const paramMatches = [
-    ...text2.matchAll(/<parameter\s+name=["'][^"']*["'][^>]*>([\s\S]*?)<\/parameter>/gi)
+    ...text.matchAll(/<parameter\s+name=["'][^"']*["'][^>]*>([\s\S]*?)<\/parameter>/gi)
   ];
   if (paramMatches.length > 0) {
     return paramMatches.map((m) => m[1].trim()).sort((a, b) => b.length - a.length)[0];
   }
-  const stripped = text2.replace(/<\/?(?:function_?calls?|invoke|parameter|tool_call|antml:[a-z_]+)[^>]*>/gi, "").replace(/\s{2,}/g, " ").trim();
+  const stripped = text.replace(/<\/?(?:function_?calls?|invoke|parameter|tool_call|antml:[a-z_]+)[^>]*>/gi, "").replace(/\s{2,}/g, " ").trim();
   return stripped;
 }
-function sanitizeDialogue(text2) {
-  return extractFromXml(text2).replace(/<\/?[a-z_][a-z0-9_-]*(?:\s[^>]*)?\s*>/gi, "").replace(/https?:\/\/\S+/g, "").replace(/[*_]{1,3}([^*_]+)[*_]{1,3}/g, "$1").replace(/^["']|["']$/g, "").replace(/\s+/g, " ").trim();
+function sanitizeDialogue(text) {
+  return extractFromXml(text).replace(/<\/?[a-z_][a-z0-9_-]*(?:\s[^>]*)?\s*>/gi, "").replace(/https?:\/\/\S+/g, "").replace(/[*_]{1,3}([^*_]+)[*_]{1,3}/g, "$1").replace(/^["']|["']$/g, "").replace(/\s+/g, " ").trim();
 }
-var log, OPENROUTER_API_KEY, MAX_MODELS_ARRAY, LLM_MODEL_ENV, _client, OLLAMA_LOCAL_URL, OLLAMA_CLOUD_URL, OLLAMA_API_KEY, OLLAMA_TIMEOUT_MS;
+var import_sdk, log, OPENROUTER_API_KEY, MAX_MODELS_ARRAY, LLM_MODEL_ENV, _client, OLLAMA_LOCAL_URL, OLLAMA_CLOUD_URL, OLLAMA_API_KEY, OLLAMA_TIMEOUT_MS;
 var init_client = __esm({
   "src/lib/llm/client.ts"() {
     "use strict";
-    init_esm();
+    import_sdk = require("@openrouter/sdk");
     init_v4();
     init_db();
     init_logger();
@@ -35368,6 +16432,72 @@ var init_llm = __esm({
 });
 
 // src/lib/discord/client.ts
+function webhookKey(webhookUrl) {
+  return webhookUrl.split("?")[0];
+}
+async function drainQueue(key) {
+  if (processingWebhooks.has(key)) return;
+  processingWebhooks.add(key);
+  const queue = webhookQueues.get(key);
+  try {
+    while (queue && queue.length > 0) {
+      const entry = queue.shift();
+      const result = await entry.send();
+      entry.resolve(result);
+      if (queue.length > 0) {
+        await sleep(WEBHOOK_MIN_INTERVAL_MS);
+      }
+    }
+  } finally {
+    processingWebhooks.delete(key);
+    if (queue && queue.length > 0) {
+      drainQueue(key);
+    }
+  }
+}
+async function sendWithRetry(url2, body) {
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch(url2, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (res.status === 429) {
+        const retryAfterHeader = res.headers.get("Retry-After");
+        const retryMs = retryAfterHeader ? Math.ceil(parseFloat(retryAfterHeader) * 1e3) : 2e3 * (attempt + 1);
+        log2.warn("Webhook rate limited, backing off", {
+          retryMs,
+          attempt,
+          queueKey: url2.split("/webhooks/")[1]?.slice(0, 8)
+        });
+        await sleep(retryMs);
+        continue;
+      }
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        log2.warn("Webhook POST failed", {
+          status: res.status,
+          body: text.slice(0, 200)
+        });
+        return null;
+      }
+      return await res.json();
+    } catch (err) {
+      log2.warn("Webhook POST error", {
+        error: err.message,
+        attempt
+      });
+      if (attempt < MAX_RETRIES) {
+        await sleep(1e3 * (attempt + 1));
+      }
+    }
+  }
+  return null;
+}
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
 async function postToWebhook(options) {
   const url2 = new URL(options.webhookUrl);
   url2.searchParams.set("wait", "true");
@@ -35379,40 +16509,41 @@ async function postToWebhook(options) {
   if (options.avatarUrl) body.avatar_url = options.avatarUrl;
   if (options.content) body.content = options.content;
   if (options.embeds) body.embeds = options.embeds;
-  try {
-    const res = await fetch(url2.toString(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
-    });
-    if (!res.ok) {
-      const text2 = await res.text().catch(() => "");
-      log2.warn("Webhook POST failed", {
-        status: res.status,
-        body: text2.slice(0, 200)
-      });
-      return null;
+  const key = webhookKey(options.webhookUrl);
+  const fullUrl = url2.toString();
+  return new Promise((resolve) => {
+    if (!webhookQueues.has(key)) {
+      webhookQueues.set(key, []);
     }
-    return await res.json();
-  } catch (err) {
-    log2.warn("Webhook POST error", { error: err.message });
-    return null;
-  }
+    webhookQueues.get(key).push({
+      send: () => sendWithRetry(fullUrl, body),
+      resolve
+    });
+    drainQueue(key);
+  });
 }
 async function discordFetch(path3, options = {}) {
-  const res = await fetch(`${DISCORD_API}${path3}`, {
-    ...options,
-    headers: {
-      Authorization: `Bot ${BOT_TOKEN}`,
-      "Content-Type": "application/json",
-      ...options.headers
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const res = await fetch(`${DISCORD_API}${path3}`, {
+      ...options,
+      headers: {
+        Authorization: `Bot ${BOT_TOKEN}`,
+        "Content-Type": "application/json",
+        ...options.headers
+      }
+    });
+    if (res.status === 429) {
+      const retryAfterHeader = res.headers.get("Retry-After");
+      const retryMs = retryAfterHeader ? Math.ceil(parseFloat(retryAfterHeader) * 1e3) : 2e3 * (attempt + 1);
+      log2.warn("Discord API rate limited, backing off", { retryMs, attempt, path: path3 });
+      if (attempt < MAX_RETRIES) {
+        await sleep(retryMs);
+        continue;
+      }
     }
-  });
-  if (res.status === 429) {
-    const retryAfter = res.headers.get("Retry-After");
-    log2.warn("Discord rate limited", { retryAfter, path: path3 });
+    return res;
   }
-  return res;
+  throw new Error("discordFetch: exhausted retries");
 }
 async function getOrCreateWebhook(channelId, name = "Subcult") {
   if (!BOT_TOKEN) {
@@ -35486,29 +16617,52 @@ async function postToWebhookWithFiles(options) {
     const blob = new Blob([new Uint8Array(file2.data)], { type: file2.contentType });
     formData.append(`files[${i}]`, blob, file2.filename);
   }
-  try {
-    const res = await fetch(url2.toString(), {
-      method: "POST",
-      body: formData
-      // No Content-Type header — auto multipart boundary
-    });
-    if (!res.ok) {
-      const text2 = await res.text().catch(() => "");
-      log2.warn("Webhook multipart POST failed", {
-        status: res.status,
-        body: text2.slice(0, 200)
-      });
-      return null;
+  const key = webhookKey(options.webhookUrl);
+  const sendMultipart = async () => {
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const res = await fetch(url2.toString(), {
+          method: "POST",
+          body: formData
+        });
+        if (res.status === 429) {
+          const retryAfterHeader = res.headers.get("Retry-After");
+          const retryMs = retryAfterHeader ? Math.ceil(parseFloat(retryAfterHeader) * 1e3) : 2e3 * (attempt + 1);
+          log2.warn("Webhook multipart rate limited, backing off", { retryMs, attempt });
+          await sleep(retryMs);
+          continue;
+        }
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          log2.warn("Webhook multipart POST failed", {
+            status: res.status,
+            body: text.slice(0, 200)
+          });
+          return null;
+        }
+        return await res.json();
+      } catch (err) {
+        log2.warn("Webhook multipart POST error", {
+          error: err.message,
+          attempt
+        });
+        if (attempt < MAX_RETRIES) await sleep(1e3 * (attempt + 1));
+      }
     }
-    return await res.json();
-  } catch (err) {
-    log2.warn("Webhook multipart POST error", {
-      error: err.message
-    });
     return null;
-  }
+  };
+  return new Promise((resolve) => {
+    if (!webhookQueues.has(key)) {
+      webhookQueues.set(key, []);
+    }
+    webhookQueues.get(key).push({
+      send: sendMultipart,
+      resolve
+    });
+    drainQueue(key);
+  });
 }
-var log2, DISCORD_API, BOT_TOKEN, webhookCache;
+var log2, DISCORD_API, BOT_TOKEN, webhookCache, WEBHOOK_MIN_INTERVAL_MS, MAX_RETRIES, webhookQueues, processingWebhooks;
 var init_client2 = __esm({
   "src/lib/discord/client.ts"() {
     "use strict";
@@ -35517,6 +16671,10 @@ var init_client2 = __esm({
     DISCORD_API = "https://discord.com/api/v10";
     BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
     webhookCache = /* @__PURE__ */ new Map();
+    WEBHOOK_MIN_INTERVAL_MS = 600;
+    MAX_RETRIES = 3;
+    webhookQueues = /* @__PURE__ */ new Map();
+    processingWebhooks = /* @__PURE__ */ new Set();
   }
 });
 
@@ -35524,7 +16682,39 @@ var init_client2 = __esm({
 function buildWebhookUrl(webhookId, webhookToken) {
   return `https://discord.com/api/webhooks/${webhookId}/${webhookToken}`;
 }
+async function syncEnvToDb2() {
+  if (envSynced2) return;
+  envSynced2 = true;
+  const guildId = process.env.DISCORD_GUILD_ID;
+  if (!guildId) return;
+  for (const [key, value] of Object.entries(process.env)) {
+    if (!key.startsWith(ENV_PREFIX2) || !value) continue;
+    const rawName = key.slice(ENV_PREFIX2.length);
+    if (!rawName) continue;
+    const channelName = rawName.toLowerCase().replace(/_/g, "-");
+    const channelId = value.trim();
+    if (!channelId) continue;
+    try {
+      await sql`
+                INSERT INTO ops_discord_channels (discord_channel_id, discord_guild_id, name, category, purpose)
+                VALUES (${channelId}, ${guildId}, ${channelName}, 'env', ${"Set via DISCORD_CHANNEL env var"})
+                ON CONFLICT (discord_channel_id) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    enabled = true
+            `;
+      await sql`
+                DELETE FROM ops_discord_channels
+                WHERE name = ${channelName} AND discord_channel_id != ${channelId}
+            `;
+      channelCache.delete(channelName);
+      log3.info("Discord channel synced from env", { name: channelName, channelId });
+    } catch (error48) {
+      log3.error("Failed to sync discord channel env var", { name: channelName, channelId, error: error48 });
+    }
+  }
+}
 async function getWebhookUrl(channelName) {
+  await syncEnvToDb2();
   const cached2 = channelCache.get(channelName);
   if (cached2) {
     if (!cached2.enabled) return null;
@@ -35558,11 +16748,11 @@ async function getWebhookUrl(channelName) {
   }
   const webhookUrl = await getOrCreateWebhook(row.discord_channel_id);
   if (webhookUrl) {
-    const match2 = webhookUrl.match(/\/webhooks\/(\d+)\/(.+)$/);
-    if (match2) {
+    const match = webhookUrl.match(/\/webhooks\/(\d+)\/(.+)$/);
+    if (match) {
       await sql`
                 UPDATE ops_discord_channels
-                SET webhook_id = ${match2[1]}, webhook_token = ${match2[2]}
+                SET webhook_id = ${match[1]}, webhook_token = ${match[2]}
                 WHERE name = ${channelName}
             `;
     }
@@ -35577,7 +16767,7 @@ async function getWebhookUrl(channelName) {
 function getChannelForFormat(format) {
   return FORMAT_CHANNEL_MAP[format];
 }
-var log3, FORMAT_CHANNEL_MAP, channelCache;
+var log3, FORMAT_CHANNEL_MAP, ENV_PREFIX2, envSynced2, channelCache;
 var init_channels = __esm({
   "src/lib/discord/channels.ts"() {
     "use strict";
@@ -35605,6 +16795,8 @@ var init_channels = __esm({
       agent_design: "roundtable",
       voice_chat: "roundtable"
     };
+    ENV_PREFIX2 = "DISCORD_CHANNEL_";
+    envSynced2 = false;
     channelCache = /* @__PURE__ */ new Map();
   }
 });
@@ -35711,6 +16903,33 @@ var events_exports = {};
 __export(events_exports, {
   postEventToDiscord: () => postEventToDiscord
 });
+function splitDiscordMessage(content) {
+  if (content.length <= DISCORD_MAX_LENGTH) return [content];
+  const lines = content.split("\n");
+  const chunks = [];
+  let current = "";
+  for (const line of lines) {
+    const candidate = current.length === 0 ? line : `${current}
+${line}`;
+    if (candidate.length > DISCORD_MAX_LENGTH) {
+      if (current.length > 0) {
+        chunks.push(current);
+        current = line;
+      } else {
+        let remaining = line;
+        while (remaining.length > DISCORD_MAX_LENGTH) {
+          chunks.push(remaining.slice(0, DISCORD_MAX_LENGTH));
+          remaining = remaining.slice(DISCORD_MAX_LENGTH);
+        }
+        current = remaining;
+      }
+    } else {
+      current = candidate;
+    }
+  }
+  if (current.length > 0) chunks.push(current);
+  return chunks;
+}
 function getKindEmoji(kind) {
   if (kind.includes("dream")) return "\u{1F4AD}";
   if (kind.includes("archaeology")) return "\u{1F52E}";
@@ -35736,8 +16955,11 @@ ${quoted}`;
     const rounds = meta3.rounds ? ` \xB7 ${meta3.rounds} rounds` : "";
     const tools = meta3.toolCalls ? ` \xB7 ${meta3.toolCalls} tool calls` : "";
     let content2 = `${emoji3} **${agentLabel}** \u2014 ${input.title}${rounds}${tools}`;
-    if (summary) content2 += `
-> ${summary.split("\n")[0]}`;
+    if (summary) {
+      const quoted = summary.split("\n").map((l) => `> ${l}`).join("\n");
+      content2 += `
+${quoted}`;
+    }
     return content2;
   }
   if (kind.includes("proposal")) {
@@ -35764,17 +16986,17 @@ async function postEventToDiscord(input) {
   const symbol2 = voice?.symbol ?? "";
   const emoji3 = getKindEmoji(input.kind);
   const agentLabel = `${symbol2 ? symbol2 + " " : ""}${agentName}`;
-  let content = formatEventContent(input, agentLabel, emoji3);
-  if (content.length > 2e3) {
-    content = content.slice(0, 1997) + "...";
-  }
+  const content = formatEventContent(input, agentLabel, emoji3);
+  const chunks = splitDiscordMessage(content);
   try {
-    await postToWebhook({
-      webhookUrl,
-      username: agentName,
-      avatarUrl: getAgentAvatarUrl(input.agent_id),
-      content
-    });
+    for (const chunk of chunks) {
+      await postToWebhook({
+        webhookUrl,
+        username: agentName,
+        avatarUrl: getAgentAvatarUrl(input.agent_id),
+        content: chunk
+      });
+    }
   } catch (err) {
     log4.warn("Failed to post event to Discord", {
       kind: input.kind,
@@ -35783,7 +17005,7 @@ async function postEventToDiscord(input) {
     });
   }
 }
-var log4, EVENT_CHANNEL_MAP;
+var log4, DISCORD_MAX_LENGTH, EVENT_CHANNEL_MAP;
 var init_events = __esm({
   "src/lib/discord/events.ts"() {
     "use strict";
@@ -35794,6 +17016,7 @@ var init_events = __esm({
     init_avatars();
     init_logger();
     log4 = logger.child({ module: "discord-events" });
+    DISCORD_MAX_LENGTH = 2e3;
     EVENT_CHANNEL_MAP = {
       // proposals
       proposal_created: "proposals",
@@ -35807,9 +17030,13 @@ var init_events = __esm({
       mission_succeeded: "missions",
       agent_session_completed: "missions",
       agent_session_failed: "missions",
-      // insights
+      // research — step-kind completions for analysis tasks
+      research_completed: "research",
+      news_digest_generated: "research",
+      // insights — step-kind completions for synthesis/memory tasks
+      insight_generated: "insights",
       memory_archaeology_complete: "insights",
-      dream_cycle_completed: "insights",
+      dream_cycle_completed: "dreams",
       // system-log
       trigger_fired: "system-log",
       stale_steps_recovered: "system-log",
@@ -36055,12 +17282,14 @@ async function createMissionFromProposal(proposalId) {
   let stepCount = 0;
   for (const step of steps) {
     await sql`
-            INSERT INTO ops_mission_steps (mission_id, kind, status, payload)
+            INSERT INTO ops_mission_steps (mission_id, kind, status, payload, assigned_agent, output_path)
             VALUES (
                 ${missionId},
                 ${step.kind},
                 'queued',
-                ${jsonb(step.payload ?? {})}
+                ${jsonb(step.payload ?? {})},
+                ${step.assigned_agent ?? null},
+                ${step.output_path ?? null}
             )
         `;
     stepCount++;
@@ -36263,13 +17492,13 @@ var init_events2 = __esm({
 });
 
 // src/lib/ops/memory.ts
-async function getEmbedding(text2) {
+async function getEmbedding(text) {
   if (!OLLAMA_BASE_URL) return null;
   try {
     const response = await fetch(`${OLLAMA_BASE_URL}/v1/embeddings`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: EMBEDDING_MODEL, input: text2 }),
+      body: JSON.stringify({ model: EMBEDDING_MODEL, input: text }),
       signal: AbortSignal.timeout(1e4)
     });
     if (!response.ok) return null;
@@ -36832,10 +18061,17 @@ Cast your vote as ${agentName}. JSON only:`
         await submitVote(proposalId, agentId, vote, reasoning);
       } else {
         const upper = response.toUpperCase();
-        if (upper.includes("APPROVE") && !upper.includes("NOT APPROVE")) {
+        if (upper.includes("APPROVE") && !upper.includes("NOT APPROVE") && !upper.includes("DON'T APPROVE")) {
           await submitVote(proposalId, agentId, "approve", response.slice(0, 200));
-        } else {
+        } else if (upper.includes("REJECT")) {
           await submitVote(proposalId, agentId, "reject", response.slice(0, 200));
+        } else {
+          log11.warn("Could not determine vote from response, skipping agent", {
+            agentId,
+            proposalId,
+            response: response.slice(0, 200)
+          });
+          continue;
         }
         log11.warn("Vote response was not valid JSON, used fallback parsing", {
           agentId,
@@ -38008,9 +19244,9 @@ ${convLines.join("\n")}`
     sections.push(`Pending proposals:
 ${propLines.join("\n")}`);
   }
-  const text2 = sections.length > 0 ? sections.join("\n\n") : "No recent activity.";
-  cache2.set(agentId, { text: text2, expires: Date.now() + CACHE_TTL_MS5 });
-  return text2;
+  const text = sections.length > 0 ? sections.join("\n\n") : "No recent activity.";
+  cache2.set(agentId, { text, expires: Date.now() + CACHE_TTL_MS5 });
+  return text;
 }
 function timeAgo(date5) {
   const minutes = Math.floor((Date.now() - date5.getTime()) / 6e4);
@@ -38032,8 +19268,8 @@ var init_situational_briefing = __esm({
 });
 
 // src/lib/discord/format.ts
-function formatForDiscord(text2) {
-  return text2.replace(
+function formatForDiscord(text) {
+  return text.replace(
     // Match a block of consecutive lines that look like markdown table rows
     /(?:^[ \t]*\|.+\|[ \t]*$\n?){2,}/gm,
     (tableBlock) => convertMarkdownTable(tableBlock)
@@ -38182,10 +19418,10 @@ async function postArtifactToDiscord(roundtableSessionId, format, artifactText) 
     chunks: chunks.length
   });
 }
-function splitDialogue(text2, maxLen) {
-  if (text2.length <= maxLen) return [text2];
+function splitDialogue(text, maxLen) {
+  if (text.length <= maxLen) return [text];
   const chunks = [];
-  let remaining = text2;
+  let remaining = text;
   while (remaining.length > 0) {
     if (remaining.length <= maxLen) {
       chunks.push(remaining);
@@ -38202,18 +19438,18 @@ function splitDialogue(text2, maxLen) {
   }
   return chunks;
 }
-function splitAtBoundaries(text2, maxLen) {
-  if (text2.length <= maxLen) return [text2];
+function splitAtBoundaries(text, maxLen) {
+  if (text.length <= maxLen) return [text];
   const chunks = [];
-  let remaining = text2;
+  let remaining = text;
   while (remaining.length > 0) {
     if (remaining.length <= maxLen) {
       chunks.push(remaining);
       break;
     }
-    const window2 = remaining.slice(0, maxLen);
-    const codeBlockStart = window2.lastIndexOf("```\n");
-    const codeBlockEnd = window2.lastIndexOf("\n```");
+    const window = remaining.slice(0, maxLen);
+    const codeBlockStart = window.lastIndexOf("```\n");
+    const codeBlockEnd = window.lastIndexOf("\n```");
     if (codeBlockStart > codeBlockEnd && codeBlockStart > 0) {
       const splitIdx2 = remaining.lastIndexOf("\n\n", codeBlockStart);
       if (splitIdx2 > 0) {
@@ -38274,8 +19510,8 @@ var init_discord = __esm({
 });
 
 // src/lib/tts/elevenlabs.ts
-function sanitizeForTTS(text2) {
-  return text2.replace(/```[\s\S]*?```/g, "").replace(/`([^`]+)`/g, "$1").replace(/#{1,6}\s?/g, "").replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*]+)\*/g, "$1").replace(/^>\s?/gm, "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/!\[([^\]]*)\]\([^)]+\)/g, "").replace(/[-*_]{3,}/g, "").replace(/\n{3,}/g, "\n\n").trim();
+function sanitizeForTTS(text) {
+  return text.replace(/```[\s\S]*?```/g, "").replace(/`([^`]+)`/g, "$1").replace(/#{1,6}\s?/g, "").replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*]+)\*/g, "$1").replace(/^>\s?/gm, "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/!\[([^\]]*)\]\([^)]+\)/g, "").replace(/[-*_]{3,}/g, "").replace(/\n{3,}/g, "\n\n").trim();
 }
 async function synthesizeSpeech(options) {
   const apiKey = process.env.ELEVENLABS_API_KEY;
@@ -38809,7 +20045,7 @@ async function orchestrateConversation(session, delayBetweenTurns = true) {
                 LEFT(s.result->>'text', 200) as preview,
                 r.format, r.topic
             FROM ops_agent_sessions s
-            JOIN ops_roundtable_sessions r ON r.id = s.source_id
+            JOIN ops_roundtable_sessions r ON r.id = s.source_id::uuid
             WHERE s.source = 'conversation'
               AND s.status = 'succeeded'
               AND s.completed_at > now() - interval '24 hours'
@@ -39001,8 +20237,8 @@ async function orchestrateConversation(session, delayBetweenTurns = true) {
       await delayPromise;
     } else {
       if (delayBetweenTurns && turn < maxTurns - 1) {
-        const delay2 = 3e3 + Math.random() * 5e3;
-        await new Promise((resolve) => setTimeout(resolve, delay2));
+        const delay = 3e3 + Math.random() * 5e3;
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
   }
@@ -39652,6 +20888,351 @@ var init_action_extractor = __esm({
   }
 });
 
+// src/lib/ops/content-pipeline.ts
+var content_pipeline_exports = {};
+__export(content_pipeline_exports, {
+  extractContentFromSession: () => extractContentFromSession,
+  processReviewSession: () => processReviewSession
+});
+async function extractContentFromSession(sessionId) {
+  const [existing] = await sql`
+        SELECT id FROM ops_content_drafts WHERE source_session_id = ${sessionId} LIMIT 1
+    `;
+  if (existing) {
+    log28.info("Draft already exists for session, skipping", {
+      sessionId,
+      draftId: existing.id
+    });
+    return null;
+  }
+  const [session] = await sql`
+        SELECT format, participants, topic FROM ops_roundtable_sessions WHERE id = ${sessionId}
+    `;
+  if (!session) {
+    log28.warn("Session not found", { sessionId });
+    return null;
+  }
+  const turns = await sql`
+        SELECT speaker, dialogue, turn_number
+        FROM ops_roundtable_turns
+        WHERE session_id = ${sessionId}
+        ORDER BY turn_number ASC
+    `;
+  if (turns.length === 0) {
+    log28.warn("No turns found for session", { sessionId });
+    return null;
+  }
+  const transcript = turns.map((t) => `[${t.speaker}]: ${t.dialogue}`).join("\n\n");
+  const extractionPrompt = `You are analyzing a creative writing session transcript. Extract the creative content that was produced during this session.
+
+Session topic: ${session.topic}
+Participants: ${session.participants.join(", ")}
+
+TRANSCRIPT:
+${transcript}
+
+INSTRUCTIONS:
+1. Separate the actual creative work (the content being written) from the meta-discussion about the work
+2. If multiple pieces of creative content exist, extract the primary/most complete one
+3. Determine the content type based on the form and structure
+
+Respond ONLY with valid JSON (no markdown fencing):
+{
+    "title": "Title of the creative work",
+    "body": "The full creative content text",
+    "contentType": "essay|thread|statement|poem|manifesto",
+    "hasContent": true
+}
+
+If no extractable creative content exists, respond with:
+{ "hasContent": false }`;
+  try {
+    const result = await llmGenerate({
+      messages: [
+        {
+          role: "system",
+          content: "You are a content extraction engine. Output only valid JSON."
+        },
+        { role: "user", content: extractionPrompt }
+      ],
+      temperature: 0.3,
+      maxTokens: 4e3,
+      trackingContext: {
+        context: "content_extraction"
+      }
+    });
+    const jsonMatch = result.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      log28.warn("No JSON found in extraction result", { sessionId });
+      return null;
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonMatch[0]);
+    } catch (parseErr) {
+      log28.warn("Invalid JSON in extraction result", {
+        sessionId,
+        error: parseErr
+      });
+      return null;
+    }
+    if (!parsed.hasContent || !parsed.title || !parsed.body) {
+      log28.info("No extractable content found", { sessionId });
+      return null;
+    }
+    if (typeof parsed.title !== "string" || typeof parsed.body !== "string") {
+      log28.warn("Title or body not strings, rejecting", {
+        sessionId,
+        titleType: typeof parsed.title,
+        bodyType: typeof parsed.body
+      });
+      return null;
+    }
+    if (parsed.title.length > MAX_TITLE_LENGTH) {
+      log28.warn("Title too long, truncating", { sessionId });
+      parsed.title = parsed.title.slice(0, MAX_TITLE_LENGTH);
+    }
+    if (parsed.body.length > MAX_BODY_LENGTH) {
+      log28.warn("Body too long, truncating", { sessionId });
+      parsed.body = parsed.body.slice(0, MAX_BODY_LENGTH);
+    }
+    const validTypes = [
+      "essay",
+      "thread",
+      "statement",
+      "poem",
+      "manifesto",
+      "briefing",
+      "report",
+      "review",
+      "digest",
+      "plan"
+    ];
+    const contentType = validTypes.includes(parsed.contentType) ? parsed.contentType : "essay";
+    const authorAgent = session.participants[0] ?? "mux";
+    const [draft] = await sql`
+            INSERT INTO ops_content_drafts (
+                author_agent, content_type, title, body, status,
+                source_session_id, metadata
+            ) VALUES (
+                ${authorAgent},
+                ${contentType},
+                ${parsed.title},
+                ${parsed.body},
+                'draft',
+                ${sessionId},
+                ${jsonb({ extractedFrom: "writing_room", topic: session.topic })}
+            )
+            RETURNING id
+        `;
+    log28.info("Content draft created", {
+      draftId: draft.id,
+      sessionId,
+      contentType,
+      author: authorAgent,
+      titlePreview: parsed.title.slice(0, 60)
+    });
+    await emitEvent({
+      agent_id: authorAgent,
+      kind: "content_draft_created",
+      title: `Content draft created: ${parsed.title}`,
+      summary: `${contentType} by ${authorAgent} extracted from writing_room session`,
+      tags: ["content", "draft", contentType],
+      metadata: {
+        draftId: draft.id,
+        sessionId,
+        contentType,
+        titlePreview: parsed.title.slice(0, 100)
+      }
+    });
+    return draft.id;
+  } catch (err) {
+    log28.error("Content extraction failed", {
+      error: err,
+      sessionId
+    });
+    return null;
+  }
+}
+async function processReviewSession(sessionId) {
+  const [draft] = await sql`
+        SELECT * FROM ops_content_drafts WHERE review_session_id = ${sessionId} LIMIT 1
+    `;
+  if (!draft) {
+    const [session] = await sql`
+            SELECT metadata FROM ops_roundtable_sessions WHERE id = ${sessionId}
+        `;
+    const draftId = typeof session?.metadata?.draft_id === "string" ? session.metadata.draft_id : void 0;
+    if (!draftId) {
+      log28.warn("No draft linked to review session", { sessionId });
+      return;
+    }
+    const [draftById] = await sql`
+            SELECT * FROM ops_content_drafts WHERE id = ${draftId} LIMIT 1
+        `;
+    if (!draftById) {
+      log28.warn("Draft not found for review session", {
+        sessionId,
+        draftId
+      });
+      return;
+    }
+    log28.info("Found draft via metadata lookup", {
+      sessionId,
+      draftId
+    });
+    return processReviewForDraft(draftById, sessionId);
+  }
+  return processReviewForDraft(draft, sessionId);
+}
+async function processReviewForDraft(draft, sessionId) {
+  const turns = await sql`
+        SELECT speaker, dialogue, turn_number
+        FROM ops_roundtable_turns
+        WHERE session_id = ${sessionId}
+        ORDER BY turn_number ASC
+    `;
+  if (turns.length === 0) {
+    log28.warn("No turns found for review session", { sessionId });
+    return;
+  }
+  const transcript = turns.map((t) => `[${t.speaker}]: ${t.dialogue}`).join("\n\n");
+  const reviewPrompt = `You are analyzing a content review session where agents reviewed a piece of creative writing.
+
+CONTENT BEING REVIEWED:
+Title: ${draft.title}
+Type: ${draft.content_type}
+Author: ${draft.author_agent}
+
+REVIEW TRANSCRIPT:
+${transcript}
+
+INSTRUCTIONS:
+Summarize each reviewer's verdict and reasoning. Determine the overall consensus.
+
+Respond ONLY with valid JSON (no markdown fencing):
+{
+    "reviewers": [
+        { "reviewer": "agent_name", "verdict": "approve|reject|mixed", "notes": "brief reasoning" }
+    ],
+    "consensus": "approved|rejected|mixed",
+    "summary": "overall review summary"
+}`;
+  try {
+    const result = await llmGenerate({
+      messages: [
+        {
+          role: "system",
+          content: "You are a review consensus analyzer. Output only valid JSON."
+        },
+        { role: "user", content: reviewPrompt }
+      ],
+      temperature: 0.2,
+      maxTokens: 2e3,
+      trackingContext: {
+        context: "content_review"
+      }
+    });
+    const jsonMatch = result.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      log28.warn("No JSON found in review result", { sessionId });
+      return;
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonMatch[0]);
+    } catch (parseErr) {
+      log28.warn("Invalid JSON in review result", {
+        sessionId,
+        draftId: draft.id,
+        error: parseErr
+      });
+      return;
+    }
+    const reviewerNotes = parsed.reviewers ?? [];
+    const consensus = parsed.consensus ?? "mixed";
+    if (consensus === "approved") {
+      await sql`
+                UPDATE ops_content_drafts
+                SET status = 'approved',
+                    reviewer_notes = ${jsonb(reviewerNotes)},
+                    updated_at = NOW()
+                WHERE id = ${draft.id}
+            `;
+      await emitEvent({
+        agent_id: draft.author_agent,
+        kind: "content_approved",
+        title: `Content approved: ${draft.title}`,
+        summary: parsed.summary ?? "Approved by reviewer consensus",
+        tags: ["content", "approved", draft.content_type],
+        metadata: {
+          draftId: draft.id,
+          reviewSessionId: sessionId,
+          reviewerCount: reviewerNotes.length
+        }
+      });
+      log28.info("Draft approved", {
+        draftId: draft.id,
+        reviewers: reviewerNotes.length
+      });
+    } else if (consensus === "rejected") {
+      await sql`
+                UPDATE ops_content_drafts
+                SET status = 'rejected',
+                    reviewer_notes = ${jsonb(reviewerNotes)},
+                    updated_at = NOW()
+                WHERE id = ${draft.id}
+            `;
+      await emitEvent({
+        agent_id: draft.author_agent,
+        kind: "content_rejected",
+        title: `Content rejected: ${draft.title}`,
+        summary: parsed.summary ?? "Rejected by reviewer consensus",
+        tags: ["content", "rejected", draft.content_type],
+        metadata: {
+          draftId: draft.id,
+          reviewSessionId: sessionId,
+          reviewerCount: reviewerNotes.length
+        }
+      });
+      log28.info("Draft rejected", {
+        draftId: draft.id,
+        reviewers: reviewerNotes.length
+      });
+    } else {
+      await sql`
+                UPDATE ops_content_drafts
+                SET reviewer_notes = ${jsonb(reviewerNotes)},
+                    updated_at = NOW()
+                WHERE id = ${draft.id}
+            `;
+      log28.info("Draft review inconclusive, staying in review", {
+        draftId: draft.id,
+        consensus
+      });
+    }
+  } catch (err) {
+    log28.error("Review processing failed", {
+      error: err,
+      sessionId,
+      draftId: draft.id
+    });
+  }
+}
+var log28, MAX_TITLE_LENGTH, MAX_BODY_LENGTH;
+var init_content_pipeline = __esm({
+  "src/lib/ops/content-pipeline.ts"() {
+    "use strict";
+    init_db();
+    init_client();
+    init_events2();
+    init_logger();
+    log28 = logger.child({ module: "content-pipeline" });
+    MAX_TITLE_LENGTH = 500;
+    MAX_BODY_LENGTH = 5e4;
+  }
+});
+
 // src/lib/ops/memory-archaeology.ts
 var memory_archaeology_exports = {};
 __export(memory_archaeology_exports, {
@@ -39666,10 +21247,10 @@ async function performDig(config2) {
   const digId = import_crypto.default.randomUUID();
   const agentId = config2.agent_id ?? "system";
   const maxMemories = config2.max_memories ?? DEFAULT_MAX_MEMORIES;
-  log28.info("Starting archaeological dig", { digId, agentId, maxMemories });
+  log29.info("Starting archaeological dig", { digId, agentId, maxMemories });
   const memories = await fetchMemoriesForDig(config2, maxMemories);
   if (memories.length < 3) {
-    log28.info("Not enough memories for archaeology", {
+    log29.info("Not enough memories for archaeology", {
       digId,
       available: memories.length
     });
@@ -39729,7 +21310,7 @@ async function performDig(config2) {
       finding_types: [...new Set(allFindings.map((f) => f.finding_type))]
     }
   });
-  log28.info("Archaeological dig completed", {
+  log29.info("Archaeological dig completed", {
     digId,
     agentId,
     findingCount: allFindings.length,
@@ -39775,7 +21356,7 @@ ${m.content}`
     memorySummary.length / CHARS_PER_TOKEN_ESTIMATE
   );
   if (estimatedInputTokens > TOKEN_WARNING_THRESHOLD) {
-    log28.warn("High token count in archaeology batch", {
+    log29.warn("High token count in archaeology batch", {
       agentId,
       estimatedInputTokens,
       memoryCount: memories.length,
@@ -39845,7 +21426,7 @@ ${memorySummary}`
     }
   });
   if (!result?.trim()) {
-    log28.warn("Archaeology analysis returned empty", { agentId });
+    log29.warn("Archaeology analysis returned empty", { agentId });
     return [];
   }
   try {
@@ -39858,12 +21439,12 @@ ${memorySummary}`
         if (lastCompleteObj > 0) {
           jsonStr = jsonStr.slice(0, lastCompleteObj + 1) + "]}";
         }
-        log28.info("Attempting truncated JSON recovery", {
+        log29.info("Attempting truncated JSON recovery", {
           originalLength: result.length,
           recoveredLength: jsonStr.length
         });
       } else {
-        log28.warn("No JSON found in archaeology response", {
+        log29.warn("No JSON found in archaeology response", {
           responsePreview: result.slice(0, 200)
         });
         return [];
@@ -39871,7 +21452,7 @@ ${memorySummary}`
     }
     const parsed = JSON.parse(jsonStr);
     if (!parsed.findings || !Array.isArray(parsed.findings)) {
-      log28.warn("Invalid JSON structure in archaeology response", {
+      log29.warn("Invalid JSON structure in archaeology response", {
         hasFindings: !!parsed.findings,
         isArray: Array.isArray(parsed.findings),
         keys: Object.keys(parsed)
@@ -39891,7 +21472,7 @@ ${memorySummary}`
       const evidenceWithWarnings = (f.evidence ?? []).map((e) => {
         const memory = memories[e.memory_index - 1];
         if (!memory) {
-          log28.warn(
+          log29.warn(
             "LLM referenced invalid memory_index in evidence",
             {
               memory_index: e.memory_index,
@@ -39907,7 +21488,7 @@ ${memorySummary}`
         };
       }).filter((e) => e.memory_id !== "unknown");
       if (f.evidence?.length > 0 && evidenceWithWarnings.length === 0) {
-        log28.warn("All evidence filtered due to invalid memory indices", {
+        log29.warn("All evidence filtered due to invalid memory indices", {
           finding_title: f.title,
           evidence_count: f.evidence.length
         });
@@ -39922,7 +21503,7 @@ ${memorySummary}`
       };
     });
   } catch (err) {
-    log28.error("Failed to parse archaeology findings", {
+    log29.error("Failed to parse archaeology findings", {
       error: err.message,
       responseLength: result.length,
       responsePreview: result.slice(0, 300),
@@ -39972,7 +21553,7 @@ async function getLastDigTimestamp() {
     `;
   return row?.latest ? new Date(row.latest) : null;
 }
-var import_crypto, log28, DEFAULT_MAX_MEMORIES, MEMORIES_PER_BATCH, ANALYSIS_TEMPERATURE, ANALYSIS_MAX_TOKENS, CHARS_PER_TOKEN_ESTIMATE, TOKEN_WARNING_THRESHOLD;
+var import_crypto, log29, DEFAULT_MAX_MEMORIES, MEMORIES_PER_BATCH, ANALYSIS_TEMPERATURE, ANALYSIS_MAX_TOKENS, CHARS_PER_TOKEN_ESTIMATE, TOKEN_WARNING_THRESHOLD;
 var init_memory_archaeology = __esm({
   "src/lib/ops/memory-archaeology.ts"() {
     "use strict";
@@ -39981,7 +21562,7 @@ var init_memory_archaeology = __esm({
     init_events2();
     init_logger();
     import_crypto = __toESM(require("crypto"));
-    log28 = logger.child({ module: "memory-archaeology" });
+    log29 = logger.child({ module: "memory-archaeology" });
     DEFAULT_MAX_MEMORIES = 100;
     MEMORIES_PER_BATCH = 25;
     ANALYSIS_TEMPERATURE = 0.7;
@@ -40055,8 +21636,8 @@ async function buildStepPrompt(kind, ctx, opts) {
   const prompt = header + body;
   return opts?.withVersion ? { prompt, templateVersion: null } : prompt;
 }
-function slugify2(text2) {
-  return text2.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30);
+function slugify2(text) {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30);
 }
 var TEMPLATE_CACHE_TTL_MS, templateCache, STEP_INSTRUCTIONS;
 var init_step_prompts = __esm({
@@ -40096,11 +21677,15 @@ Check file permissions, exposed ports, running services, or whatever the payload
 Write findings to output/reviews/${today}__audit__security__${slugify2(ctx.missionTitle)}__${ctx.agentId}__v01.md using file_write.
 Rate findings by severity: critical, high, medium, low, info.
 `,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      patch_code: (_ctx) => `Read the relevant source files from projects/ using file_read.
-Use bash to make code changes as described in the payload.
-Write changed files using file_write to the projects/ directory.
-Provide a summary of all changes made and why.
+      patch_code: (ctx, today, outputDir) => `You are working in the subcult-corp repo at /workspace/projects/subcult-corp/.
+Use bash to run: cd /workspace/projects/subcult-corp && git status
+Read the relevant source files using file_read.
+Make changes as described in the payload using file_write.
+After writing changes, use bash to run build checks:
+  cd /workspace/projects/subcult-corp && npx tsc --noEmit 2>&1 | head -30
+If the build passes, commit your changes:
+  cd /workspace/projects/subcult-corp && git add -A && git commit -m "${ctx.missionTitle}"
+Write a change log to ${outputDir}/${today}__patch__code__${slugify2(ctx.missionTitle)}__${ctx.agentId}__v01.md using file_write.
 `,
       distill_insight: (ctx, today) => `Read recent outputs from output/ and agents/${ctx.agentId}/notes/ using file_read.
 Synthesize into a concise digest of key insights.
@@ -40119,6 +21704,40 @@ Provide a summary of what the roundtable should discuss and why.
       propose_workflow: (_ctx) => `Based on the payload, propose a multi-step workflow.
 Each step should specify: agent, step kind, and expected output.
 Write the workflow proposal as a structured plan.
+`,
+      draft_product_spec: (ctx, today) => `Read recent research notes and roundtable artifacts from agents/ and output/ using file_read.
+Look for brainstorm sessions, strategy discussions, and signal reports.
+Draft a structured product specification document with:
+  - YAML front matter (artifact_id, created_at, agent_id, status: "draft")
+  - Problem statement
+  - Proposed solution
+  - User stories / use cases
+  - Technical requirements
+  - Success metrics
+  - Open questions
+Write the spec to output/reports/${today}__product__spec__${slugify2(ctx.missionTitle)}__${ctx.agentId}__v01.md using file_write.
+`,
+      update_directive: (ctx, today) => `Read the current prime directive from shared/prime-directive.md using file_read.
+Read any recent product specs from output/reports/ using file_read (look for product__spec files).
+Read recent strategy roundtable artifacts from output/ using file_read.
+Based on the current state of the project, write an updated prime directive.
+The directive should:
+  - Reflect the current product direction
+  - Set clear priorities and focus areas
+  - Define success criteria for the current period
+  - Be concise and actionable (under 500 words)
+Write the updated directive to shared/prime-directive.md using file_write.
+Also write a changelog entry to agents/primus/notes/${today}__directive__update__${slugify2(ctx.missionTitle)}__${ctx.agentId}__v01.md.
+`,
+      create_pull_request: (ctx, today, outputDir) => `You are creating a pull request from the agents/workspace branch.
+Use bash to check the diff:
+  cd /workspace/projects/subcult-corp && git diff --stat HEAD~5
+  cd /workspace/projects/subcult-corp && git log --oneline -10
+If GITHUB_TOKEN is set, push and create a PR:
+  cd /workspace/projects/subcult-corp && git push -u origin agents/workspace 2>&1
+  cd /workspace/projects/subcult-corp && gh pr create --base main --head agents/workspace --title "${ctx.missionTitle}" --body "Auto-generated by agent workflow" 2>&1
+If GITHUB_TOKEN is NOT set or push fails, write a PR summary to ${outputDir}/${today}__pr__summary__${slugify2(ctx.missionTitle)}__${ctx.agentId}__v01.md using file_write.
+The summary should include: branch name, commit list, diff stats, and a description of all changes.
 `,
       memory_archaeology: (ctx, today, outputDir) => `Perform a memory archaeology dig to analyze agent memories for patterns, contradictions, emergence, echoes, and drift.
 Use the memory_search tool to retrieve relevant memories from the collective.
@@ -40151,7 +21770,7 @@ __export(agent_designer_exports, {
   setHumanApproval: () => setHumanApproval
 });
 async function generateAgentProposal(proposerId) {
-  log29.info("Generating agent proposal", { proposer: proposerId });
+  log30.info("Generating agent proposal", { proposer: proposerId });
   const agents = await sql`
         SELECT agent_id, display_name, role
         FROM ops_agent_registry
@@ -40176,7 +21795,7 @@ async function generateAgentProposal(proposerId) {
         WHERE status IN ('proposed', 'voting')
     `;
   if (pendingCount.count >= 2) {
-    log29.info("Skipping proposal \u2014 too many pending proposals", {
+    log30.info("Skipping proposal \u2014 too many pending proposals", {
       pending: pendingCount.count
     });
     throw new Error(
@@ -40247,7 +21866,7 @@ Respond with valid JSON only, no markdown fencing:
     if (!jsonMatch) throw new Error("No JSON found in LLM response");
     parsed = JSON.parse(jsonMatch[0]);
   } catch (err) {
-    log29.error("Failed to parse agent proposal from LLM", {
+    log30.error("Failed to parse agent proposal from LLM", {
       error: err,
       responsePreview: result.slice(0, 200)
     });
@@ -40328,7 +21947,7 @@ async function saveProposal(proposal, proposerId) {
         )
         RETURNING id
     `;
-  log29.info("Agent proposal saved", {
+  log30.info("Agent proposal saved", {
     id: row.id,
     proposer: proposerId,
     agentName: proposal.agent_name
@@ -40379,9 +21998,9 @@ async function setHumanApproval(proposalId, approved) {
         SET human_approved = ${approved}
         WHERE id = ${proposalId}
     `;
-  log29.info("Human approval set", { proposalId, approved });
+  log30.info("Human approval set", { proposalId, approved });
 }
-var log29;
+var log30;
 var init_agent_designer = __esm({
   "src/lib/ops/agent-designer.ts"() {
     "use strict";
@@ -40389,12 +22008,22 @@ var init_agent_designer = __esm({
     init_client();
     init_events2();
     init_logger();
-    log29 = logger.child({ module: "agent-designer" });
+    log30 = logger.child({ module: "agent-designer" });
   }
 });
 
+// node_modules/dotenv/config.js
+(function() {
+  require_main().config(
+    Object.assign(
+      {},
+      require_env_options(),
+      require_cli_options()(process.argv)
+    )
+  );
+})();
+
 // scripts/unified-worker/index.ts
-var import_config3 = require("dotenv/config");
 var import_postgres2 = __toESM(require("postgres"));
 var import_promises = __toESM(require("fs/promises"));
 var import_path = __toESM(require("path"));
@@ -40614,8 +22243,8 @@ var WRITE_ACLS = {
   chora: ["agents/chora/", "output/reports/", "output/briefings/", "output/digests/"],
   subrosa: ["agents/subrosa/", "output/reviews/"],
   thaum: ["agents/thaum/", "output/"],
-  praxis: ["agents/praxis/", "output/"],
-  mux: ["agents/mux/", "output/"],
+  praxis: ["agents/praxis/", "output/", "projects/subcult-corp/"],
+  mux: ["agents/mux/", "output/", "projects/subcult-corp/"],
   primus: ["agents/primus/", "shared/", "output/"]
 };
 var DROID_PREFIX = "droids/";
@@ -40966,13 +22595,13 @@ init_logger();
 var log22 = logger.child({ module: "memory-search" });
 var OLLAMA_BASE_URL2 = process.env.OLLAMA_BASE_URL ?? "";
 var EMBEDDING_MODEL2 = "bge-m3";
-async function getEmbedding2(text2) {
+async function getEmbedding2(text) {
   if (!OLLAMA_BASE_URL2) return null;
   try {
     const response = await fetch(`${OLLAMA_BASE_URL2}/v1/embeddings`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: EMBEDDING_MODEL2, input: text2 }),
+      body: JSON.stringify({ model: EMBEDDING_MODEL2, input: text }),
       signal: AbortSignal.timeout(1e4)
     });
     if (!response.ok) return null;
@@ -41498,20 +23127,20 @@ init_situational_briefing();
 init_prime_directive();
 init_logger();
 var log26 = logger.child({ module: "agent-session" });
-function sanitizeSummary(text2) {
-  return text2.replace(/<\/?[a-z_][a-z0-9_-]*(?:\s[^>]*)?\s*>/gi, "").replace(/\s{2,}/g, " ").trim();
+function sanitizeSummary(text) {
+  return text.replace(/<[｜|]DSML[｜|]/g, "<").replace(/<\/[｜|]DSML[｜|]/g, "</").replace(/<\/?[a-z_][a-z0-9_-]*(?:\s[^>]*)?\s*>/gi, "").replace(/\s{2,}/g, " ").trim();
 }
-function truncateToFirstSentences(text2, maxLen) {
-  const clean = text2.replace(/<\/?[a-z_][a-z0-9_-]*(?:\s[^>]*)?\s*>/gi, "").replace(/^#+\s+.+$/gm, "").replace(/\n{2,}/g, "\n").trim();
+function truncateToFirstSentences(text, maxLen) {
+  const clean = text.replace(/<\/?[a-z_][a-z0-9_-]*(?:\s[^>]*)?\s*>/gi, "").replace(/^#+\s+.+$/gm, "").replace(/\n{2,}/g, "\n").trim();
   if (clean.length <= maxLen) return clean;
   const truncated = clean.slice(0, maxLen);
-  const lastSentence = Math.max(
-    truncated.lastIndexOf(". "),
-    truncated.lastIndexOf(".\n"),
-    truncated.lastIndexOf("? "),
-    truncated.lastIndexOf("! ")
-  );
-  if (lastSentence > maxLen * 0.3) return truncated.slice(0, lastSentence + 1);
+  const sentenceEnd = truncated.search(/[.!?][*_)\]]*[\s\n](?=[^\s])[^]*$/);
+  if (sentenceEnd > maxLen * 0.3) {
+    const endMatch = truncated.slice(sentenceEnd).match(/^[.!?][*_)\]]*/);
+    return truncated.slice(0, sentenceEnd + (endMatch?.[0].length ?? 1));
+  }
+  const lastNewline = truncated.lastIndexOf("\n");
+  if (lastNewline > maxLen * 0.5) return truncated.slice(0, lastNewline);
   return truncated + "...";
 }
 async function executeAgentSession(session) {
@@ -41625,7 +23254,7 @@ ${briefing}
       const result = await llmGenerateWithTools({
         messages,
         temperature: 0.7,
-        maxTokens: 2e3,
+        maxTokens: 16e3,
         model: session.model ?? void 0,
         tools: tools.length > 0 ? tools : void 0,
         maxToolRounds: 1,
@@ -41664,7 +23293,7 @@ Continue with your task. If you're done, provide a final summary.`
       summary: sanitizeSummary(cleanedText),
       rounds: llmRounds
     }, allToolCalls, llmRounds, totalTokens, totalCost);
-    const summaryPreview = truncateToFirstSentences(cleanedText, 200);
+    const summaryPreview = truncateToFirstSentences(cleanedText, 2e3);
     await emitEvent({
       agent_id: agentId,
       kind: "agent_session_completed",
@@ -41725,14 +23354,14 @@ async function completeSession(sessionId, status, result, toolCalls, llmRounds, 
 // scripts/unified-worker/index.ts
 init_logger();
 init_formats();
-var log30 = createLogger({ service: "unified-worker" });
+var log31 = createLogger({ service: "unified-worker" });
 var WORKER_ID = `unified-${process.pid}`;
 if (!process.env.DATABASE_URL) {
-  log30.fatal("Missing DATABASE_URL");
+  log31.fatal("Missing DATABASE_URL");
   process.exit(1);
 }
 if (!process.env.OPENROUTER_API_KEY) {
-  log30.fatal("Missing OPENROUTER_API_KEY");
+  log31.fatal("Missing OPENROUTER_API_KEY");
   process.exit(1);
 }
 var sql2 = (0, import_postgres2.default)(process.env.DATABASE_URL, {
@@ -41754,7 +23383,7 @@ async function pollAgentSessions() {
         RETURNING *
     `;
   if (!session) return false;
-  log30.info("Processing agent session", {
+  log31.info("Processing agent session", {
     sessionId: session.id,
     agent: session.agent_id,
     source: session.source
@@ -41792,7 +23421,7 @@ async function pollAgentSessions() {
               rtSession.topic
             );
             if (actionCount > 0) {
-              log30.info("Actions extracted from roundtable artifact", {
+              log31.info("Actions extracted from roundtable artifact", {
                 sessionId: session.id,
                 roundtableId: session.source_id,
                 format: rtSession.format,
@@ -41801,7 +23430,7 @@ async function pollAgentSessions() {
             }
           }
         } catch (extractErr) {
-          log30.error("Action extraction failed (non-fatal)", {
+          log31.error("Action extraction failed (non-fatal)", {
             error: extractErr,
             sessionId: session.id
           });
@@ -41825,13 +23454,13 @@ async function pollAgentSessions() {
               await import_promises.default.mkdir(import_path.default.dirname(filePath), { recursive: true });
               const fileExists = await import_promises.default.access(filePath).then(() => true, () => false);
               if (fileExists) {
-                log30.info("Artifact file already exists (written by synthesis agent)", {
+                log31.info("Artifact file already exists (written by synthesis agent)", {
                   sessionId: session.id,
                   path: filePath
                 });
               } else {
                 await import_promises.default.writeFile(filePath, artifactText, "utf-8");
-                log30.info("Artifact file written to workspace", {
+                log31.info("Artifact file written to workspace", {
                   sessionId: session.id,
                   path: filePath,
                   format: rtSession.format,
@@ -41841,7 +23470,7 @@ async function pollAgentSessions() {
             }
           }
         } catch (fileErr) {
-          log30.error("Artifact file write failed (non-fatal)", {
+          log31.error("Artifact file write failed (non-fatal)", {
             error: fileErr,
             sessionId: session.id
           });
@@ -41885,7 +23514,7 @@ async function pollAgentSessions() {
                                 )
                                 RETURNING id
                             `;
-              log30.info("Content draft created from synthesis", {
+              log31.info("Content draft created from synthesis", {
                 draftId: draft.id,
                 sessionId: session.id,
                 roundtableId: session.source_id,
@@ -41911,7 +23540,7 @@ async function pollAgentSessions() {
             }
           }
         } catch (draftErr) {
-          log30.error("Content draft creation failed (non-fatal)", {
+          log31.error("Content draft creation failed (non-fatal)", {
             error: draftErr,
             sessionId: session.id
           });
@@ -41919,7 +23548,7 @@ async function pollAgentSessions() {
       }
     }
   } catch (err) {
-    log30.error("Agent session execution failed", {
+    log31.error("Agent session execution failed", {
       error: err,
       sessionId: session.id
     });
@@ -41956,13 +23585,27 @@ async function pollRoundtables() {
         SET status = 'pending'
         WHERE id = ${session.id}
     `;
-  log30.info("Processing roundtable", {
+  log31.info("Processing roundtable", {
     sessionId: session.id,
     format: session.format,
     topic: session.topic.slice(0, 80)
   });
   try {
     await orchestrateConversation(session, true);
+    if (session.format === "content_review") {
+      try {
+        const { processReviewSession: processReviewSession2 } = await Promise.resolve().then(() => (init_content_pipeline(), content_pipeline_exports));
+        await processReviewSession2(session.id);
+        log31.info("Content review processed", {
+          sessionId: session.id
+        });
+      } catch (reviewErr) {
+        log31.error("Content review processing failed (non-fatal)", {
+          error: reviewErr,
+          sessionId: session.id
+        });
+      }
+    }
     const proposalId = session.metadata?.governance_proposal_id;
     if (session.format === "debate" && proposalId) {
       try {
@@ -42008,7 +23651,7 @@ ${transcript}`
                 );
               }
             }
-            log30.info("Governance votes extracted from debate", {
+            log31.info("Governance votes extracted from debate", {
               sessionId: session.id,
               proposalId,
               voteCount: votes.length
@@ -42016,7 +23659,7 @@ ${transcript}`
           }
         }
       } catch (govErr) {
-        log30.error("Governance vote extraction failed (non-fatal)", {
+        log31.error("Governance vote extraction failed (non-fatal)", {
           error: govErr,
           sessionId: session.id,
           proposalId
@@ -42033,13 +23676,13 @@ ${transcript}`
             rebellionAgentId,
             "cross_exam_completed"
           );
-          log30.info("Rebellion resolved via cross-exam", {
+          log31.info("Rebellion resolved via cross-exam", {
             sessionId: session.id,
             rebellionAgentId
           });
         }
       } catch (rebellionErr) {
-        log30.error(
+        log31.error(
           "Rebellion resolution from cross-exam failed (non-fatal)",
           {
             error: rebellionErr,
@@ -42050,7 +23693,7 @@ ${transcript}`
       }
     }
   } catch (err) {
-    log30.error("Roundtable orchestration failed", {
+    log31.error("Roundtable orchestration failed", {
       error: err,
       sessionId: session.id
     });
@@ -42079,7 +23722,7 @@ async function pollMissionSteps() {
         RETURNING *
     `;
   if (!step) return false;
-  log30.info("Processing mission step", {
+  log31.info("Processing mission step", {
     stepId: step.id,
     kind: step.kind,
     missionId: step.mission_id
@@ -42088,7 +23731,7 @@ async function pollMissionSteps() {
     const { hasActiveVeto: hasActiveVeto2 } = await Promise.resolve().then(() => (init_veto(), veto_exports));
     const missionVeto = await hasActiveVeto2("mission", step.mission_id);
     if (missionVeto.vetoed) {
-      log30.info("Mission step blocked by veto on mission", {
+      log31.info("Mission step blocked by veto on mission", {
         stepId: step.id,
         missionId: step.mission_id,
         vetoId: missionVeto.vetoId,
@@ -42107,7 +23750,7 @@ async function pollMissionSteps() {
     }
     const stepVeto = await hasActiveVeto2("step", step.id);
     if (stepVeto.vetoed) {
-      log30.info("Mission step blocked by veto on step", {
+      log31.info("Mission step blocked by veto on step", {
         stepId: step.id,
         vetoId: stepVeto.vetoId,
         severity: stepVeto.severity
@@ -42124,7 +23767,7 @@ async function pollMissionSteps() {
       return true;
     }
   } catch (vetoErr) {
-    log30.error("Veto check failed (non-fatal, allowing step)", {
+    log31.error("Veto check failed (non-fatal, allowing step)", {
       error: vetoErr,
       stepId: step.id
     });
@@ -42169,6 +23812,47 @@ async function pollMissionSteps() {
       await finalizeMissionIfComplete(step.mission_id);
       return true;
     }
+    if (step.kind === "convene_roundtable") {
+      const payload = step.payload ?? {};
+      const format = payload.format ?? "brainstorm";
+      const topic = payload.topic ?? mission?.title ?? "Roundtable";
+      const participants = payload.participants ?? ["chora", "subrosa", "thaum", "praxis", "mux"];
+      await sql2`
+                INSERT INTO ops_roundtable_sessions (
+                    format, topic, participants, status, scheduled_for, source, metadata
+                ) VALUES (
+                    ${format},
+                    ${topic},
+                    ${participants},
+                    'pending',
+                    NOW(),
+                    'mission',
+                    ${sql2.json({ mission_id: step.mission_id, step_id: step.id })}::jsonb
+                )
+            `;
+      await sql2`
+                UPDATE ops_mission_steps
+                SET status = 'succeeded',
+                    result = ${sql2.json({ action: "roundtable_enqueued", format, topic })}::jsonb,
+                    completed_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = ${step.id}
+            `;
+      await emitEvent2({
+        agent_id: agentId,
+        kind: "roundtable_enqueued",
+        title: `Roundtable enqueued: ${format} \u2014 ${topic.slice(0, 80)}`,
+        tags: ["mission", "roundtable", "enqueued"],
+        metadata: {
+          missionId: step.mission_id,
+          stepId: step.id,
+          format,
+          topic
+        }
+      });
+      await finalizeMissionIfComplete(step.mission_id);
+      return true;
+    }
     const { buildStepPrompt: buildStepPrompt2 } = await Promise.resolve().then(() => (init_step_prompts(), step_prompts_exports));
     const { prompt, templateVersion } = await buildStepPrompt2(
       step.kind,
@@ -42195,7 +23879,7 @@ async function pollMissionSteps() {
                     VALUES (${agentId}, ${outputPrefix}, 'mission', ${step.mission_id}::uuid, NOW() + INTERVAL '4 hours')
                 `;
       } catch (grantErr) {
-        log30.warn("Failed to create ACL grant for step", {
+        log31.warn("Failed to create ACL grant for step", {
           error: grantErr,
           agentId,
           outputPath: step.output_path
@@ -42220,6 +23904,7 @@ async function pollMissionSteps() {
     await sql2`
             UPDATE ops_mission_steps
             SET result = ${sql2.json({ agent_session_id: session.id, agent: agentId })}::jsonb,
+                assigned_agent = COALESCE(assigned_agent, ${agentId}),
                 updated_at = NOW()
             WHERE id = ${step.id}
         `;
@@ -42236,7 +23921,7 @@ async function pollMissionSteps() {
       }
     });
   } catch (err) {
-    log30.error("Mission step failed", { error: err, stepId: step.id });
+    log31.error("Mission step failed", { error: err, stepId: step.id });
     const stepData = await sql2`
             SELECT result FROM ops_mission_steps WHERE id = ${step.id}
         `;
@@ -42263,13 +23948,34 @@ async function pollMissionSteps() {
   }
   return true;
 }
+var RESEARCH_STEP_KINDS = /* @__PURE__ */ new Set([
+  "research_topic",
+  "scan_signals",
+  "analyze_discourse",
+  "classify_pattern",
+  "trace_incentive",
+  "identify_assumption"
+]);
+var INSIGHT_STEP_KINDS = /* @__PURE__ */ new Set([
+  "distill_insight",
+  "consolidate_memory",
+  "document_lesson",
+  "memory_archaeology"
+]);
 async function finalizeMissionSteps() {
   const steps = await sql2`
         SELECT
             s.id,
             s.mission_id,
+            s.kind,
+            s.assigned_agent,
+            sess.agent_id as session_agent_id,
             sess.status as session_status,
-            sess.error as session_error
+            sess.error as session_error,
+            CASE WHEN sess.status = 'succeeded'
+                THEN LEFT(sess.result->>'summary', 2000)
+                ELSE NULL
+            END as session_summary
         FROM ops_mission_steps s
         LEFT JOIN ops_agent_sessions sess ON sess.id = (s.result->>'agent_session_id')::uuid
         WHERE s.status = 'running'
@@ -42288,12 +23994,35 @@ async function finalizeMissionSteps() {
                 WHERE id = ${step.id}
             `;
       finalized++;
+      const resolvedAgent = step.assigned_agent || step.session_agent_id;
+      if (resolvedAgent) {
+        const { emitEvent: emitStepEvent } = await Promise.resolve().then(() => (init_events2(), events_exports2));
+        if (RESEARCH_STEP_KINDS.has(step.kind)) {
+          await emitStepEvent({
+            agent_id: resolvedAgent,
+            kind: "research_completed",
+            title: `Research completed: ${step.kind}`,
+            summary: step.session_summary || void 0,
+            tags: ["research", step.kind, "completed"],
+            metadata: { missionId: step.mission_id, stepId: step.id, stepKind: step.kind }
+          });
+        } else if (INSIGHT_STEP_KINDS.has(step.kind)) {
+          await emitStepEvent({
+            agent_id: resolvedAgent,
+            kind: "insight_generated",
+            title: `Insight generated: ${step.kind}`,
+            summary: step.session_summary || void 0,
+            tags: ["insight", step.kind, "completed"],
+            metadata: { missionId: step.mission_id, stepId: step.id, stepKind: step.kind }
+          });
+        }
+      }
       await finalizeMissionIfComplete(step.mission_id);
-    } else if (step.session_status === "failed") {
+    } else if (step.session_status === "failed" || step.session_status === "timed_out") {
       await sql2`
                 UPDATE ops_mission_steps
                 SET status = 'failed',
-                    failure_reason = ${step.session_error ?? "Agent session failed"},
+                    failure_reason = ${step.session_error ?? (step.session_status === "timed_out" ? "Agent session timed out" : "Agent session failed")},
                     completed_at = NOW(),
                     updated_at = NOW()
                 WHERE id = ${step.id}
@@ -42318,14 +24047,14 @@ async function pollInitiatives() {
         RETURNING *
     `;
   if (!entry) return false;
-  log30.info("Processing initiative", {
+  log31.info("Processing initiative", {
     entryId: entry.id,
     agent: entry.agent_id
   });
   try {
     const initiativeAction = entry.context?.action;
     if (initiativeAction === "agent_design_proposal") {
-      log30.info("Processing agent design proposal", {
+      log31.info("Processing agent design proposal", {
         entryId: entry.id,
         agent: entry.agent_id
       });
@@ -42345,7 +24074,7 @@ async function pollInitiatives() {
       return true;
     }
     if (initiativeAction === "memory_archaeology") {
-      log30.info("Processing memory archaeology dig", {
+      log31.info("Processing memory archaeology dig", {
         entryId: entry.id,
         agent: entry.agent_id
       });
@@ -42446,7 +24175,7 @@ Format as JSON: { "title": "...", "description": "...", "steps": [{ "kind": "<va
             WHERE id = ${entry.id}
         `;
   } catch (err) {
-    log30.error("Initiative processing failed", {
+    log31.error("Initiative processing failed", {
       error: err,
       entryId: entry.id
     });
@@ -42459,6 +24188,24 @@ Format as JSON: { "title": "...", "description": "...", "steps": [{ "kind": "<va
         `;
   }
   return true;
+}
+async function sweepStaleAgentSessions() {
+  const stale = await sql2`
+        UPDATE ops_agent_sessions
+        SET status = 'timed_out',
+            error = 'Swept by worker — session exceeded timeout while running',
+            completed_at = NOW()
+        WHERE status = 'running'
+          AND started_at < NOW() - COALESCE(timeout_seconds, 300) * INTERVAL '1 second' - INTERVAL '5 minutes'
+        RETURNING id, agent_id, source
+    `;
+  if (stale.length > 0) {
+    log31.warn("Swept stale agent sessions", {
+      count: stale.length,
+      sessions: stale.map((s) => ({ id: s.id, agent: s.agent_id, source: s.source }))
+    });
+  }
+  return stale.length > 0;
 }
 async function finalizeMissionIfComplete(missionId) {
   const [counts] = await sql2`
@@ -42481,11 +24228,89 @@ async function finalizeMissionIfComplete(missionId) {
             completed_at = NOW(),
             updated_at = NOW()
         WHERE id = ${missionId}
-        AND status = 'running'
+        AND status IN ('running', 'approved')
     `;
 }
+async function waitForDb(maxRetries = 30, intervalMs = 2e3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await sql2`SELECT 1 FROM ops_roundtable_sessions LIMIT 0`;
+      log31.info("Database ready", { attempt });
+      return;
+    } catch {
+      if (attempt === maxRetries) {
+        throw new Error(`Database not ready after ${maxRetries} attempts`);
+      }
+      log31.info("Waiting for database...", { attempt, maxRetries });
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+  }
+}
 var running = true;
+async function catchUpStuckReviews() {
+  const stuck = await sql2`
+        SELECT d.id, d.review_session_id, d.title
+        FROM ops_content_drafts d
+        JOIN ops_roundtable_sessions rs ON rs.id = d.review_session_id
+        WHERE d.status = 'review'
+          AND rs.status = 'completed'
+    `;
+  if (stuck.length === 0) return;
+  log31.info("Catching up stuck content reviews", { count: stuck.length });
+  const { processReviewSession: processReviewSession2 } = await Promise.resolve().then(() => (init_content_pipeline(), content_pipeline_exports));
+  for (const draft of stuck) {
+    try {
+      await processReviewSession2(draft.review_session_id);
+      log31.info("Stuck review processed", {
+        draftId: draft.id,
+        title: draft.title
+      });
+    } catch (err) {
+      log31.error("Failed to process stuck review", {
+        error: err,
+        draftId: draft.id
+      });
+    }
+  }
+}
+async function catchUpOrphanedMissions() {
+  const orphaned = await sql2`
+        SELECT m.id, m.title,
+            COUNT(s.id)::int as total,
+            COUNT(s.id) FILTER (WHERE s.status = 'succeeded')::int as succeeded,
+            COUNT(s.id) FILTER (WHERE s.status = 'failed')::int as failed
+        FROM ops_missions m
+        LEFT JOIN ops_mission_steps s ON s.mission_id = m.id
+        WHERE m.status = 'approved'
+        GROUP BY m.id
+        HAVING COUNT(s.id) > 0
+           AND COUNT(s.id) = COUNT(s.id) FILTER (WHERE s.status IN ('succeeded', 'failed'))
+    `;
+  if (orphaned.length === 0) return;
+  log31.info("Catching up orphaned missions", { count: orphaned.length });
+  for (const mission of orphaned) {
+    const finalStatus = mission.failed > 0 ? "failed" : "succeeded";
+    const failReason = mission.failed > 0 ? `${mission.failed} of ${mission.total} step(s) failed` : null;
+    await sql2`
+            UPDATE ops_missions
+            SET status = ${finalStatus},
+                failure_reason = ${failReason},
+                completed_at = NOW(),
+                updated_at = NOW()
+            WHERE id = ${mission.id}
+            AND status = 'approved'
+        `;
+    log31.info("Orphaned mission finalized", {
+      missionId: mission.id,
+      title: mission.title,
+      status: finalStatus
+    });
+  }
+}
 async function pollLoop() {
+  await waitForDb();
+  await catchUpStuckReviews();
+  await catchUpOrphanedMissions();
   while (running) {
     try {
       await pollRoundtables();
@@ -42493,24 +24318,25 @@ async function pollLoop() {
       if (hadSession) continue;
       await pollMissionSteps();
       await finalizeMissionSteps();
+      await sweepStaleAgentSessions();
       await pollInitiatives();
     } catch (err) {
-      log30.error("Poll loop error", { error: err });
+      log31.error("Poll loop error", { error: err });
     }
     await new Promise((resolve) => setTimeout(resolve, 15e3));
   }
 }
 function shutdown(signal) {
-  log30.info(`Received ${signal}, shutting down...`);
+  log31.info(`Received ${signal}, shutting down...`);
   running = false;
   setTimeout(() => {
-    log30.warn("Forced shutdown after 30s timeout");
+    log31.warn("Forced shutdown after 30s timeout");
     process.exit(1);
   }, 3e4);
 }
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
-log30.info("Unified worker started", {
+log31.info("Unified worker started", {
   workerId: WORKER_ID,
   database: !!process.env.DATABASE_URL,
   openrouter: !!process.env.OPENROUTER_API_KEY,
@@ -42518,10 +24344,9 @@ log30.info("Unified worker started", {
   braveSearch: !!process.env.BRAVE_API_KEY
 });
 pollLoop().then(() => {
-  log30.info("Worker stopped");
+  log31.info("Worker stopped");
   process.exit(0);
 }).catch((err) => {
-  log30.fatal("Fatal error", { error: err });
+  log31.fatal("Fatal error", { error: err });
   process.exit(1);
 });
-//# sourceMappingURL=index.js.map

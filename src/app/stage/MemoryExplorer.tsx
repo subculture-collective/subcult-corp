@@ -12,6 +12,7 @@ import {
 import { AGENTS } from '@/lib/agents';
 import type { AgentId, MemoryType, MemoryEntry } from '@/lib/types';
 import { AgentAvatar } from './AgentAvatar';
+import { MarkdownContent } from '@/components/MarkdownContent';
 
 type ExplorerTab = 'memories' | 'archaeology';
 
@@ -645,13 +646,13 @@ function MemoryCard({
                             {formatRelativeTime(memory.created_at)}
                         </span>
                     </div>
-                    <p
-                        className={`text-sm text-zinc-200 leading-snug ${
+                    <div
+                        className={`text-sm text-zinc-200 ${
                             !isExpanded ? 'line-clamp-2' : ''
                         }`}
                     >
-                        {memory.content}
-                    </p>
+                        <MarkdownContent>{memory.content}</MarkdownContent>
+                    </div>
 
                     {/* Confidence bar */}
                     <div className='mt-2 max-w-48'>
@@ -774,9 +775,9 @@ function MemoryCard({
                         <div className='text-[10px] uppercase tracking-wider text-zinc-500 mb-1'>
                             Full Content
                         </div>
-                        <p className='text-xs text-zinc-300 leading-relaxed whitespace-pre-wrap'>
-                            {memory.content}
-                        </p>
+                        <div className='text-xs text-zinc-300'>
+                            <MarkdownContent>{memory.content}</MarkdownContent>
+                        </div>
                     </div>
                 </div>
             )}

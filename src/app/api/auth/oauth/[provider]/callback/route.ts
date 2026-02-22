@@ -9,8 +9,9 @@ import { ensureCsrfToken } from '@/lib/auth/csrf';
 
 export const dynamic = 'force-dynamic';
 
-const VALID_PROVIDERS = new Set<OAuthProvider>(['github', 'discord']);
+const VALID_PROVIDERS = new Set<OAuthProvider>(['github', 'discord', 'openai']);
 const STATE_COOKIE = 'oauth_state';
+const PKCE_COOKIE = 'oauth_pkce';
 
 export async function GET(
     req: NextRequest,
@@ -41,13 +42,17 @@ export async function GET(
     const savedState = jar.get(STATE_COOKIE)?.value;
     jar.delete(STATE_COOKIE);
 
+    // Read + clear PKCE verifier cookie (if present)
+    const codeVerifier = jar.get(PKCE_COOKIE)?.value;
+    if (codeVerifier) jar.delete(PKCE_COOKIE);
+
     if (!savedState || savedState !== state) {
         return NextResponse.redirect(new URL('/stage?auth_error=invalid_state', req.url));
     }
 
     try {
         // Exchange code for user info
-        const providerData = await exchangeCode(provider as OAuthProvider, code);
+        const providerData = await exchangeCode(provider as OAuthProvider, code, codeVerifier);
 
         if (!providerData) {
             return NextResponse.redirect(new URL('/stage?auth_error=exchange_failed', req.url));

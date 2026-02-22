@@ -45,6 +45,12 @@ export default function LearnLayout({
                         >
                             Directory
                         </Link>
+                        <Link
+                            href='/learn/alternatives'
+                            className='hover:text-zinc-300 transition-colors'
+                        >
+                            Alternatives
+                        </Link>
                         <span className='text-zinc-800'>|</span>
                         <Link
                             href='/blog'

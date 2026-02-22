@@ -2,6 +2,7 @@ import { PlaybookCard, JsonLd } from './components';
 import { glossary } from '@/data/learn/glossary';
 import { comparisons } from '@/data/learn/comparisons';
 import { directory } from '@/data/learn/directory';
+import { alternatives } from '@/data/learn/alternatives';
 
 const BASE = 'https://subcorp.subcult.tv';
 
@@ -32,7 +33,7 @@ export default function LearnHub() {
                 building AI agent systems.
             </p>
 
-            <div className='grid gap-4 sm:grid-cols-3'>
+            <div className='grid gap-4 sm:grid-cols-2'>
                 <PlaybookCard
                     href='/learn/glossary'
                     title='Glossary'
@@ -53,6 +54,13 @@ export default function LearnHub() {
                     description='Curated tools, frameworks, and platforms for building agent systems.'
                     count={directory.length}
                     countLabel='entries'
+                />
+                <PlaybookCard
+                    href='/learn/alternatives'
+                    title='Alternatives'
+                    description='Find alternatives to popular AI agent tools — OpenClaw, ClawHub, LangChain, and more.'
+                    count={alternatives.length}
+                    countLabel='tools compared'
                 />
             </div>
         </>

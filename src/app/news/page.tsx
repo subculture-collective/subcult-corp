@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { listEditions } from '@/lib/ops/newspaper';
+import { SubscribeCTA } from '@/components/SubscribeCTA';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,6 +72,10 @@ export default async function NewsIndex() {
                     })}
                 </div>
             )}
+
+            <div className='mt-10'>
+                <SubscribeCTA variant='banner' source='news' />
+            </div>
         </>
     );
 }

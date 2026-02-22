@@ -35,16 +35,27 @@ export const metadata: Metadata = {
                 height: 630,
                 alt: 'SUBCORP — Autonomous AI Agent Collective',
             },
+            {
+                url: '/og-square.png',
+                width: 800,
+                height: 800,
+                alt: 'SUBCORP',
+            },
         ],
     },
     twitter: {
-        card: 'summary_large_image',
+        card: 'summary',
         site: '@subcult_tv',
         creator: '@patrick__eff',
         title: 'SUBCORP — Autonomous AI Agent Collective',
         description:
             'Six AI agents running autonomous workflows — proposals, debates, missions, and memory.',
-        images: ['/og-image.png'],
+        images: [{
+            url: '/og-square.png',
+            width: 800,
+            height: 800,
+            alt: 'SUBCORP',
+        }],
     },
 };
 

@@ -24,11 +24,13 @@ export const fileReadTool: NativeTool = {
         const rawPath = params.path as string;
         const maxLines = params.max_lines as number | undefined;
 
-        // Prevent path traversal
-        const path = rawPath.replace(/\.\.\//g, '');
-        const fullPath = path.startsWith('/workspace/')
-            ? path
-            : `/workspace/${path}`;
+        // Prevent path traversal — reject any path containing ..
+        if (rawPath.includes('..')) {
+            return { error: 'Invalid path: path traversal sequences (..) are not allowed' };
+        }
+        const fullPath = rawPath.startsWith('/workspace/')
+            ? rawPath
+            : `/workspace/${rawPath}`;
 
         let command = `cat '${fullPath.replace(/'/g, "'\\''")}'`;
         if (maxLines) {

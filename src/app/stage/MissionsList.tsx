@@ -12,6 +12,7 @@ import {
     BanIcon,
 } from '@/lib/icons';
 import type { Mission, MissionStep } from '@/lib/types';
+import { MarkdownContent } from '@/components/MarkdownContent';
 
 const STATUS_STYLES: Record<string, string> = {
     approved: 'bg-accent-blue/30 text-accent-blue border-accent-blue/30',
@@ -110,9 +111,9 @@ function MissionCard({
             {expanded && (
                 <div className='border-t border-zinc-800 px-4 py-3 space-y-3'>
                     {mission.description && (
-                        <p className='text-xs text-zinc-400'>
-                            {mission.description}
-                        </p>
+                        <div className='text-xs text-zinc-400'>
+                            <MarkdownContent>{mission.description}</MarkdownContent>
+                        </div>
                     )}
 
                     {/* Steps */}

@@ -1,10 +1,12 @@
 // ContentPipeline — Kanban board for content drafts
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useContent, type ContentDraft, type ContentStatus, type ContentType } from './hooks';
+import { useAuth } from '@/lib/auth/client';
 import { AGENTS } from '@/lib/agents';
 import type { AgentId } from '@/lib/types';
+import { MarkdownContent } from '@/components/MarkdownContent';
 
 // ─── Constants ───
 
@@ -85,15 +87,50 @@ function DraftCard({
 
 // ─── DetailPanel ───
 
+/** Valid next statuses for each draft status */
+const NEXT_ACTIONS: Record<ContentStatus, { status: ContentStatus; label: string; style: string }[]> = {
+    draft: [],
+    review: [
+        { status: 'approved', label: 'Approve', style: 'bg-emerald-600 hover:bg-emerald-500 text-white' },
+        { status: 'rejected', label: 'Reject', style: 'bg-rose-600 hover:bg-rose-500 text-white' },
+    ],
+    approved: [
+        { status: 'published', label: 'Publish', style: 'bg-blue-600 hover:bg-blue-500 text-white' },
+    ],
+    rejected: [
+        { status: 'draft', label: 'Re-draft', style: 'bg-zinc-600 hover:bg-zinc-500 text-white' },
+    ],
+    published: [],
+};
+
 function DetailPanel({
     draft,
     onClose,
+    onAction,
 }: {
     draft: ContentDraft;
     onClose: () => void;
+    onAction: (id: string, status: ContentStatus) => Promise<void>;
 }) {
+    const { user, requireAuth } = useAuth();
+    const [acting, setActing] = useState(false);
+    const [actionError, setActionError] = useState('');
     const agent = AGENTS[draft.author_agent as AgentId];
     const badge = TYPE_BADGES[draft.content_type] ?? TYPE_BADGES.essay;
+    const actions = NEXT_ACTIONS[draft.status] ?? [];
+
+    const handleAction = useCallback(async (status: ContentStatus) => {
+        setActionError('');
+        try {
+            if (!user) await requireAuth('Sign in to manage content');
+            setActing(true);
+            await onAction(draft.id, status);
+        } catch (err) {
+            setActionError((err as Error).message);
+        } finally {
+            setActing(false);
+        }
+    }, [user, requireAuth, onAction, draft.id]);
 
     return (
         <div className='rounded-xl bg-zinc-800/70 border border-zinc-700/50 p-5 space-y-4'>
@@ -129,9 +166,9 @@ function DetailPanel({
 
             {/* Body */}
             <div className='rounded-lg bg-zinc-900/50 border border-zinc-700/30 p-4 max-h-80 overflow-y-auto'>
-                <pre className='text-sm text-zinc-300 whitespace-pre-wrap break-words font-sans leading-relaxed'>
-                    {draft.body || '(empty)'}
-                </pre>
+                <div className='text-sm text-zinc-300'>
+                    <MarkdownContent>{draft.body || '(empty)'}</MarkdownContent>
+                </div>
             </div>
 
             {/* Reviewer notes */}
@@ -161,11 +198,32 @@ function DetailPanel({
                                             {note.verdict}
                                         </span>
                                     </div>
-                                    <p className='text-xs text-zinc-400 leading-relaxed'>{note.notes}</p>
+                                    <div className='text-xs text-zinc-400'>
+                                        <MarkdownContent>{note.notes}</MarkdownContent>
+                                    </div>
                                 </div>
                             );
                         })}
                     </div>
+                </div>
+            )}
+
+            {/* Action buttons */}
+            {actions.length > 0 && (
+                <div className='flex items-center gap-2 pt-1'>
+                    {actions.map(action => (
+                        <button
+                            key={action.status}
+                            onClick={() => handleAction(action.status)}
+                            disabled={acting}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 cursor-pointer ${action.style}`}
+                        >
+                            {acting ? '...' : action.label}
+                        </button>
+                    ))}
+                    {actionError && (
+                        <span className='text-xs text-rose-400'>{actionError}</span>
+                    )}
                 </div>
             )}
 
@@ -206,7 +264,7 @@ function ContentPipelineSkeleton() {
 // ─── ContentPipeline (main export) ───
 
 export function ContentPipeline() {
-    const { drafts, loading, error } = useContent({ limit: 100 });
+    const { drafts, loading, error, updateStatus } = useContent({ limit: 100 });
     const [selected, setSelected] = useState<ContentDraft | null>(null);
     const [showRejected, setShowRejected] = useState(false);
 
@@ -239,7 +297,14 @@ export function ContentPipeline() {
         <div className='space-y-4'>
             {/* Detail panel (above board when a card is selected) */}
             {selected && (
-                <DetailPanel draft={selected} onClose={() => setSelected(null)} />
+                <DetailPanel
+                    draft={selected}
+                    onClose={() => setSelected(null)}
+                    onAction={async (id, status) => {
+                        await updateStatus(id, status);
+                        setSelected(null);
+                    }}
+                />
             )}
 
             {/* Kanban columns */}

@@ -46,6 +46,7 @@ import {
     RefreshIcon,
 } from '@/lib/icons';
 import { AgentAvatar, AgentAvatarStack } from './AgentAvatar';
+import { MarkdownContent } from '@/components/MarkdownContent';
 
 // ─── Constants ───
 
@@ -305,9 +306,9 @@ function DetailedEventRow({
                         {event.title}
                     </p>
                     {event.summary && (
-                        <p className='text-xs text-zinc-500 mt-0.5 leading-relaxed'>
-                            {cleanSummary(event.summary)}
-                        </p>
+                        <div className='text-xs text-zinc-500 mt-0.5'>
+                            <MarkdownContent className='prose-p:text-zinc-500 prose-strong:text-zinc-400'>{cleanSummary(event.summary)}</MarkdownContent>
+                        </div>
                     )}
                     {event.tags?.length > 0 && (
                         <div className='flex gap-1 mt-1.5 flex-wrap'>

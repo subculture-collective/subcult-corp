@@ -9,6 +9,7 @@ import {
 } from './hooks';
 import { AGENTS } from '@/lib/agents';
 import type { AgentId } from '@/lib/types';
+import { MarkdownContent } from '@/components/MarkdownContent';
 
 // ─── Constants ───
 
@@ -146,9 +147,9 @@ function ProposalCard({
                 </div>
 
                 {/* Rationale preview */}
-                <p className='text-xs text-zinc-400 line-clamp-2 leading-relaxed'>
-                    {proposal.rationale}
-                </p>
+                <div className='text-xs text-zinc-400 line-clamp-2 leading-relaxed'>
+                    <MarkdownContent>{proposal.rationale}</MarkdownContent>
+                </div>
 
                 {/* Vote progress */}
                 <VoteBar
@@ -191,9 +192,9 @@ function ProposalCard({
                         <h4 className='text-[10px] uppercase tracking-wider text-zinc-500'>
                             Rationale
                         </h4>
-                        <p className='text-xs text-zinc-300 leading-relaxed whitespace-pre-wrap'>
-                            {proposal.rationale}
-                        </p>
+                        <div className='text-xs text-zinc-300'>
+                            <MarkdownContent>{proposal.rationale}</MarkdownContent>
+                        </div>
                     </div>
 
                     {/* Votes */}
@@ -240,8 +241,8 @@ function ProposalCard({
                                             >
                                                 {v.vote}
                                             </span>
-                                            <span className='text-zinc-400 leading-relaxed'>
-                                                {v.reason}
+                                            <span className='text-zinc-400'>
+                                                <MarkdownContent className='prose-p:text-zinc-400'>{v.reason}</MarkdownContent>
                                             </span>
                                         </div>
                                     );

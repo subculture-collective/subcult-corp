@@ -23,7 +23,11 @@ export type DiscordChannelName =
     | 'insights'
     | 'proposals'
     | 'project'
-    | 'daily-digest';
+    | 'daily-digest'
+    | 'news-digest'
+    | 'dreams'
+    | 'sanctum-chat'
+    | 'newsletter';
 
 /** Map conversation formats to Discord channel names */
 const FORMAT_CHANNEL_MAP: Record<ConversationFormat, DiscordChannelName> = {
@@ -95,8 +99,11 @@ async function syncEnvToDb(): Promise<void> {
                     name = EXCLUDED.name,
                     enabled = true
             `;
-            // Also handle name conflicts (different channel_id for same name)
-            // The name index isn't unique, so we just update by channel_id above
+            // Remove stale rows: same name but different channel_id (env is source of truth)
+            await sql`
+                DELETE FROM ops_discord_channels
+                WHERE name = ${channelName} AND discord_channel_id != ${channelId}
+            `;
             channelCache.delete(channelName);
             log.info('Discord channel synced from env', { name: channelName, channelId });
         } catch (error) {

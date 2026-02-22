@@ -2,14 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import {
     generateState,
+    generatePkceVerifier,
+    generatePkceChallenge,
     getOAuthRedirectUrl,
     type OAuthProvider,
 } from '@/lib/auth/oauth';
 
 export const dynamic = 'force-dynamic';
 
-const VALID_PROVIDERS = new Set<OAuthProvider>(['github', 'discord']);
+const VALID_PROVIDERS = new Set<OAuthProvider>(['github', 'discord', 'openai']);
 const STATE_COOKIE = 'oauth_state';
+const PKCE_COOKIE = 'oauth_pkce';
+
+/** Providers that use PKCE (public clients, no client_secret) */
+const PKCE_PROVIDERS = new Set<OAuthProvider>(['openai']);
 
 export async function GET(
     _req: NextRequest,
@@ -25,7 +31,24 @@ export async function GET(
     }
 
     const state = generateState();
-    const redirectUrl = getOAuthRedirectUrl(provider as OAuthProvider, state);
+    const usePkce = PKCE_PROVIDERS.has(provider as OAuthProvider);
+    const jar = await cookies();
+    const cookieOpts = {
+        httpOnly: true,
+        sameSite: 'lax' as const,
+        path: '/',
+        maxAge: 600,
+        secure: process.env.NODE_ENV === 'production',
+    };
+
+    let codeChallenge: string | undefined;
+    if (usePkce) {
+        const verifier = generatePkceVerifier();
+        codeChallenge = generatePkceChallenge(verifier);
+        jar.set(PKCE_COOKIE, verifier, cookieOpts);
+    }
+
+    const redirectUrl = getOAuthRedirectUrl(provider as OAuthProvider, state, codeChallenge);
 
     if (!redirectUrl) {
         return NextResponse.json(
@@ -35,14 +58,7 @@ export async function GET(
     }
 
     // Store state in cookie for verification in callback
-    const jar = await cookies();
-    jar.set(STATE_COOKIE, state, {
-        httpOnly: true,
-        sameSite: 'lax',
-        path: '/',
-        maxAge: 600, // 10 minutes
-        secure: process.env.NODE_ENV === 'production',
-    });
+    jar.set(STATE_COOKIE, state, cookieOpts);
 
     return NextResponse.redirect(redirectUrl);
 }

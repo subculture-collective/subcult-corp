@@ -19,6 +19,20 @@ export interface ComparisonEntry {
     related: string[];
 }
 
+export interface AlternativesEntry {
+    slug: string; // e.g. "openclaw" -> /learn/alternatives/openclaw
+    name: string; // "OpenClaw"
+    shortDesc: string;
+    body: string;
+    alternatives: {
+        name: string;
+        slug: string; // directory slug for cross-linking
+        reason: string; // why it's an alternative
+    }[];
+    faqs: { question: string; answer: string }[];
+    related: string[];
+}
+
 export interface DirectoryEntry {
     slug: string;
     name: string;

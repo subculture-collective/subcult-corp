@@ -45,6 +45,7 @@ export interface NewsletterEdition {
     sections: NewsletterSection[];
     stats: NewsletterStats;
     spotlight_agent: string | null;
+    markdown_content: string | null;
     markdown_path: string | null;
     pdf_path: string | null;
     pdf_data: Buffer | null;
@@ -429,6 +430,37 @@ function generateMarkdown(
     return md;
 }
 
+// ─── Discord helpers ───
+
+/** Split text into chunks that fit Discord's 2000-char limit, breaking at line boundaries. */
+function splitDiscordMessage(content: string): string[] {
+    const MAX = 2000;
+    if (content.length <= MAX) return [content];
+    const lines = content.split('\n');
+    const chunks: string[] = [];
+    let current = '';
+    for (const line of lines) {
+        const candidate = current.length === 0 ? line : `${current}\n${line}`;
+        if (candidate.length > MAX) {
+            if (current.length > 0) {
+                chunks.push(current);
+                current = line;
+            } else {
+                let remaining = line;
+                while (remaining.length > MAX) {
+                    chunks.push(remaining.slice(0, MAX));
+                    remaining = remaining.slice(MAX);
+                }
+                current = remaining;
+            }
+        } else {
+            current = candidate;
+        }
+    }
+    if (current.length > 0) chunks.push(current);
+    return chunks;
+}
+
 // ─── Delivery ───
 
 async function deliverToAgentInboxes(weekString: string, markdown: string): Promise<void> {
@@ -451,10 +483,11 @@ async function deliverToAgentInboxes(weekString: string, markdown: string): Prom
     }
 }
 
-async function postToDiscord(headline: string, weekString: string, stats: NewsletterStats): Promise<void> {
-    const webhookUrl = await getWebhookUrl('daily-digest');
+async function postToDiscord(headline: string, weekString: string, stats: NewsletterStats, markdown: string): Promise<void> {
+    const webhookUrl = await getWebhookUrl('newsletter');
     if (!webhookUrl) return;
 
+    // Embed header
     await postToWebhook({
         webhookUrl,
         username: 'SUBCULT Weekly',
@@ -466,6 +499,16 @@ async function postToDiscord(headline: string, weekString: string, stats: Newsle
             timestamp: new Date().toISOString(),
         }],
     });
+
+    // Full markdown content in chunks
+    const chunks = splitDiscordMessage(markdown);
+    for (const chunk of chunks) {
+        await postToWebhook({
+            webhookUrl,
+            username: 'SUBCULT Weekly',
+            content: chunk,
+        });
+    }
 }
 
 // ─── Main Pipeline ───
@@ -579,18 +622,18 @@ export async function generateWeeklyNewsletter(): Promise<string | null> {
         INSERT INTO ops_newsletter_editions (
             edition_week, edition_date, headline, primus_message, summary,
             sections, stats, spotlight_agent,
-            markdown_path, pdf_path, pdf_data, generated_by
+            markdown_content, markdown_path, pdf_path, pdf_data, generated_by
         )
         VALUES (
             ${weekString}, ${editionDate}, ${headline}, ${primusMessage}, ${summary},
             ${jsonb(sections)}, ${jsonb(stats)}, ${spotlightAgent},
-            ${markdownPath}, ${pdfPath}, ${pdfBuffer}, 'mux'
+            ${markdown}, ${markdownPath}, ${pdfPath}, ${pdfBuffer}, 'mux'
         )
         RETURNING id
     `;
 
     // 13. Discord announcement (fire-and-forget)
-    postToDiscord(headline, weekString, stats).catch(err =>
+    postToDiscord(headline, weekString, stats, markdown).catch(err =>
         log.warn('Discord newsletter post failed', { error: (err as Error).message }),
     );
 
@@ -655,7 +698,7 @@ export async function getNewsletterEdition(week: string): Promise<Omit<Newslette
         SELECT
             id, edition_week, edition_date, headline, primus_message,
             summary, sections, stats, spotlight_agent,
-            markdown_path, pdf_path, generated_by, created_at,
+            markdown_content, markdown_path, pdf_path, generated_by, created_at,
             (pdf_data IS NOT NULL OR pdf_path IS NOT NULL) AS has_pdf
         FROM ops_newsletter_editions
         WHERE edition_week = ${week}

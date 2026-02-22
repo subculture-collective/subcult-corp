@@ -1,4 +1,4 @@
-import { randomBytes } from 'crypto';
+import { randomBytes, createHash } from 'crypto';
 import type postgres from 'postgres';
 import { sql } from '@/lib/db';
 import { createSession } from './session';
@@ -6,9 +6,19 @@ import type { User } from './types';
 
 type Sql = ReturnType<typeof postgres>;
 
+// ─── PKCE helpers ───
+
+export function generatePkceVerifier(): string {
+    return randomBytes(32).toString('base64url');
+}
+
+export function generatePkceChallenge(verifier: string): string {
+    return createHash('sha256').update(verifier).digest('base64url');
+}
+
 // ─── Provider definitions ───
 
-export type OAuthProvider = 'github' | 'discord';
+export type OAuthProvider = 'github' | 'discord' | 'openai';
 
 interface ProviderConfig {
     authorizeUrl: string;
@@ -17,6 +27,7 @@ interface ProviderConfig {
     scopes: string;
     clientId: string;
     clientSecret: string;
+    usePkce?: boolean;
     /** Extract email, name, avatar, provider_account_id from userinfo response */
     extractUser: (data: Record<string, unknown>) => {
         email: string;
@@ -64,6 +75,23 @@ function getProviderConfig(provider: OAuthProvider): ProviderConfig | null {
                 }),
             };
 
+        case 'openai':
+            return {
+                authorizeUrl: 'https://auth.openai.com/authorize',
+                tokenUrl: 'https://auth0.openai.com/oauth/token',
+                userInfoUrl: 'https://auth0.openai.com/userinfo',
+                scopes: 'openid profile email offline_access',
+                clientId: process.env.OPENAI_CLIENT_ID ?? '',
+                clientSecret: '', // public client — uses PKCE instead
+                usePkce: true,
+                extractUser: (data) => ({
+                    email: (data.email as string) ?? '',
+                    name: (data.name as string) ?? (data.nickname as string) ?? null,
+                    avatar: (data.picture as string) ?? null,
+                    providerId: String(data.sub),
+                }),
+            };
+
         default:
             return null;
     }
@@ -78,6 +106,7 @@ export function generateState(): string {
 export function getOAuthRedirectUrl(
     provider: OAuthProvider,
     state: string,
+    codeChallenge?: string,
 ): string | null {
     const config = getProviderConfig(provider);
     if (!config || !config.clientId) return null;
@@ -92,12 +121,18 @@ export function getOAuthRedirectUrl(
         response_type: 'code',
     });
 
+    if (codeChallenge) {
+        params.set('code_challenge', codeChallenge);
+        params.set('code_challenge_method', 'S256');
+    }
+
     return `${config.authorizeUrl}?${params.toString()}`;
 }
 
 export async function exchangeCode(
     provider: OAuthProvider,
     code: string,
+    codeVerifier?: string,
 ): Promise<{
     email: string;
     name: string | null;
@@ -109,6 +144,20 @@ export async function exchangeCode(
 
     const callbackUrl = `${process.env.AUTH_REDIRECT_BASE_URL}/api/auth/oauth/${provider}/callback`;
 
+    // Build token request body — PKCE uses code_verifier, confidential clients use client_secret
+    const tokenBody: Record<string, string> = {
+        client_id: config.clientId,
+        code,
+        redirect_uri: callbackUrl,
+        grant_type: 'authorization_code',
+    };
+
+    if (config.usePkce && codeVerifier) {
+        tokenBody.code_verifier = codeVerifier;
+    } else {
+        tokenBody.client_secret = config.clientSecret;
+    }
+
     // Exchange code for token
     const tokenRes = await fetch(config.tokenUrl, {
         method: 'POST',
@@ -116,13 +165,7 @@ export async function exchangeCode(
             'Content-Type': 'application/x-www-form-urlencoded',
             Accept: 'application/json',
         },
-        body: new URLSearchParams({
-            client_id: config.clientId,
-            client_secret: config.clientSecret,
-            code,
-            redirect_uri: callbackUrl,
-            grant_type: 'authorization_code',
-        }),
+        body: new URLSearchParams(tokenBody),
     });
 
     const tokenData = await tokenRes.json();

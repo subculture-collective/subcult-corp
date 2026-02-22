@@ -36,6 +36,89 @@ const PORT = parseInt(process.env.SANCTUM_WS_PORT ?? '3011', 10);
 
 const server = createSanctumServer(PORT);
 
+// ─── Discord Bridge Helpers ───
+
+const DISCORD_MAX_LENGTH = 2000;
+
+/** Split a message into chunks that fit Discord's 2000-char limit. */
+function splitDiscordMessage(content) {
+    if (content.length <= DISCORD_MAX_LENGTH) return [content];
+    const lines = content.split('\n');
+    const chunks = [];
+    let current = '';
+    for (const line of lines) {
+        const candidate = current.length === 0 ? line : `${current}\n${line}`;
+        if (candidate.length > DISCORD_MAX_LENGTH) {
+            if (current.length > 0) {
+                chunks.push(current);
+                current = line;
+            } else {
+                let remaining = line;
+                while (remaining.length > DISCORD_MAX_LENGTH) {
+                    chunks.push(remaining.slice(0, DISCORD_MAX_LENGTH));
+                    remaining = remaining.slice(DISCORD_MAX_LENGTH);
+                }
+                current = remaining;
+            }
+        } else {
+            current = candidate;
+        }
+    }
+    if (current.length > 0) chunks.push(current);
+    return chunks;
+}
+
+// Lazy-loaded Discord posting deps (only when sanctum-chat channel is configured)
+let _discordPostReady = null;
+
+async function getDiscordPoster() {
+    if (_discordPostReady !== null) return _discordPostReady;
+    try {
+        const { getWebhookUrl } = await import('../../src/lib/discord/channels.ts');
+        const { postToWebhook } = await import('../../src/lib/discord/client.ts');
+        const { getAgentAvatarUrl } = await import('../../src/lib/discord/avatars.ts');
+        const webhookUrl = await getWebhookUrl('sanctum-chat');
+        if (!webhookUrl) {
+            log.info('sanctum-chat webhook not available, Discord bridge disabled');
+            _discordPostReady = false;
+            return false;
+        }
+        _discordPostReady = { postToWebhook, getAgentAvatarUrl, webhookUrl };
+        log.info('Discord bridge enabled for sanctum-chat');
+        return _discordPostReady;
+    } catch (err) {
+        log.warn('Failed to initialize Discord bridge', { error: err.message });
+        _discordPostReady = false;
+        return false;
+    }
+}
+
+/**
+ * Post a sanctum message to the Discord sanctum-chat channel.
+ * Fire-and-forget — errors are logged but don't break the flow.
+ */
+async function postSanctumToDiscord(agentId, content, { username, isUser } = {}) {
+    const poster = await getDiscordPoster();
+    if (!poster) return;
+
+    const { postToWebhook, getAgentAvatarUrl, webhookUrl } = poster;
+    const displayName = isUser
+        ? (username || 'User')
+        : (AGENTS[agentId]?.displayName ?? agentId);
+    const avatarUrl = isUser ? undefined : getAgentAvatarUrl(agentId);
+    const finalUsername = isUser ? `\u{1F464} ${displayName}` : displayName;
+
+    const chunks = splitDiscordMessage(content);
+    for (const chunk of chunks) {
+        await postToWebhook({
+            webhookUrl,
+            username: finalUsername,
+            avatarUrl,
+            content: chunk,
+        });
+    }
+}
+
 // ─── Message Handlers ───
 
 server.onMessage(async (client, msg) => {
@@ -155,6 +238,11 @@ async function handleChatSend(client, msg) {
         content: message,
     });
 
+    // Mirror user message to Discord (fire-and-forget)
+    postSanctumToDiscord(null, message, { username: userId, isUser: true }).catch(err =>
+        log.warn('Discord user message post failed', { error: err.message }),
+    );
+
     // Handle /roundtable
     if (intent.mode === 'roundtable') {
         await handleRoundtable(
@@ -190,7 +278,17 @@ async function handleChatSend(client, msg) {
         userId,
     );
 
-    // Send each response as it's ready
+    // Deliver each response and clear typing for agents that didn't respond (PASS)
+    const respondedAgentIds = new Set(responses.map(r => r.agentId));
+    for (const agentId of respondingAgents) {
+        if (!respondedAgentIds.has(agentId)) {
+            server.sendTo(client.id, {
+                type: 'typing.indicator',
+                payload: { agentId, typing: false },
+            });
+        }
+    }
+
     for (const response of responses) {
         // Clear typing for this agent
         server.sendTo(client.id, {
@@ -220,6 +318,11 @@ async function handleChatSend(client, msg) {
                 metadata: response.metadata,
             },
         });
+
+        // Mirror agent response to Discord (fire-and-forget)
+        postSanctumToDiscord(response.agentId, response.content).catch(err =>
+            log.warn('Discord agent response post failed', { error: err.message }),
+        );
     }
 
     // Check for summons in responses
@@ -272,6 +375,11 @@ async function handleChatSend(client, msg) {
                     metadata: summonResponse.metadata,
                 },
             });
+
+            // Mirror summon response to Discord (fire-and-forget)
+            postSanctumToDiscord(summonResponse.agentId, summonResponse.content).catch(err =>
+                log.warn('Discord summon response post failed', { error: err.message }),
+            );
         }
     }
 
@@ -309,6 +417,11 @@ async function handleChatSend(client, msg) {
                     metadata: ct.metadata,
                 },
             });
+
+            // Mirror cross-talk to Discord (fire-and-forget)
+            postSanctumToDiscord(ct.agentId, ct.content).catch(err =>
+                log.warn('Discord cross-talk post failed', { error: err.message }),
+            );
         }
     }
 
@@ -483,10 +596,164 @@ async function handleRoundtable(client, msg, conversationId, topic) {
     }
 }
 
+// ─── Discord → Sanctum (inbound listener) ───
+
+let discordClient = null;
+
+async function startDiscordListener() {
+    const botToken = process.env.DISCORD_BOT_TOKEN;
+    const sanctumChannelId = process.env.DISCORD_CHANNEL_SANCTUM_CHAT;
+
+    if (!botToken || !sanctumChannelId) {
+        log.info('Discord listener disabled (missing DISCORD_BOT_TOKEN or DISCORD_CHANNEL_SANCTUM_CHAT)');
+        return;
+    }
+
+    try {
+        const { Client, GatewayIntentBits } = await import('discord.js');
+
+        discordClient = new Client({
+            intents: [
+                GatewayIntentBits.Guilds,
+                GatewayIntentBits.GuildMessages,
+                GatewayIntentBits.MessageContent,
+            ],
+        });
+
+        discordClient.on('clientReady', () => {
+            log.info('Discord listener connected', { user: discordClient.user?.tag });
+        });
+
+        discordClient.on('messageCreate', async (message) => {
+            // Ignore bots (prevents responding to own webhook posts)
+            if (message.author.bot) return;
+            // Only listen to sanctum-chat channel
+            if (message.channelId !== sanctumChannelId) return;
+
+            const content = message.content?.trim();
+            if (!content) return;
+
+            const userId = `discord:${message.author.id}`;
+            const displayName = message.member?.displayName || message.author.displayName || message.author.username;
+
+            log.info('Discord message received', { userId, displayName, channelId: message.channelId });
+
+            try {
+                // Get or create conversation for this Discord user
+                const intent = parseIntent(content);
+                let conversation;
+                if (intent.mode === 'direct' && intent.agents.length > 0) {
+                    conversation = await getOrCreateConversation(userId, 'direct', intent.agents[0]);
+                } else {
+                    conversation = await getOrCreateConversation(userId, 'open');
+                }
+
+                // Persist user message
+                await addMessage(conversation.id, {
+                    role: 'user',
+                    content,
+                });
+
+                // Broadcast user message to WebSocket clients
+                server.broadcast({
+                    type: 'chat.message',
+                    payload: {
+                        conversationId: conversation.id,
+                        role: 'user',
+                        content,
+                        source: 'discord',
+                        displayName,
+                    },
+                });
+
+                // Build context and route
+                const llmContext = await buildLLMContext(conversation.id);
+                const { responses } = await routeMessage(content, llmContext, userId);
+
+                // Process each agent response
+                for (const response of responses) {
+                    await addMessage(conversation.id, {
+                        role: 'agent',
+                        agentId: response.agentId,
+                        content: response.content,
+                        metadata: response.metadata,
+                    });
+
+                    // Post agent response back to Discord
+                    await postSanctumToDiscord(response.agentId, response.content);
+
+                    // Broadcast to WebSocket clients
+                    server.broadcast({
+                        type: 'chat.message',
+                        payload: {
+                            conversationId: conversation.id,
+                            agentId: response.agentId,
+                            displayName: AGENTS[response.agentId].displayName,
+                            role: AGENTS[response.agentId].role,
+                            color: AGENTS[response.agentId].color,
+                            content: response.content,
+                            source: 'discord',
+                            metadata: response.metadata,
+                        },
+                    });
+                }
+
+                // Check for summons
+                for (const response of responses) {
+                    const summons = detectSummons(response.agentId, response.content);
+                    for (const summon of summons) {
+                        if (responses.some(r => r.agentId === summon.target)) continue;
+
+                        const summonResponse = await executeSummon(summon, llmContext);
+
+                        await addMessage(conversation.id, {
+                            role: 'agent',
+                            agentId: summonResponse.agentId,
+                            content: summonResponse.content,
+                            metadata: { ...summonResponse.metadata, crossTalk: true, replyTo: summonResponse.replyTo },
+                        });
+
+                        await postSanctumToDiscord(summonResponse.agentId, summonResponse.content);
+
+                        server.broadcast({
+                            type: 'chat.message',
+                            payload: {
+                                conversationId: conversation.id,
+                                agentId: summonResponse.agentId,
+                                displayName: AGENTS[summonResponse.agentId].displayName,
+                                role: AGENTS[summonResponse.agentId].role,
+                                color: AGENTS[summonResponse.agentId].color,
+                                content: summonResponse.content,
+                                crossTalk: true,
+                                replyTo: summonResponse.replyTo,
+                                source: 'discord',
+                                metadata: summonResponse.metadata,
+                            },
+                        });
+                    }
+                }
+            } catch (err) {
+                log.error('Discord message handling failed', { error: err, userId });
+            }
+        });
+
+        await discordClient.login(botToken);
+    } catch (err) {
+        log.error('Failed to start Discord listener', { error: err });
+    }
+}
+
+// Start Discord listener
+startDiscordListener();
+
 // ─── Graceful Shutdown ───
 
 async function shutdown() {
     log.info('Shutting down Sanctum server...');
+    if (discordClient) {
+        log.info('Destroying Discord client...');
+        discordClient.destroy();
+    }
     await server.shutdown();
     process.exit(0);
 }

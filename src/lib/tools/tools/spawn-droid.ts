@@ -6,8 +6,8 @@ import { randomUUID } from 'node:crypto';
 import type { NativeTool } from '../types';
 import { ALL_AGENTS } from '@/lib/types';
 
-const MAX_DROID_TIMEOUT = 300;
-const DEFAULT_DROID_TIMEOUT = 120;
+const MAX_DROID_TIMEOUT = process.env.MAX_DROID_TIMEOUT_SECONDS ? parseInt(process.env.MAX_DROID_TIMEOUT_SECONDS) : 300;
+const DEFAULT_DROID_TIMEOUT = process.env.DEFAULT_DROID_TIMEOUT_SECONDS ? parseInt(process.env.DEFAULT_DROID_TIMEOUT_SECONDS) : 120;
 
 export const spawnDroidTool: NativeTool = {
     name: 'spawn_droid',

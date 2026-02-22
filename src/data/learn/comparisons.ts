@@ -309,6 +309,94 @@ export const comparisons: ComparisonEntry[] = [
         ],
         related: ['langchain-vs-autogen', 'openclaw-vs-langchain', 'ollama-vs-cloud-llm'],
     },
+    {
+        slug: 'autogen-vs-crewai',
+        title: 'AutoGen vs CrewAI',
+        shortDesc:
+            'Two multi-agent frameworks compared — research-grade flexibility versus role-based simplicity.',
+        body: "AutoGen and CrewAI are both multi-agent frameworks, but they target different needs. AutoGen (by Microsoft) is research-oriented with flexible conversation primitives. CrewAI is task-oriented with a simpler role-based model. The right choice depends on whether you need fine-grained control over agent interactions or a quick way to get agents collaborating.",
+        sideA: {
+            name: 'AutoGen',
+            points: [
+                'Research-grade multi-agent conversation framework',
+                'Flexible agent-to-agent messaging primitives',
+                'Group chat with dynamic speaker selection',
+                'Human-in-the-loop patterns built in',
+                'Microsoft backing and active research development',
+            ],
+        },
+        sideB: {
+            name: 'CrewAI',
+            points: [
+                'Role-based agent definition — intuitive mental model',
+                'Natural language task descriptions',
+                'Sequential and hierarchical execution modes',
+                'Lower learning curve for getting started',
+                'LangChain tool compatibility built in',
+            ],
+        },
+        verdict:
+            'CrewAI for teams that want multi-agent capabilities quickly with minimal configuration. AutoGen for teams that need fine-grained control over agent interactions and conversation dynamics.',
+        faqs: [
+            {
+                question: 'Which is better for production systems?',
+                answer: 'CrewAI is simpler to deploy for well-defined workflows. AutoGen requires more engineering but offers more flexibility for complex, research-oriented applications.',
+            },
+            {
+                question: 'Do they support TypeScript?',
+                answer: 'Both are primarily Python. For TypeScript multi-agent systems, consider Mastra, the Vercel AI SDK, or custom orchestration with direct API calls.',
+            },
+            {
+                question: 'Can I start with one and migrate to the other?',
+                answer: 'They have different APIs and abstractions, so migration is not straightforward. The agent logic (prompts, tool definitions) transfers, but the orchestration code needs rewriting.',
+            },
+        ],
+        related: ['langchain-vs-autogen', 'openclaw-vs-langchain', 'multi-agent-vs-single-agent'],
+    },
+    {
+        slug: 'clawhub-vs-openclaw',
+        title: 'ClawHub vs OpenClaw',
+        shortDesc:
+            'Skill marketplace versus agent gateway — two parts of the same ecosystem with different roles.',
+        body: "ClawHub and OpenClaw are part of the same ecosystem but serve different functions. OpenClaw is the AI agent gateway — the runtime that executes agents, manages channels, and handles tool invocation. ClawHub is the skill marketplace — the registry where developers publish and discover extensions for OpenClaw agents.\n\nUnderstanding the difference helps you evaluate whether you need the full OpenClaw stack, just the skill registry, or neither.",
+        sideA: {
+            name: 'ClawHub',
+            points: [
+                'Skill marketplace — discover, install, and publish agent skills',
+                'Vector-powered semantic search for skill discovery',
+                'CLI-based management (clawhub install, publish, update)',
+                'Community features: stars, comments, moderation',
+                '3,000+ community-built skills available',
+            ],
+        },
+        sideB: {
+            name: 'OpenClaw',
+            points: [
+                'Agent gateway — runs agents and executes tools',
+                'Multi-channel support (WhatsApp, Telegram, Discord)',
+                'OpenAI-compatible HTTP API for agent access',
+                'WebSocket primary protocol for real-time messaging',
+                'Self-hosted, single binary deployment',
+            ],
+        },
+        verdict:
+            'ClawHub is the app store; OpenClaw is the operating system. You need OpenClaw to run agents, and ClawHub to extend them with community skills. For teams not using OpenClaw, ClawHub skills are not usable — look at MCP servers or framework-native tools instead.',
+        faqs: [
+            {
+                question: 'Can I use ClawHub without OpenClaw?',
+                answer: 'No. ClawHub skills are designed specifically for the OpenClaw runtime. They use SKILL.md format and rely on OpenClaw\'s execution environment.',
+            },
+            {
+                question: 'Is OpenClaw required for multi-agent systems?',
+                answer: 'No. OpenClaw is one approach to agent tooling. Other frameworks like LangChain, CrewAI, and AutoGen provide their own tool integration without needing a separate gateway.',
+            },
+            {
+                question: 'How does the ClawHavoc incident affect this?',
+                answer: 'The ClawHavoc incident (341 malicious skills) affected ClawHub\'s marketplace, not the OpenClaw gateway itself. It highlighted the supply chain risks of community-maintained skill registries. ClawHub has since added security scanning and stricter publisher requirements.',
+            },
+        ],
+        related: ['clawhub-vs-mcp', 'openclaw-vs-langchain', 'multi-agent-vs-single-agent'],
+    },
 ];
 
 export const comparisonLabelMap: Record<string, string> = Object.fromEntries(

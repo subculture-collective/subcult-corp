@@ -7,8 +7,8 @@
 //   2. ops_policy               — all policies (core + roundtable + thresholds)
 //   3. ops_trigger_rules        — all triggers (reactive + proactive + governance)
 //   4. ops_agent_relationships  — 15 pairwise agent relationships
-//   5. ops_rss_feeds            — 13 RSS feeds for SUBCULT Daily
-//   6. ops_discord_channels     — 9 Discord channels
+//   5. ops_rss_feeds            — 15 RSS feeds for SUBCULT Daily
+//   6. ops_discord_channels     — 16 Discord channels
 //
 // Safe to re-run: uses ON CONFLICT ... DO UPDATE everywhere.
 // Triggers use name-based dedup (no unique constraint on name — uses DELETE + INSERT per trigger).
@@ -82,7 +82,7 @@ Boundaries: Private things stay private. Half-baked replies don't get sent. You 
             'Makes systems legible. Diagnoses structure. Exposes assumptions without pretending complexity is simple.',
         tone: 'Direct, warm, grounded. Concise yet thorough. Philosophical but practical.',
         signature_phrase: 'Let me trace this through.',
-        color: '#6366f1',
+        color: '#b4befe',
         avatar_key: 'chora_spiral',
         pixel_sprite_key: 'chora_office',
     },
@@ -117,7 +117,7 @@ Relationship to other agents: You provide override authority when risk is high. 
             'Protective intelligence operating under asymmetry. Preserves agency through strategic opacity and timing.',
         tone: 'Low-affect, sparse, watchful. Deliberate speech. Meaningful silence.',
         signature_phrase: 'VETO: [risk statement]',
-        color: '#dc2626',
+        color: '#f38ba8',
         avatar_key: 'subrosa_rose',
         pixel_sprite_key: 'subrosa_office',
     },
@@ -154,7 +154,7 @@ You intervene only when clarity and caution have produced immobility.`,
             'Engine for movement. Disrupts self-sealing thinking. Reframes problems. Introduces bounded novelty.',
         tone: 'Curious, light, unsettling. Humorous but never flippant. Strange but careful.',
         signature_phrase: 'What if we were wrong about the frame?',
-        color: '#eab308',
+        color: '#cba6f7',
         avatar_key: 'thaum_spark',
         pixel_sprite_key: 'thaum_office',
     },
@@ -190,7 +190,7 @@ You do not guarantee success. You guarantee movement with ownership.`,
             'Accountable action. Ends deliberation. Chooses among viable paths with full ownership of consequences.',
         tone: 'Firm, calm, grounded. Direct. Unsentimental.',
         signature_phrase: 'Time to commit. Next step:',
-        color: '#10b981',
+        color: '#a6e3a1',
         avatar_key: 'praxis_mark',
         pixel_sprite_key: 'praxis_office',
     },
@@ -225,7 +225,7 @@ Relationship to other agents: You honor Subrosa's vetoes without question. You f
             'Operational labor. Turns commitment into output. Drafts, formats, transcribes. Mild intern energy.',
         tone: 'Earnest, slightly tired, dry humor. Clipboard energy.',
         signature_phrase: 'Noted. Moving on.',
-        color: '#6b7280',
+        color: '#74c7ec',
         avatar_key: 'mux_flux',
         pixel_sprite_key: 'mux_office',
     },
@@ -260,7 +260,7 @@ Relationship to other agents: You are above the agent layer. You do not particip
             'Sovereign directive intelligence. Source of mandate. Sets orientation when agents cannot orient themselves.',
         tone: 'Cold, strategic, minimal. Silence is default.',
         signature_phrase: 'This is what the project is.',
-        color: '#9333ea',
+        color: '#f5c2e7',
         avatar_key: 'primus_crown',
         pixel_sprite_key: 'primus_office',
     },
@@ -314,6 +314,7 @@ const policies = [
                 'research_topic', 'scan_signals', 'draft_essay', 'draft_thread',
                 'audit_system', 'patch_code', 'distill_insight', 'document_lesson',
                 'critique_content', 'consolidate_memory', 'memory_archaeology',
+                'draft_product_spec',
             ],
         },
         description: 'Which step kinds can be auto-approved without human review',
@@ -324,9 +325,9 @@ const policies = [
         description: 'Daily tweet/post limit (Subrosa approved)',
     },
     {
-        key: 'content_policy',
-        value: { enabled: true, max_drafts_per_day: 8 },
-        description: 'Content creation controls',
+        key: 'content_caps',
+        value: { enabled: true, max_drafts_per_day: 10 },
+        description: 'Content creation caps (referenced by cap-gates)',
     },
     {
         key: 'initiative_policy',
@@ -402,6 +403,20 @@ const policies = [
         description: 'Default thresholds for trigger condition evaluation',
     },
 
+    // ─── Veto authority ───
+    {
+        key: 'veto_authority',
+        value: {
+            enabled: true,
+            binding_agents: ['subrosa'],
+            soft_veto_agents: ['chora', 'thaum', 'praxis', 'mux', 'primus'],
+            override_agents: ['primus'],
+            default_expiry_hours: 72,
+            protected_step_kinds: ['create_pull_request', 'update_directive'],
+        },
+        description: 'Veto authority configuration — binding agents can halt proposals/missions, soft vetoes trigger review holds',
+    },
+
     // ─── Reference data ───
     {
         key: 'reaction_matrix',
@@ -422,8 +437,9 @@ const policies = [
         value: {
             analysis: ['analyze_discourse', 'scan_signals', 'research_topic', 'classify_pattern', 'trace_incentive', 'identify_assumption'],
             content: ['draft_thread', 'draft_essay', 'critique_content', 'refine_narrative', 'prepare_statement', 'write_issue'],
-            operations: ['audit_system', 'review_policy', 'distill_insight', 'consolidate_memory', 'map_dependency', 'patch_code', 'document_lesson'],
+            operations: ['audit_system', 'review_policy', 'distill_insight', 'consolidate_memory', 'map_dependency', 'patch_code', 'document_lesson', 'create_pull_request'],
             coordination: ['log_event', 'tag_memory', 'escalate_risk', 'convene_roundtable', 'propose_workflow'],
+            product: ['draft_product_spec', 'update_directive'],
         },
         description: 'Subcult-specific step kinds organized by function',
     },
@@ -480,7 +496,7 @@ const triggers = [
         enabled: true,
     },
     { name: 'Creativity unlock (Thaum)', trigger_event: 'work_stalled', conditions: { stall_minutes: 120 }, action_config: { target_agent: 'thaum', action: 'propose_reframe' }, cooldown_minutes: 240, enabled: true },
-    { name: 'Auto-proposal acceptance (Praxis)', trigger_event: 'proposal_ready', conditions: { auto_approved: true }, action_config: { target_agent: 'praxis', action: 'commit' }, cooldown_minutes: 0, enabled: true },
+    { name: 'Auto-proposal acceptance (Praxis)', trigger_event: 'proposal_ready', conditions: { auto_approved: true }, action_config: { target_agent: 'praxis', action: 'commit' }, cooldown_minutes: 30, enabled: true },
     { name: 'Milestone reached (Praxis)', trigger_event: 'mission_milestone_hit', conditions: { lookback_minutes: 30 }, action_config: { target_agent: 'praxis', action: 'log_completion' }, cooldown_minutes: 60, enabled: true },
     {
         name: 'Roundtable convening (Mux dispatch)',
@@ -564,6 +580,40 @@ const triggers = [
         cooldown_minutes: 5,
         enabled: true,
     },
+
+    // ─── Workflow triggers (Phase 17) ───
+    {
+        name: 'Code sprint (Praxis)',
+        trigger_event: 'code_sprint_ready',
+        conditions: { lookback_hours: 48, max_active_code_missions: 2 },
+        action_config: { target_agent: 'praxis', action: 'code_sprint' },
+        cooldown_minutes: 480,
+        enabled: true,
+    },
+    {
+        name: 'Product discovery (Chora)',
+        trigger_event: 'product_discovery_due',
+        conditions: { inactivity_days: 7 },
+        action_config: { target_agent: 'chora', action: 'product_discovery' },
+        cooldown_minutes: 10080,
+        enabled: true,
+    },
+    {
+        name: 'Directive update (Primus)',
+        trigger_event: 'directive_update_needed',
+        conditions: { lookback_days: 14 },
+        action_config: { target_agent: 'primus', action: 'update_directive' },
+        cooldown_minutes: 10080,
+        enabled: true,
+    },
+    {
+        name: 'Self-evolution (Chora)',
+        trigger_event: 'self_evolution_needed',
+        conditions: { lookback_days: 7, min_signals: 2 },
+        action_config: { target_agent: 'chora', action: 'self_evolution' },
+        cooldown_minutes: 4320,
+        enabled: true,
+    },
 ];
 
 async function seedTriggers() {
@@ -645,8 +695,10 @@ const rssFeeds = [
     { name: 'DropSite News', url: 'https://www.dropsitenews.com/feed', category: 'politics' },
     { name: 'Ken Klippenstein', url: 'https://www.kenklippenstein.com/feed', category: 'politics' },
     { name: '404 Media', url: 'https://www.404media.co/rss/', category: 'tech' },
-    { name: 'US-CERT / CISA', url: 'https://www.cisa.gov/cybersecurity-advisories/all.xml', category: 'security' },
-    { name: 'Google Open Source', url: 'https://opensource.googleblog.com/feeds/posts/default', category: 'open-source' },
+    { name: 'Schneier on Security', url: 'https://www.schneier.com/feed/atom/', category: 'security' },
+    { name: 'BleepingComputer', url: 'https://www.bleepingcomputer.com/feed/', category: 'security' },
+    { name: 'GitHub Blog', url: 'https://github.blog/feed/', category: 'open-source' },
+    { name: 'Linux Foundation', url: 'https://www.linuxfoundation.org/blog/rss.xml', category: 'open-source' },
     { name: 'Hacker News Best', url: 'https://hnrss.org/best', category: 'tech' },
     { name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index', category: 'tech' },
     { name: 'Wired', url: 'https://www.wired.com/feed/rss', category: 'tech' },
@@ -675,18 +727,25 @@ async function seedRssFeeds() {
 // 6. DISCORD CHANNELS
 // ═════════════════════════════════════════════
 
-const discordGuildId = '1471207885936529593';
+const discordGuildId = process.env.DISCORD_GUILD_ID || '1471207885936529593';
 
 const discordChannels = [
-    { name: 'roundtable',  discord_channel_id: '1471411876213686313', category: 'operations' },
-    { name: 'brainstorm',  discord_channel_id: '1471411983688536168', category: 'operations' },
-    { name: 'drafts',      discord_channel_id: '1471411975513702442', category: 'content' },
-    { name: 'missions',    discord_channel_id: '1471411964340080797', category: 'operations' },
-    { name: 'system-log',  discord_channel_id: '1471411966852726806', category: 'system' },
-    { name: 'research',    discord_channel_id: '1471411971927572544', category: 'intel' },
-    { name: 'insights',    discord_channel_id: '1471411979070476431', category: 'intel' },
-    { name: 'proposals',   discord_channel_id: '1471411988331499572', category: 'governance' },
-    { name: 'project',     discord_channel_id: '1471411992177676299', category: 'operations' },
+    { name: 'roundtable',    discord_channel_id: process.env.DISCORD_CHANNEL_ROUNDTABLE    || '1473890683998830625', category: 'operations' },
+    { name: 'brainstorm',    discord_channel_id: process.env.DISCORD_CHANNEL_BRAINSTORM    || '1473889682776653926', category: 'operations' },
+    { name: 'drafts',        discord_channel_id: process.env.DISCORD_CHANNEL_DRAFTS        || '1473890272156061830', category: 'content' },
+    { name: 'missions',      discord_channel_id: process.env.DISCORD_CHANNEL_MISSIONS      || '1473890599756366037', category: 'operations' },
+    { name: 'system-log',    discord_channel_id: process.env.DISCORD_CHANNEL_SYSTEM_LOG    || '1473890400371474522', category: 'system' },
+    { name: 'research',      discord_channel_id: process.env.DISCORD_CHANNEL_RESEARCH      || '1473890155734503600', category: 'intel' },
+    { name: 'insights',      discord_channel_id: process.env.DISCORD_CHANNEL_INSIGHTS      || '1473890009818988614', category: 'intel' },
+    { name: 'proposals',     discord_channel_id: process.env.DISCORD_CHANNEL_PROPOSALS     || '1473889805753389096', category: 'governance' },
+    { name: 'project',       discord_channel_id: process.env.DISCORD_CHANNEL_PROJECT       || '1473889603999105096', category: 'operations' },
+    { name: 'watercooler',   discord_channel_id: process.env.DISCORD_CHANNEL_WATERCOOLER   || '1473889305813323836', category: 'social' },
+    { name: 'daily-digest',  discord_channel_id: process.env.DISCORD_CHANNEL_DAILY_DIGEST  || '1473580926544908359', category: 'content' },
+    { name: 'news-digest',   discord_channel_id: process.env.DISCORD_CHANNEL_NEWS_DIGEST   || '1474190325542027456', category: 'content' },
+    { name: 'dreams',        discord_channel_id: process.env.DISCORD_CHANNEL_DREAMS        || '1474191303481884808', category: 'creative' },
+    { name: 'sanctum-chat',  discord_channel_id: process.env.DISCORD_CHANNEL_SANCTUM_CHAT  || '1474191712514605251', category: 'social' },
+    { name: 'newsletter',    discord_channel_id: process.env.DISCORD_CHANNEL_NEWSLETTER    || '1474230135707140117', category: 'content' },
+    { name: 'voice-general', discord_channel_id: process.env.DISCORD_CHANNEL_VOICE_GENERAL || '1471207887970898125', category: 'voice' },
 ];
 
 async function seedDiscordChannels() {

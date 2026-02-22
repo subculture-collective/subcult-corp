@@ -293,7 +293,7 @@ export async function generateNewsDigest(
 // ─── Discord posting ───
 
 async function postToDiscord(slot: string, summary: string, itemCount: number): Promise<void> {
-    const webhookUrl = await getWebhookUrl('daily-digest');
+    const webhookUrl = await getWebhookUrl('news-digest');
     if (!webhookUrl) return;
 
     const slotLabel = slot === 'morning' ? 'Morning' : 'Evening';

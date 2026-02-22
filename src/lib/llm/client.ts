@@ -29,6 +29,44 @@ function normalizeModel(id: string): string {
 /** OpenRouter limits the `models` array to 3 items. Slice for API calls; full list used by individual fallback loop. */
 const MAX_MODELS_ARRAY = 3;
 
+/**
+ * Best-effort repair of truncated JSON from LLM tool call arguments.
+ * Models sometimes run out of output tokens mid-JSON, producing unterminated
+ * strings or missing closing braces/brackets. This tries to close them.
+ */
+function repairTruncatedJson(raw: string): Record<string, unknown> {
+    let s = raw.trim();
+    if (!s.startsWith('{')) return {};
+
+    // Close any unterminated string (odd number of unescaped quotes)
+    const unescapedQuotes = s.match(/(?<!\\)"/g);
+    if (unescapedQuotes && unescapedQuotes.length % 2 !== 0) {
+        s += '"';
+    }
+
+    // Remove trailing comma before we close brackets/braces
+    s = s.replace(/,\s*$/, '');
+
+    // Count unmatched openers and close them
+    let braces = 0;
+    let brackets = 0;
+    let inString = false;
+    for (let i = 0; i < s.length; i++) {
+        const ch = s[i];
+        if (ch === '\\' && inString) { i++; continue; }
+        if (ch === '"') { inString = !inString; continue; }
+        if (inString) continue;
+        if (ch === '{') braces++;
+        else if (ch === '}') braces--;
+        else if (ch === '[') brackets++;
+        else if (ch === ']') brackets--;
+    }
+    for (let i = 0; i < brackets; i++) s += ']';
+    for (let i = 0; i < braces; i++) s += '}';
+
+    return JSON.parse(s);
+}
+
 /** LLM_MODEL env override — prepended to resolved model list when set. */
 const LLM_MODEL_ENV: string | null = (() => {
     const envModel = process.env.LLM_MODEL;
@@ -299,7 +337,19 @@ async function ollamaChatWithModel(
                     try {
                         args = JSON.parse(tc.function.arguments);
                     } catch {
-                        args = {};
+                        try {
+                            args = repairTruncatedJson(tc.function.arguments);
+                            log.warn('Repaired truncated tool call JSON', {
+                                tool: tc.function.name,
+                                original: tc.function.arguments.slice(0, 200),
+                            });
+                        } catch {
+                            log.warn('Unrecoverable malformed tool call JSON', {
+                                tool: tc.function.name,
+                                arguments: tc.function.arguments.slice(0, 200),
+                            });
+                            args = {};
+                        }
                     }
                     const result = await tool.execute(args);
                     toolCallRecords.push({
@@ -678,77 +728,225 @@ export async function llmGenerateWithTools(
         }
     }
 
-    // ── OpenRouter (cloud) ──
-    const client = getClient();
+    // ── OpenRouter (cloud) — raw fetch with JSON repair ──
+    // We bypass the SDK's callModel for tool execution because the SDK's
+    // JSON parser cannot repair truncated tool call arguments. Using raw
+    // fetch gives us control over parsing (repairTruncatedJson) and proper
+    // maxToolRounds enforcement.
     const resolved =
         model ?
             [normalizeModel(model)]
         :   await resolveModelsWithEnv(trackingContext?.context);
     const modelList = resolved.slice(0, MAX_MODELS_ARRAY);
 
-    const systemMessage = messages.find(m => m.role === 'system');
-    const conversationMessages = messages.filter(m => m.role !== 'system');
-
     const toolCallRecords: ToolCallRecord[] = [];
 
-    // Wrap execute functions to capture tool call records
-    const wrappedTools = tools.map(tool => ({
-        type: ToolType.Function as const,
+    // Convert tools to OpenAI function-calling format
+    const openaiTools = tools.map(t => ({
+        type: 'function' as const,
         function: {
-            name: tool.name,
-            description: tool.description,
-            inputSchema: jsonSchemaToZod(tool.parameters),
-            ...(tool.execute ?
-                {
-                    execute: async (params: Record<string, unknown>) => {
-                        const result = await tool.execute!(params);
-                        toolCallRecords.push({
-                            name: tool.name,
-                            arguments: params,
-                            result,
-                        });
-                        return result;
-                    },
-                }
-            :   {}),
+            name: t.name,
+            description: t.description,
+            parameters: t.parameters,
         },
     }));
 
-    try {
-        const callOptions: Record<string, unknown> = {
-            models: modelList,
-            provider: { allowFallbacks: true },
-            ...(systemMessage ? { instructions: systemMessage.content } : {}),
-            input: conversationMessages.map(m => ({
-                role: m.role as 'user' | 'assistant',
-                content: m.content,
-            })),
-            temperature,
-            maxOutputTokens: maxTokens,
-        };
+    // Build working messages (mutable for tool result feeding)
+    type WorkingMessage = {
+        role: string;
+        content: string | null;
+        tool_calls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }>;
+        tool_call_id?: string;
+    };
+    const workingMessages: WorkingMessage[] = messages.map(m => ({
+        role: m.role,
+        content: m.content,
+    }));
 
-        if (wrappedTools.length > 0) {
-            callOptions.tools = wrappedTools;
-            callOptions.maxToolRounds = maxToolRounds;
+    try {
+        let lastModel = 'unknown';
+        let lastUsage: OpenResponsesUsage | null = null;
+
+        for (let round = 0; round <= maxToolRounds; round++) {
+            const body: Record<string, unknown> = {
+                messages: workingMessages,
+                temperature,
+                max_tokens: maxTokens,
+            };
+
+            // Use models array for fallback routing
+            if (modelList.length > 1) {
+                body.models = modelList;
+                body.provider = { allow_fallbacks: true };
+            } else {
+                body.model = modelList[0];
+            }
+
+            // Only include tools if we haven't exhausted rounds
+            if (openaiTools.length > 0 && round < maxToolRounds) {
+                body.tools = openaiTools;
+            }
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 120_000);
+
+            const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+                    'HTTP-Referer': 'https://subcult.org',
+                },
+                body: JSON.stringify(body),
+                signal: controller.signal,
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                const errBody = await response.text().catch(() => '');
+                const statusCode = response.status;
+                throw Object.assign(
+                    new Error(`OpenRouter API error: ${statusCode} ${errBody.slice(0, 200)}`),
+                    { statusCode },
+                );
+            }
+
+            const data = await response.json() as {
+                choices?: [{
+                    message?: {
+                        content?: string;
+                        tool_calls?: Array<{
+                            id: string;
+                            function: { name: string; arguments: string };
+                        }>;
+                    };
+                }];
+                model?: string;
+                usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+            };
+
+            lastModel = data.model ?? 'unknown';
+            if (data.usage) {
+                lastUsage = {
+                    inputTokens: data.usage.prompt_tokens ?? 0,
+                    outputTokens: data.usage.completion_tokens ?? 0,
+                    totalTokens: (data.usage.prompt_tokens ?? 0) + (data.usage.completion_tokens ?? 0),
+                } as unknown as OpenResponsesUsage;
+            }
+
+            const msg = data.choices?.[0]?.message;
+            if (!msg) {
+                log.warn('OpenRouter returned empty message', { round, model: lastModel });
+                break;
+            }
+
+            let pendingToolCalls = msg.tool_calls;
+
+            // Detect DSML/XML text tool calls when API returned none
+            // DeepSeek models sometimes emit tool calls as DSML text instead of
+            // using the API tool_calls mechanism. Parse them into real tool calls.
+            if ((!pendingToolCalls || pendingToolCalls.length === 0) && msg.content) {
+                const dsmlCalls = parseDsmlToolCalls(msg.content, tools);
+                if (dsmlCalls.length > 0) {
+                    pendingToolCalls = dsmlCalls;
+                    log.debug('Recovered tool calls from DSML text', {
+                        count: dsmlCalls.length,
+                        tools: dsmlCalls.map(tc => tc.function.name),
+                        model: lastModel,
+                    });
+                }
+            }
+
+            // No tool calls → return text
+            if (!pendingToolCalls || pendingToolCalls.length === 0) {
+                const raw = msg.content ?? '';
+                const text = extractFromXml(raw).trim();
+
+                const durationMs = Date.now() - startTime;
+                void trackUsage(lastModel, lastUsage, durationMs, trackingContext);
+
+                return { text, toolCalls: toolCallRecords };
+            }
+
+            // ── Process tool calls with JSON repair ──
+            workingMessages.push({
+                role: 'assistant',
+                content: msg.content ?? null,
+                tool_calls: pendingToolCalls.map(tc => ({
+                    id: tc.id,
+                    type: 'function' as const,
+                    function: tc.function,
+                })),
+            });
+
+            for (const tc of pendingToolCalls) {
+                const tool = tools.find(t => t.name === tc.function.name);
+                let resultStr: string;
+
+                if (tool?.execute) {
+                    let args: Record<string, unknown>;
+                    try {
+                        args = JSON.parse(tc.function.arguments);
+                    } catch {
+                        try {
+                            args = repairTruncatedJson(tc.function.arguments);
+                            log.warn('Repaired truncated tool call JSON', {
+                                tool: tc.function.name,
+                                original: tc.function.arguments.slice(0, 200),
+                            });
+                        } catch {
+                            log.warn('Unrecoverable malformed tool call JSON', {
+                                tool: tc.function.name,
+                                arguments: tc.function.arguments.slice(0, 200),
+                            });
+                            args = {};
+                        }
+                    }
+
+                    // Validate required parameters before executing
+                    const required = (tool.parameters?.required as string[]) ?? [];
+                    const missing = required.filter(p => !(p in args) || args[p] == null);
+
+                    if (missing.length > 0) {
+                        log.warn('Tool call missing required params after parse/repair', {
+                            tool: tc.function.name,
+                            missing,
+                            argsKeys: Object.keys(args),
+                        });
+                        resultStr = JSON.stringify({
+                            error: `Missing required parameters: ${missing.join(', ')}. ` +
+                                `Your tool call output was truncated before these fields were emitted. ` +
+                                `If writing long content, split into smaller chunks using the "append" parameter ` +
+                                `or reduce the content length.`,
+                        });
+                    } else {
+                        const result = await tool.execute(args);
+                        toolCallRecords.push({
+                            name: tool.name,
+                            arguments: args,
+                            result,
+                        });
+                        resultStr =
+                            typeof result === 'string' ? result
+                            :   JSON.stringify(result);
+                    }
+                } else {
+                    resultStr = `Tool ${tc.function.name} not available`;
+                }
+
+                workingMessages.push({
+                    role: 'tool',
+                    content: resultStr,
+                    tool_call_id: tc.id,
+                });
+            }
         }
 
-        const result = client.callModel(
-            callOptions as Parameters<typeof client.callModel>[0],
-        );
-
-        const rawText = (await result.getText())?.trim() ?? '';
-        const text = extractFromXml(rawText);
-
-        // Track usage after successful getText
+        // Exhausted all rounds — return what we have
         const durationMs = Date.now() - startTime;
-        const response = await result.getResponse();
-        const usedModel = response.model || 'unknown';
-        const usage = response.usage;
-
-        // Fire-and-forget tracking (errors logged internally by trackUsage)
-        void trackUsage(usedModel, usage, durationMs, trackingContext);
-
-        return { text, toolCalls: toolCallRecords };
+        void trackUsage(lastModel, lastUsage, durationMs, trackingContext);
+        return { text: '', toolCalls: toolCallRecords };
     } catch (error: unknown) {
         const err = error as { statusCode?: number; message?: string };
 
@@ -795,6 +993,67 @@ export async function llmGenerateWithTools(
 }
 
 /**
+ * Parse DSML/XML text tool calls into structured tool call objects.
+ *
+ * DeepSeek models trained on Anthropic data sometimes emit tool calls as text using
+ * DSML tags (e.g. <｜DSML｜invoke name="bash"><｜DSML｜prompt>...</｜DSML｜prompt>)
+ * or standard XML (<invoke name="bash"><parameter name="command">...</parameter>).
+ * This extracts them into the same format as API tool_calls so they can be executed.
+ */
+function parseDsmlToolCalls(
+    text: string,
+    availableTools: Array<{ name: string; parameters?: Record<string, unknown> }>,
+): Array<{ id: string; function: { name: string; arguments: string } }> {
+    // Normalize DSML to standard XML
+    const normalized = text
+        .replace(/<[｜|]DSML[｜|]/g, '<')
+        .replace(/<\/[｜|]DSML[｜|]/g, '</');
+
+    // Match <invoke name="toolname">...params...</invoke> blocks
+    const invokePattern = /<invoke\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)<\/invoke>/gi;
+    const calls: Array<{ id: string; function: { name: string; arguments: string } }> = [];
+    const toolNames = new Set(availableTools.map(t => t.name));
+
+    let match;
+    while ((match = invokePattern.exec(normalized)) !== null) {
+        const toolName = match[1];
+        const body = match[2];
+
+        // Only parse calls to tools that actually exist
+        if (!toolNames.has(toolName)) continue;
+
+        // Extract parameters — supports both <parameter name="x">val</parameter> and <x>val</x>
+        const args: Record<string, string> = {};
+        const paramPattern = /<parameter\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)<\/parameter>/gi;
+        let paramMatch;
+        while ((paramMatch = paramPattern.exec(body)) !== null) {
+            args[paramMatch[1]] = paramMatch[2].trim();
+        }
+
+        // If no <parameter> tags found, try bare tags (DSML style: <prompt>...</prompt>)
+        if (Object.keys(args).length === 0) {
+            const barePattern = /<([a-z_][a-z0-9_]*)>([\s\S]*?)<\/\1>/gi;
+            let bareMatch;
+            while ((bareMatch = barePattern.exec(body)) !== null) {
+                args[bareMatch[1]] = bareMatch[2].trim();
+            }
+        }
+
+        if (Object.keys(args).length > 0) {
+            calls.push({
+                id: `dsml_${Date.now()}_${calls.length}`,
+                function: {
+                    name: toolName,
+                    arguments: JSON.stringify(args),
+                },
+            });
+        }
+    }
+
+    return calls;
+}
+
+/**
  * Extract meaningful content from LLM output that may contain XML function call wrappers.
  *
  * Models trained on Anthropic's XML format sometimes emit tool calls as text:
@@ -806,6 +1065,10 @@ export async function llmGenerateWithTools(
  * 3. If no XML detected, return text as-is
  */
 export function extractFromXml(text: string): string {
+    // Normalize DeepSeek DSML tags (e.g. <｜DSML｜function_calls>) to standard XML
+    // eslint-disable-next-line no-control-regex
+    text = text.replace(/<[｜|]DSML[｜|]/g, '<').replace(/<\/[｜|]DSML[｜|]/g, '</');
+
     // Quick check — if no XML function call patterns, return as-is
     if (!/<(?:function_?calls?|invoke|parameter)\b/i.test(text)) {
         return text;

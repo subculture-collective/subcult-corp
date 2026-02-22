@@ -10,6 +10,45 @@ import { logger } from '@/lib/logger';
 
 const log = logger.child({ module: 'discord-events' });
 
+const DISCORD_MAX_LENGTH = 2000;
+
+/**
+ * Split a message into chunks that fit Discord's 2000-char limit.
+ * Splits at line boundaries to keep blockquotes intact.
+ * Continuation chunks inside a blockquote re-open the `> ` prefix.
+ */
+function splitDiscordMessage(content: string): string[] {
+    if (content.length <= DISCORD_MAX_LENGTH) return [content];
+
+    const lines = content.split('\n');
+    const chunks: string[] = [];
+    let current = '';
+
+    for (const line of lines) {
+        // If adding this line would exceed the limit, flush current chunk
+        const candidate = current.length === 0 ? line : `${current}\n${line}`;
+        if (candidate.length > DISCORD_MAX_LENGTH) {
+            if (current.length > 0) {
+                chunks.push(current);
+                current = line;
+            } else {
+                // Single line exceeds limit — hard-split it
+                let remaining = line;
+                while (remaining.length > DISCORD_MAX_LENGTH) {
+                    chunks.push(remaining.slice(0, DISCORD_MAX_LENGTH));
+                    remaining = remaining.slice(DISCORD_MAX_LENGTH);
+                }
+                current = remaining;
+            }
+        } else {
+            current = candidate;
+        }
+    }
+    if (current.length > 0) chunks.push(current);
+
+    return chunks;
+}
+
 /** Map event kinds to Discord channel names */
 const EVENT_CHANNEL_MAP: Record<string, DiscordChannelName> = {
     // proposals
@@ -26,9 +65,14 @@ const EVENT_CHANNEL_MAP: Record<string, DiscordChannelName> = {
     agent_session_completed: 'missions',
     agent_session_failed: 'missions',
 
-    // insights
+    // research — step-kind completions for analysis tasks
+    research_completed: 'research',
+    news_digest_generated: 'research',
+
+    // insights — step-kind completions for synthesis/memory tasks
+    insight_generated: 'insights',
     memory_archaeology_complete: 'insights',
-    dream_cycle_completed: 'insights',
+    dream_cycle_completed: 'dreams',
 
     // system-log
     trigger_fired: 'system-log',
@@ -76,7 +120,10 @@ function formatEventContent(input: EventInput, agentLabel: string, emoji: string
         const rounds = meta.rounds ? ` · ${meta.rounds} rounds` : '';
         const tools = meta.toolCalls ? ` · ${meta.toolCalls} tool calls` : '';
         let content = `${emoji} **${agentLabel}** — ${input.title}${rounds}${tools}`;
-        if (summary) content += `\n> ${summary.split('\n')[0]}`;
+        if (summary) {
+            const quoted = summary.split('\n').map(l => `> ${l}`).join('\n');
+            content += `\n${quoted}`;
+        }
         return content;
     }
 
@@ -110,20 +157,18 @@ export async function postEventToDiscord(input: EventInput): Promise<void> {
     const emoji = getKindEmoji(input.kind);
     const agentLabel = `${symbol ? symbol + ' ' : ''}${agentName}`;
 
-    let content = formatEventContent(input, agentLabel, emoji);
-
-    // Discord message limit is 2000 chars
-    if (content.length > 2000) {
-        content = content.slice(0, 1997) + '...';
-    }
+    const content = formatEventContent(input, agentLabel, emoji);
+    const chunks = splitDiscordMessage(content);
 
     try {
-        await postToWebhook({
-            webhookUrl,
-            username: agentName,
-            avatarUrl: getAgentAvatarUrl(input.agent_id),
-            content,
-        });
+        for (const chunk of chunks) {
+            await postToWebhook({
+                webhookUrl,
+                username: agentName,
+                avatarUrl: getAgentAvatarUrl(input.agent_id),
+                content: chunk,
+            });
+        }
     } catch (err) {
         log.warn('Failed to post event to Discord', {
             kind: input.kind,

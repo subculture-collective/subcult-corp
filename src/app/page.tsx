@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { AGENTS, AGENT_IDS } from '@/lib/agents';
 import { AgentAvatar } from '@/app/stage/AgentAvatar';
 import { RefreshIcon, BrainIcon, ScaleIcon, NetworkIcon } from '@/lib/icons';
+import { SubscribeCTA } from '@/components/SubscribeCTA';
 
 const FEATURES = [
     {
@@ -236,6 +237,13 @@ export default function LandingPage() {
                             />
                         </svg>
                     </Link>
+                </div>
+            </section>
+
+            {/* Subscribe */}
+            <section className='border-t border-zinc-800 bg-zinc-900/30'>
+                <div className='max-w-2xl mx-auto px-4 py-16 text-center'>
+                    <SubscribeCTA variant='hero' source='homepage' />
                 </div>
             </section>
 

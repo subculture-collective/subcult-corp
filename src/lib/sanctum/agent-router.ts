@@ -36,6 +36,7 @@ export interface RouteResult {
     agents: AgentId[];
     processedMessage: string;
     topic?: string;
+    agentScores?: Record<AgentId, number>;
 }
 
 export interface AgentResponse {
@@ -117,18 +118,25 @@ export function parseIntent(message: string): RouteResult {
     }
 
     // Open mode — classify topic and select relevant agents
-    const agents = classifyTopicAgents(trimmed);
+    const { agents, scores } = classifyTopicAgents(trimmed);
     return {
         mode: 'open',
         agents,
         processedMessage: trimmed,
+        agentScores: scores,
     };
+}
+
+interface TopicClassification {
+    agents: AgentId[];
+    scores: Record<AgentId, number>;
 }
 
 /**
  * Select 2-4 relevant agents based on message topic using keyword heuristics.
+ * Returns both the selected agents and their scores (for probability weighting).
  */
-function classifyTopicAgents(message: string): AgentId[] {
+function classifyTopicAgents(message: string): TopicClassification {
     const lower = message.toLowerCase();
     const scores: Record<AgentId, number> = {
         chora: 0,
@@ -215,7 +223,7 @@ function classifyTopicAgents(message: string): AgentId[] {
             agents.push('praxis');
     }
 
-    return agents;
+    return { agents, scores };
 }
 
 // ─── Personality Loading ───
@@ -407,22 +415,68 @@ async function generateDirectResponse(
     };
 }
 
+// ─── Probability helpers ───
+
+/** Weighted random pick: selects one item proportional to its weight. */
+function weightedRandomPick<T>(items: T[], weights: number[]): T {
+    const total = weights.reduce((sum, w) => sum + w, 0);
+    let r = Math.random() * total;
+    for (let i = 0; i < items.length; i++) {
+        r -= weights[i];
+        if (r <= 0) return items[i];
+    }
+    return items[items.length - 1];
+}
+
+/** Fisher-Yates shuffle (in-place). */
+function shuffle<T>(arr: T[]): T[] {
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+}
+
 /**
  * Generate responses from multiple agents for an open-mode question.
- * Agents respond concurrently and are aware others are responding.
+ * Natural conversation flow:
+ * 1. First speaker: the most relevant agent (weighted random by topic score)
+ * 2. Remaining agents each have a probability of chiming in (not guaranteed)
+ * 3. Small chance for an agent-to-agent reaction after the main responses
  */
 async function generateOpenResponses(
     agents: AgentId[],
     message: string,
     conversationHistory: ConversationMessage[],
+    agentScores?: Record<AgentId, number>,
 ): Promise<AgentResponse[]> {
     await loadAffinityMap();
 
-    const responses = await Promise.all(
-        agents.map(async (agentId) => {
-            const startTime = Date.now();
+    // ── 1. Order agents: first speaker weighted by score, rest shuffled ──
+    const scores: Partial<Record<AgentId, number>> = agentScores ?? {};
+    const agentWeights = agents.map(a => Math.max(scores[a] ?? 1, 1));
 
-            // Load memories (semantic retrieval based on message)
+    // Pick the first speaker weighted by relevance score
+    const firstSpeaker = weightedRandomPick(agents, agentWeights);
+    const remaining = shuffle(agents.filter(a => a !== firstSpeaker));
+    const orderedAgents = [firstSpeaker, ...remaining];
+
+    log.debug('Open conversation order', {
+        first: firstSpeaker,
+        remaining,
+        scores: agents.map(a => `${a}:${scores[a] ?? 0}`),
+    });
+
+    // ── 2. Pre-load context for all agents in parallel ──
+    const contextMap = new Map<AgentId, {
+        memories: string[];
+        tools: ToolDefinition[];
+        scratchpad: string;
+        briefing: string;
+    }>();
+
+    const ctxEntries = await Promise.all(
+        orderedAgents.map(async (agentId) => {
             let memories: string[] = [];
             try {
                 const memEntries = await queryRelevantMemories(
@@ -435,73 +489,231 @@ async function generateOpenResponses(
                 // Continue without memories
             }
 
-            // Load scratchpad, briefing, and tools
             const tools = getAgentTools(agentId);
             const [scratchpad, briefing] = await Promise.all([
                 getScratchpad(agentId).catch(() => ''),
                 buildBriefing(agentId).catch(() => ''),
             ]);
 
-            // Determine interaction hint based on other responding agents
-            const otherAgents = agents.filter(a => a !== agentId);
-            const otherNames = otherAgents
-                .map(a => AGENTS[a].displayName)
-                .join(', ');
-            const interactionHint = `Other agents responding to the same question: ${otherNames}. Offer your unique perspective without duplicating others.`;
-
-            const systemPrompt = buildSanctumSystemPrompt(
-                agentId,
-                conversationHistory,
-                memories,
-                interactionHint,
-                scratchpad,
-                briefing,
-                tools,
-            );
-
-            try {
-                const result = await llmGenerateWithTools({
-                    messages: [
-                        { role: 'system', content: systemPrompt },
-                        { role: 'user', content: message },
-                    ],
-                    temperature: 0.8,
-                    maxTokens: 300,
-                    tools: tools.length > 0 ? tools : undefined,
-                    maxToolRounds: 2,
-                    trackingContext: {
-                        agentId,
-                        context: 'sanctum-open',
-                    },
-                });
-
-                const cleaned = cleanResponse(result.text);
-                return {
-                    agentId,
-                    content:
-                        cleaned ||
-                        `*${AGENTS[agentId].displayName} defers on this one*`,
-                    metadata: {
-                        model: 'auto',
-                        tokensUsed: 0,
-                        responseTimeMs: Date.now() - startTime,
-                        toolCalls: result.toolCalls.length || undefined,
-                    },
-                };
-            } catch (err) {
-                log.error('Agent response failed', { error: err, agentId });
-                return {
-                    agentId,
-                    content: `*${AGENTS[agentId].displayName} is unavailable*`,
-                    metadata: {
-                        model: 'error',
-                        tokensUsed: 0,
-                        responseTimeMs: Date.now() - startTime,
-                    },
-                };
-            }
+            return { agentId, memories, tools, scratchpad, briefing };
         }),
     );
+
+    for (const entry of ctxEntries) {
+        contextMap.set(entry.agentId, entry);
+    }
+
+    // ── 3. Generate responses with probability gating ──
+    const responses: AgentResponse[] = [];
+    const priorReplies: { agentId: AgentId; content: string }[] = [];
+
+    for (let i = 0; i < orderedAgents.length; i++) {
+        const agentId = orderedAgents[i];
+        const ctx = contextMap.get(agentId)!;
+        const score = scores[agentId] ?? 1;
+
+        // First agent always responds. Others have a probability based on score.
+        // High score (3+): ~75% chance. Medium (1-2): ~45%. Baseline: ~30%.
+        if (i > 0) {
+            const replyChance = score >= 3 ? 0.75 : score >= 2 ? 0.55 : 0.35;
+            if (Math.random() > replyChance) {
+                log.debug('Agent skipped by probability', { agentId, score, replyChance });
+                continue;
+            }
+        }
+
+        const startTime = Date.now();
+        const { memories, tools, scratchpad, briefing } = ctx;
+
+        // Build interaction hint
+        const otherAgents = orderedAgents.filter(a => a !== agentId);
+        const otherNames = otherAgents
+            .map(a => AGENTS[a].displayName)
+            .join(', ');
+
+        let interactionHint: string;
+        if (priorReplies.length === 0) {
+            interactionHint = `Other agents in the room: ${otherNames}. You're speaking first — set the tone.`;
+        } else {
+            const replySummary = priorReplies
+                .map(r => `${AGENTS[r.agentId].displayName}: ${r.content}`)
+                .join('\n');
+            interactionHint =
+                `Other agents present: ${otherNames}.\n` +
+                `Already said:\n${replySummary}\n\n` +
+                `Add your unique perspective or respectfully push back. Don't repeat what's been covered. If you truly have nothing to add, respond with just: PASS`;
+        }
+
+        const systemPrompt = buildSanctumSystemPrompt(
+            agentId,
+            conversationHistory,
+            memories,
+            interactionHint,
+            scratchpad,
+            briefing,
+            tools,
+        );
+
+        try {
+            const result = await llmGenerateWithTools({
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: message },
+                ],
+                temperature: 0.85,
+                maxTokens: 300,
+                tools: tools.length > 0 ? tools : undefined,
+                maxToolRounds: 2,
+                trackingContext: {
+                    agentId,
+                    context: 'sanctum-open',
+                },
+            });
+
+            const cleaned = cleanResponse(result.text);
+
+            if (cleaned.trim().toUpperCase() === 'PASS') {
+                log.debug('Agent passed (nothing to add)', { agentId });
+                continue;
+            }
+
+            const response: AgentResponse = {
+                agentId,
+                content:
+                    cleaned ||
+                    `*${AGENTS[agentId].displayName} defers on this one*`,
+                metadata: {
+                    model: 'auto',
+                    tokensUsed: 0,
+                    responseTimeMs: Date.now() - startTime,
+                    toolCalls: result.toolCalls.length || undefined,
+                },
+            };
+
+            responses.push(response);
+            priorReplies.push({ agentId, content: cleaned });
+        } catch (err) {
+            log.error('Agent response failed', { error: err, agentId });
+        }
+    }
+
+    // ── 4. Agent-to-agent reaction (~15% chance) ──
+    // Only if we got 2+ responses, pick a non-responding agent to react
+    if (responses.length >= 2 && Math.random() < 0.15) {
+        const respondedIds = new Set(responses.map(r => r.agentId));
+        const nonResponders = orderedAgents.filter(a => !respondedIds.has(a));
+
+        // Can also be a responder reacting to someone else
+        const allCandidates = nonResponders.length > 0 ? nonResponders : orderedAgents;
+        const reactor = allCandidates[Math.floor(Math.random() * allCandidates.length)];
+
+        // Pick a random response to react to
+        const targetResponse = responses[Math.floor(Math.random() * responses.length)];
+
+        // Don't react to yourself
+        if (reactor !== targetResponse.agentId) {
+            log.debug('Agent-to-agent reaction', { reactor, reactingTo: targetResponse.agentId });
+
+            const ctx = contextMap.get(reactor);
+            if (ctx) {
+                const startTime = Date.now();
+                const reactionHint =
+                    `${AGENTS[targetResponse.agentId].displayName} just said: "${targetResponse.content}"\n\n` +
+                    `You have a brief reaction — agree, riff on it, or gently challenge. Keep it short (1-2 sentences). ` +
+                    `If you have nothing to say, respond with just: PASS`;
+
+                const systemPrompt = buildSanctumSystemPrompt(
+                    reactor,
+                    conversationHistory,
+                    ctx.memories,
+                    reactionHint,
+                    ctx.scratchpad,
+                    ctx.briefing,
+                    ctx.tools,
+                );
+
+                try {
+                    const result = await llmGenerateWithTools({
+                        messages: [
+                            { role: 'system', content: systemPrompt },
+                            { role: 'user', content: message },
+                        ],
+                        temperature: 0.9,
+                        maxTokens: 150,
+                        tools: ctx.tools.length > 0 ? ctx.tools : undefined,
+                        maxToolRounds: 1,
+                        trackingContext: {
+                            agentId: reactor,
+                            context: 'sanctum-reaction',
+                        },
+                    });
+
+                    const cleaned = cleanResponse(result.text);
+                    if (cleaned && cleaned.trim().toUpperCase() !== 'PASS') {
+                        responses.push({
+                            agentId: reactor,
+                            content: cleaned,
+                            metadata: {
+                                model: 'auto',
+                                tokensUsed: 0,
+                                responseTimeMs: Date.now() - startTime,
+                            },
+                        });
+                    }
+                } catch (err) {
+                    log.error('Agent reaction failed', { error: err, agentId: reactor });
+                }
+            }
+        }
+    }
+
+    // Ensure at least one response
+    if (responses.length === 0 && orderedAgents.length > 0) {
+        const fallbackAgent = orderedAgents[0];
+        const ctx = contextMap.get(fallbackAgent)!;
+        const startTime = Date.now();
+
+        const systemPrompt = buildSanctumSystemPrompt(
+            fallbackAgent,
+            conversationHistory,
+            ctx.memories,
+            'You are the only one responding. Answer naturally.',
+            ctx.scratchpad,
+            ctx.briefing,
+            ctx.tools,
+        );
+
+        try {
+            const result = await llmGenerateWithTools({
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: message },
+                ],
+                temperature: 0.8,
+                maxTokens: 300,
+                tools: ctx.tools.length > 0 ? ctx.tools : undefined,
+                maxToolRounds: 2,
+                trackingContext: {
+                    agentId: fallbackAgent,
+                    context: 'sanctum-open-fallback',
+                },
+            });
+
+            const cleaned = cleanResponse(result.text);
+            responses.push({
+                agentId: fallbackAgent,
+                content: cleaned || `*${AGENTS[fallbackAgent].displayName} considers this*`,
+                metadata: {
+                    model: 'auto',
+                    tokensUsed: 0,
+                    responseTimeMs: Date.now() - startTime,
+                    toolCalls: result.toolCalls.length || undefined,
+                },
+            });
+        } catch (err) {
+            log.error('Fallback agent response failed', { error: err, agentId: fallbackAgent });
+        }
+    }
 
     return responses;
 }
@@ -540,6 +752,7 @@ export async function routeMessage(
                 route.agents,
                 route.processedMessage,
                 conversationHistory,
+                route.agentScores,
             );
             return { route, responses };
         }

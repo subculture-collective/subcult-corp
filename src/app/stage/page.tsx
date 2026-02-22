@@ -30,6 +30,7 @@ import { VoiceChatInput } from './VoiceChatInput';
 import { DailyDigest } from './DailyDigest';
 import { NewsDigest } from './NewsDigest';
 import { StageIntro } from './StageIntro';
+import { SubscribeCTA } from '@/components/SubscribeCTA';
 import { QuestionsView } from './QuestionsView';
 import { NewspaperView } from './NewspaperView';
 import { NewsletterView } from './NewsletterView';
@@ -203,6 +204,7 @@ function StageContent() {
                     {view === 'feed' && (
                         <>
                             <StageIntro />
+                            <SubscribeCTA variant='compact' source='stage' />
                             <AskTheRoom onVoiceSessionCreated={handleVoiceSessionCreated} />
                             {/* Voice session — live transcript with auto-speak */}
                             {voiceRoundtableSession && (

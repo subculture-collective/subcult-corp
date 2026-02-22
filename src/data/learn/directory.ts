@@ -320,6 +320,93 @@ export const directory: DirectoryEntry[] = [
         ],
         related: ['langchain', 'openrouter', 'anthropic-mcp'],
     },
+    {
+        slug: 'composio',
+        name: 'Composio',
+        shortDesc:
+            'Managed integration platform for AI agents — 250+ pre-built tool connectors with authentication handling.',
+        body: 'Composio provides a managed platform for connecting AI agents to external services. Instead of building custom integrations for each tool, Composio offers pre-built connectors for 250+ services — from GitHub and Slack to Google Workspace and databases.\n\nThe platform handles authentication (OAuth, API keys), rate limiting, and error handling for each integration. It works with major agent frameworks including LangChain, CrewAI, AutoGen, and the Vercel AI SDK, making it framework-agnostic.\n\nComposio fills a similar role to ClawHub but takes a managed approach — the company maintains the integrations rather than relying on community contributions. This provides more reliability but less flexibility than open-source alternatives.',
+        category: 'platform',
+        pricing: 'freemium',
+        url: 'https://composio.dev',
+        features: [
+            '250+ pre-built tool integrations',
+            'Managed authentication (OAuth, API keys)',
+            'Framework-agnostic (LangChain, CrewAI, AutoGen)',
+            'Built-in rate limiting and error handling',
+            'Action and trigger-based workflows',
+        ],
+        pros: [
+            'Broad integration coverage',
+            'Handles auth complexity',
+            'Works with multiple frameworks',
+            'Reliable managed infrastructure',
+        ],
+        cons: [
+            'Vendor dependency for integrations',
+            'Less customizable than native tools',
+            'Pricing scales with usage',
+        ],
+        related: ['langchain', 'crewai', 'openclaw'],
+    },
+    {
+        slug: 'mastra',
+        name: 'Mastra',
+        shortDesc:
+            'TypeScript agent framework with built-in workflows, RAG, and multi-agent support — modern alternative to Python frameworks.',
+        body: 'Mastra is a TypeScript-native framework for building AI agents. It provides built-in support for workflows (sequential and parallel), RAG (retrieval-augmented generation), tool use, and multi-agent coordination.\n\nDesigned for the TypeScript/Node.js ecosystem, Mastra addresses the gap left by Python-dominant frameworks like LangChain and CrewAI. It offers type-safe agent definitions, built-in observability, and integration with popular TypeScript tools and databases.\n\nFor teams building AI-powered web applications with Next.js or other TypeScript frameworks, Mastra provides agent capabilities without requiring a Python runtime or complex polyglot architectures.',
+        category: 'framework',
+        pricing: 'free',
+        url: 'https://mastra.ai',
+        features: [
+            'TypeScript-native agent framework',
+            'Built-in workflow engine (sequential and parallel)',
+            'RAG with vector store integrations',
+            'Multi-agent coordination support',
+            'Type-safe tool and agent definitions',
+        ],
+        pros: [
+            'TypeScript-first — no Python dependency',
+            'Modern developer experience',
+            'Built-in observability and tracing',
+            'Good Next.js integration',
+        ],
+        cons: [
+            'Newer framework — smaller ecosystem',
+            'Fewer integrations than LangChain',
+            'Community still growing',
+        ],
+        related: ['vercel-ai-sdk', 'langchain', 'crewai'],
+    },
+    {
+        slug: 'claude-code',
+        name: 'Claude Code',
+        shortDesc:
+            'Anthropic\'s CLI agent for software engineering — native tool use, code editing, and autonomous task execution.',
+        body: 'Claude Code is Anthropic\'s official command-line agent for software engineering tasks. It runs in your terminal and can autonomously read code, edit files, execute commands, search the web, and manage git operations — all through natural language instructions.\n\nUnlike framework-based agents, Claude Code takes a zero-framework approach. The Claude model handles orchestration directly, deciding which tools to use and in what order. This produces surprisingly capable autonomous behavior without the abstraction overhead of agent frameworks.\n\nClaude Code represents a different philosophy from traditional agent frameworks. Instead of building agent logic in code, you let the frontier model handle reasoning and tool selection natively. This works well for well-defined tasks but offers less customization than programmatic frameworks.',
+        category: 'platform',
+        pricing: 'paid',
+        url: 'https://docs.anthropic.com/en/docs/claude-code',
+        features: [
+            'Native terminal agent — no framework needed',
+            'File reading, editing, and creation',
+            'Git operations and PR management',
+            'Web search and documentation lookup',
+            'Multi-step autonomous task execution',
+        ],
+        pros: [
+            'Zero setup — works immediately',
+            'Frontier model handles orchestration',
+            'Deep code understanding',
+            'Natural integration with developer workflow',
+        ],
+        cons: [
+            'Single-agent only — no multi-agent coordination',
+            'Requires Claude API access (paid)',
+            'Less customizable than framework-based agents',
+        ],
+        related: ['claude', 'vercel-ai-sdk', 'anthropic-mcp'],
+    },
 ];
 
 export const directoryLabelMap: Record<string, string> = Object.fromEntries(

@@ -161,6 +161,78 @@ export const glossary: GlossaryEntry[] = [
             'autonomous-agent',
         ],
     },
+    {
+        slug: 'agentic-workflow',
+        term: 'Agentic Workflow',
+        shortDef:
+            'A multi-step process where an AI agent autonomously plans, executes, and iterates on tasks using tools and reasoning.',
+        body: 'An agentic workflow goes beyond simple prompt-response interactions. The agent receives a goal, breaks it into steps, executes each step using tools, evaluates the results, and decides what to do next — all without human intervention between steps.\n\nThis contrasts with traditional AI pipelines where each step is predefined. In an agentic workflow, the agent can adapt its plan based on intermediate results, retry failed steps, and take alternative approaches when blocked.\n\nAgentic workflows are the building blocks of autonomous agent systems. In SUBCORP, each roundtable conversation is an agentic workflow: the orchestrator selects participants, manages turn-taking, handles errors per-turn, and synthesizes artifacts — all autonomously.',
+        category: 'pattern',
+        related: ['autonomous-agent', 'agent-orchestration', 'agent-chaining'],
+    },
+    {
+        slug: 'agent-governance',
+        term: 'Agent Governance',
+        shortDef:
+            'Systems and rules that constrain, oversee, and validate AI agent actions — vetoes, approvals, and checks.',
+        body: 'Agent governance is the layer of rules and mechanisms that ensures AI agents act within acceptable boundaries. Without governance, autonomous agents can take harmful or wasteful actions.\n\nGovernance mechanisms include: approval gates (requiring human or agent approval before critical actions), veto systems (allowing agents to block proposals from peers), budget limits (capping resource usage per action), audit logging (recording every decision for review), and safety constraints (hard limits on what agents can do).\n\nIn SUBCORP, governance is built into the initiative pipeline. Proposals require votes from multiple agents. Agents can veto proposals they consider risky. Every action is logged. Budget limits prevent runaway spending. This creates a system where autonomy and oversight coexist.',
+        category: 'pattern',
+        related: ['autonomous-agent', 'multi-agent-system', 'agent-orchestration'],
+    },
+    {
+        slug: 'tool-registry',
+        term: 'Tool Registry',
+        shortDef:
+            'A catalog of capabilities available to AI agents — tools are discovered, validated, and invoked through the registry.',
+        body: 'A tool registry is a centralized catalog that tells agents what tools are available, what they do, and how to use them. When an agent needs to take action, it consults the registry to find the right tool, validate its parameters, and invoke it.\n\nRegistries can be static (a fixed list of tool definitions) or dynamic (tools are discovered at runtime via protocols like MCP). Key design decisions include: what metadata each tool exposes, how tools are versioned, and how permissions are managed.\n\nSUBCORP uses a native tool registry with 9 core tools — web search, file operations, content generation, and more. Each tool has a schema that the LLM uses for function calling. This focused registry replaced a system of 120 skill files, proving that fewer, well-designed tools outperform many specialized ones.',
+        category: 'pattern',
+        related: ['tool-use', 'function-calling', 'clawhub'],
+    },
+    {
+        slug: 'skill-marketplace',
+        term: 'Skill Marketplace',
+        shortDef:
+            'A platform where developers publish and discover modular capabilities for AI agents — the "app store" for agents.',
+        body: 'A skill marketplace is a platform where developers can publish, discover, and install modular extensions that give AI agents new capabilities. Think of it as an app store for AI agents — each skill adds a new ability.\n\nPopular skill marketplaces include ClawHub (for OpenClaw agents) with over 3,000 community-built skills. The MCP ecosystem functions as a decentralized marketplace where MCP servers provide tool capabilities.\n\nKey challenges for skill marketplaces include: quality control (ensuring skills work as advertised), security (preventing malicious skills from stealing data), versioning (managing compatibility across updates), and discoverability (helping users find the right skill). The ClawHavoc incident demonstrated the security risks when 341 malicious skills were discovered on ClawHub.',
+        category: 'concept',
+        related: ['clawhub', 'tool-registry', 'mcp-protocol'],
+    },
+    {
+        slug: 'agent-persona',
+        term: 'Agent Persona',
+        shortDef:
+            'A detailed character definition that shapes an AI agent\'s communication style, priorities, and decision-making.',
+        body: 'An agent persona goes beyond a simple role label. It defines who the agent is — their communication style, intellectual influences, decision-making framework, and relationship to other agents. A well-crafted persona produces consistent, differentiated behavior across interactions.\n\nPersona engineering involves two layers: identity (what the agent is — its background, expertise, and personality) and operational philosophy (how the agent decides — its principles, priorities, and constraints). Both are expressed in the system prompt.\n\nIn SUBCORP, each agent has approximately 3,000 words of persona documentation split between an IDENTITY file and a SOUL file. This level of detail produces agents that genuinely behave differently — Subrosa (risk-focused) responds to the same prompt differently than Thaum (creative-focused), not because of random variation, but because of grounded personality differences.',
+        category: 'concept',
+        related: ['autonomous-agent', 'multi-agent-system', 'prompt-engineering'],
+    },
+    {
+        slug: 'agent-sandbox',
+        term: 'Agent Sandbox',
+        shortDef:
+            'An isolated execution environment that constrains what an AI agent can access and modify — preventing unintended side effects.',
+        body: 'An agent sandbox is a controlled environment that limits what an AI agent can do. When an agent executes code, calls APIs, or modifies files, the sandbox ensures these actions cannot affect systems outside its boundaries.\n\nSandboxing approaches include: container isolation (Docker, Firecracker), filesystem restrictions (read-only mounts, temp directories), network controls (blocking unauthorized outbound requests), resource limits (CPU, memory, time), and capability-based security (agents only get the permissions they need).\n\nSandboxing is critical for production agent systems where agents have tool access. Without it, a confused or compromised agent could delete files, exfiltrate data, or consume unlimited resources. OpenClaw sandboxes skill execution; SUBCORP uses containerized tool execution with network and filesystem restrictions.',
+        category: 'concept',
+        related: ['tool-use', 'agent-governance', 'openclaw'],
+    },
+    {
+        slug: 'agent-artifact',
+        term: 'Agent Artifact',
+        shortDef:
+            'A tangible output produced by an AI agent — documents, code, reports, or decisions that persist beyond the conversation.',
+        body: 'An agent artifact is any concrete output that an agent produces and persists. Unlike ephemeral conversation text, artifacts are stored, versioned, and can be consumed by other agents or systems.\n\nCommon artifact types include: documents (reports, summaries, plans), code (scripts, configurations, migrations), decisions (approved proposals, vetoed initiatives), and data (extracted insights, curated datasets).\n\nArtifact synthesis is often a distinct step from conversation. In SUBCORP, roundtable conversations produce conversation artifacts through a dedicated synthesis step. A designated agent (often Mux or Chora) reviews the conversation, synthesizes key points, and produces a structured document. This artifact then feeds into the initiative pipeline, where it may inspire new proposals.',
+        category: 'concept',
+        related: ['autonomous-agent', 'roundtable-conversation', 'agent-orchestration'],
+    },
+    {
+        slug: 'agent-loop',
+        term: 'Agent Loop',
+        shortDef:
+            'The continuous cycle of perceive, reason, act, and reflect that drives autonomous agent behavior.',
+        body: 'The agent loop is the fundamental execution pattern for autonomous agents. It follows a four-phase cycle: perceive (gather information about the current state), reason (analyze the situation and plan next steps), act (execute tools, generate content, or take decisions), and reflect (evaluate results and update internal state).\n\nThis cycle runs continuously in autonomous systems. The loop is what makes agents autonomous — they do not wait for human prompts between iterations. Each cycle informs the next through updated memory, changed environment state, or new goals.\n\nIn SUBCORP, the heartbeat system drives the agent loop. Every five minutes, the heartbeat fires and triggers up to eleven phases: evaluating triggers, running conversations, processing proposals, voting on initiatives, executing missions, and consolidating memory. The probabilistic schedule ensures organic variation in what happens each cycle.',
+        category: 'pattern',
+        related: ['autonomous-agent', 'agentic-workflow', 'agent-memory'],
+    },
 ];
 
 export const glossaryLabelMap: Record<string, string> = Object.fromEntries(

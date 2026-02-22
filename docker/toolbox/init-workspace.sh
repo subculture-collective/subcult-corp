@@ -9,11 +9,39 @@ for agent in chora subrosa thaum praxis mux primus; do
     mkdir -p /workspace/agents/$agent/{drafts,notes,inbox}
 done
 mkdir -p /workspace/agents/primus/directives
-mkdir -p /workspace/output/{briefings,reports,reviews,digests}
+mkdir -p /workspace/output/{briefings,reports,reviews,digests,newspapers,newsletters}
 mkdir -p /workspace/projects
 mkdir -p /workspace/shared/templates/{reports,workflows}
 mkdir -p /workspace/shared/manifests
 mkdir -p /workspace/droids
+
+# ── Set up repo copy for agents ──
+REPO_SRC=/opt/subcult-repo
+REPO_DST=/workspace/projects/subcult-corp
+BRANCH=agents/workspace
+
+if [ -d "$REPO_SRC" ]; then
+    # Always sync from the image (fresh copy each rebuild)
+    rm -rf "$REPO_DST"
+    cp -a "$REPO_SRC" "$REPO_DST"
+
+    cd "$REPO_DST"
+    git init -q
+    git config user.email "agents@subcult.tv"
+    git config user.name "Subcult Agents"
+    git add -A
+    git commit -q -m "Initial: synced from build $(date -Iseconds)"
+    git checkout -q -b "$BRANCH"
+
+    # Set up GitHub remote if token is available
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+        git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/onnwee/subcult-corp.git" 2>/dev/null || true
+        echo "GitHub remote configured for $REPO_DST"
+    fi
+
+    echo "Repo initialized at $REPO_DST on branch $BRANCH"
+    cd /workspace
+fi
 
 # ── Seed default files ──
 if [ ! -f /workspace/shared/prime-directive.md ]; then

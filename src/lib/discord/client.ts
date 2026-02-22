@@ -27,10 +27,110 @@ export interface DiscordEmbed {
     timestamp?: string;
 }
 
-/** POST to a Discord webhook. Returns the message object on success, null on failure. */
+// ─── Per-webhook rate limiter ───
+// Discord allows 5 requests/2s per webhook. We target ~2/s with retry-after backoff.
+
+const WEBHOOK_MIN_INTERVAL_MS = 600; // ~1.7 req/s — safe headroom under 5/2s burst
+const MAX_RETRIES = 3;
+
+type WebhookResult = { id: string; channel_id: string } | null;
+interface QueueEntry {
+    send: () => Promise<WebhookResult>;
+    resolve: (value: WebhookResult) => void;
+}
+
+/** Per-webhook sequential queue. Key = webhook base URL (without query params). */
+const webhookQueues = new Map<string, QueueEntry[]>();
+const processingWebhooks = new Set<string>();
+
+/** Extract the webhook base (without query string) for keying. */
+function webhookKey(webhookUrl: string): string {
+    return webhookUrl.split('?')[0];
+}
+
+/** Process queued messages for a single webhook, one at a time with pacing. */
+async function drainQueue(key: string): Promise<void> {
+    if (processingWebhooks.has(key)) return;
+    processingWebhooks.add(key);
+
+    const queue = webhookQueues.get(key);
+    try {
+        while (queue && queue.length > 0) {
+            const entry = queue.shift()!;
+            const result = await entry.send();
+            entry.resolve(result);
+            // Pace: wait between sends on the same webhook
+            if (queue.length > 0) {
+                await sleep(WEBHOOK_MIN_INTERVAL_MS);
+            }
+        }
+    } finally {
+        processingWebhooks.delete(key);
+        // If items were added while we were finishing, restart
+        if (queue && queue.length > 0) {
+            drainQueue(key);
+        }
+    }
+}
+
+/** POST with retry on 429. */
+async function sendWithRetry(
+    url: string,
+    body: Record<string, unknown>,
+): Promise<WebhookResult> {
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+
+            if (res.status === 429) {
+                const retryAfterHeader = res.headers.get('Retry-After');
+                const retryMs = retryAfterHeader
+                    ? Math.ceil(parseFloat(retryAfterHeader) * 1000)
+                    : 2000 * (attempt + 1);
+                log.warn('Webhook rate limited, backing off', {
+                    retryMs,
+                    attempt,
+                    queueKey: url.split('/webhooks/')[1]?.slice(0, 8),
+                });
+                await sleep(retryMs);
+                continue;
+            }
+
+            if (!res.ok) {
+                const text = await res.text().catch(() => '');
+                log.warn('Webhook POST failed', {
+                    status: res.status,
+                    body: text.slice(0, 200),
+                });
+                return null;
+            }
+
+            return (await res.json()) as { id: string; channel_id: string };
+        } catch (err) {
+            log.warn('Webhook POST error', {
+                error: (err as Error).message,
+                attempt,
+            });
+            if (attempt < MAX_RETRIES) {
+                await sleep(1000 * (attempt + 1));
+            }
+        }
+    }
+    return null;
+}
+
+function sleep(ms: number): Promise<void> {
+    return new Promise(r => setTimeout(r, ms));
+}
+
+/** POST to a Discord webhook. Rate-limited per webhook URL. */
 export async function postToWebhook(
     options: WebhookPostOptions,
-): Promise<{ id: string; channel_id: string } | null> {
+): Promise<WebhookResult> {
     const url = new URL(options.webhookUrl);
     url.searchParams.set('wait', 'true');
     if (options.threadId) {
@@ -43,27 +143,19 @@ export async function postToWebhook(
     if (options.content) body.content = options.content;
     if (options.embeds) body.embeds = options.embeds;
 
-    try {
-        const res = await fetch(url.toString(), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-        });
+    const key = webhookKey(options.webhookUrl);
 
-        if (!res.ok) {
-            const text = await res.text().catch(() => '');
-            log.warn('Webhook POST failed', {
-                status: res.status,
-                body: text.slice(0, 200),
-            });
-            return null;
+    const fullUrl = url.toString();
+    return new Promise<WebhookResult>(resolve => {
+        if (!webhookQueues.has(key)) {
+            webhookQueues.set(key, []);
         }
-
-        return (await res.json()) as { id: string; channel_id: string };
-    } catch (err) {
-        log.warn('Webhook POST error', { error: (err as Error).message });
-        return null;
-    }
+        webhookQueues.get(key)!.push({
+            send: () => sendWithRetry(fullUrl, body),
+            resolve,
+        });
+        drainQueue(key);
+    });
 }
 
 /**
@@ -111,26 +203,37 @@ export async function createThread(
     }
 }
 
-/** Internal helper for bot API calls. */
+/** Internal helper for bot API calls. Retries on 429. */
 async function discordFetch(
     path: string,
     options: RequestInit = {},
 ): Promise<Response> {
-    const res = await fetch(`${DISCORD_API}${path}`, {
-        ...options,
-        headers: {
-            Authorization: `Bot ${BOT_TOKEN}`,
-            'Content-Type': 'application/json',
-            ...options.headers,
-        },
-    });
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        const res = await fetch(`${DISCORD_API}${path}`, {
+            ...options,
+            headers: {
+                Authorization: `Bot ${BOT_TOKEN}`,
+                'Content-Type': 'application/json',
+                ...options.headers,
+            },
+        });
 
-    if (res.status === 429) {
-        const retryAfter = res.headers.get('Retry-After');
-        log.warn('Discord rate limited', { retryAfter, path });
+        if (res.status === 429) {
+            const retryAfterHeader = res.headers.get('Retry-After');
+            const retryMs = retryAfterHeader
+                ? Math.ceil(parseFloat(retryAfterHeader) * 1000)
+                : 2000 * (attempt + 1);
+            log.warn('Discord API rate limited, backing off', { retryMs, attempt, path });
+            if (attempt < MAX_RETRIES) {
+                await sleep(retryMs);
+                continue;
+            }
+        }
+
+        return res;
     }
-
-    return res;
+    // Unreachable, but TypeScript needs it
+    throw new Error('discordFetch: exhausted retries');
 }
 
 /**
@@ -220,6 +323,7 @@ export interface WebhookFileAttachment {
  * POST to a Discord webhook with file attachments via multipart/form-data.
  * If no files provided, delegates to existing postToWebhook.
  * Uses Node 22 native FormData — no external dependencies.
+ * Rate-limited through the same per-webhook queue.
  */
 export async function postToWebhookWithFiles(
     options: WebhookPostOptions & { files?: WebhookFileAttachment[] },
@@ -249,29 +353,57 @@ export async function postToWebhookWithFiles(
         formData.append(`files[${i}]`, blob, file.filename);
     }
 
-    try {
-        const res = await fetch(url.toString(), {
-            method: 'POST',
-            body: formData,
-            // No Content-Type header — auto multipart boundary
-        });
+    // Queue through the same rate limiter — uses a custom send function for multipart
+    const key = webhookKey(options.webhookUrl);
+    const sendMultipart = async (): Promise<WebhookResult> => {
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                const res = await fetch(url.toString(), {
+                    method: 'POST',
+                    body: formData,
+                });
 
-        if (!res.ok) {
-            const text = await res.text().catch(() => '');
-            log.warn('Webhook multipart POST failed', {
-                status: res.status,
-                body: text.slice(0, 200),
-            });
-            return null;
+                if (res.status === 429) {
+                    const retryAfterHeader = res.headers.get('Retry-After');
+                    const retryMs = retryAfterHeader
+                        ? Math.ceil(parseFloat(retryAfterHeader) * 1000)
+                        : 2000 * (attempt + 1);
+                    log.warn('Webhook multipart rate limited, backing off', { retryMs, attempt });
+                    await sleep(retryMs);
+                    continue;
+                }
+
+                if (!res.ok) {
+                    const text = await res.text().catch(() => '');
+                    log.warn('Webhook multipart POST failed', {
+                        status: res.status,
+                        body: text.slice(0, 200),
+                    });
+                    return null;
+                }
+
+                return (await res.json()) as { id: string; channel_id: string };
+            } catch (err) {
+                log.warn('Webhook multipart POST error', {
+                    error: (err as Error).message,
+                    attempt,
+                });
+                if (attempt < MAX_RETRIES) await sleep(1000 * (attempt + 1));
+            }
         }
-
-        return (await res.json()) as { id: string; channel_id: string };
-    } catch (err) {
-        log.warn('Webhook multipart POST error', {
-            error: (err as Error).message,
-        });
         return null;
-    }
+    };
+
+    return new Promise<WebhookResult>(resolve => {
+        if (!webhookQueues.has(key)) {
+            webhookQueues.set(key, []);
+        }
+        webhookQueues.get(key)!.push({
+            send: sendMultipart,
+            resolve,
+        });
+        drainQueue(key);
+    });
 }
 
 /** Convert hex color string to decimal int for Discord embeds. */

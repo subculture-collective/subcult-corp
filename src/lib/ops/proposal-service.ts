@@ -159,12 +159,14 @@ export async function createMissionFromProposal(
 
     for (const step of steps) {
         await sql`
-            INSERT INTO ops_mission_steps (mission_id, kind, status, payload)
+            INSERT INTO ops_mission_steps (mission_id, kind, status, payload, assigned_agent, output_path)
             VALUES (
                 ${missionId},
                 ${step.kind},
                 'queued',
-                ${jsonb(step.payload ?? {})}
+                ${jsonb(step.payload ?? {})},
+                ${step.assigned_agent ?? null},
+                ${step.output_path ?? null}
             )
         `;
         stepCount++;

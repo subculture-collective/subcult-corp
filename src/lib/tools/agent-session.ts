@@ -20,6 +20,9 @@ const log = logger.child({ module: 'agent-session' });
 /** Strip XML function-call tags and other LLM artifacts from text */
 function sanitizeSummary(text: string): string {
     return text
+        // Normalize DeepSeek DSML tags to standard XML before stripping
+        .replace(/<[｜|]DSML[｜|]/g, '<')
+        .replace(/<\/[｜|]DSML[｜|]/g, '</')
         // Remove XML-style tags (e.g. <function_calls>, <invoke>, <parameter>)
         .replace(/<\/?[a-z_][a-z0-9_-]*(?:\s[^>]*)?\s*>/gi, '')
         // Collapse runs of whitespace
@@ -36,14 +39,17 @@ function truncateToFirstSentences(text: string, maxLen: number): string {
         .trim();
     if (clean.length <= maxLen) return clean;
     // Cut at last sentence-ending punctuation before maxLen
+    // Handles: "word. ", "word.\n", "word.**", "word.)\n", etc.
     const truncated = clean.slice(0, maxLen);
-    const lastSentence = Math.max(
-        truncated.lastIndexOf('. '),
-        truncated.lastIndexOf('.\n'),
-        truncated.lastIndexOf('? '),
-        truncated.lastIndexOf('! '),
-    );
-    if (lastSentence > maxLen * 0.3) return truncated.slice(0, lastSentence + 1);
+    const sentenceEnd = truncated.search(/[.!?][*_)\]]*[\s\n](?=[^\s])[^]*$/);
+    if (sentenceEnd > maxLen * 0.3) {
+        // Include the punctuation and any closing markdown
+        const endMatch = truncated.slice(sentenceEnd).match(/^[.!?][*_)\]]*/);
+        return truncated.slice(0, sentenceEnd + (endMatch?.[0].length ?? 1));
+    }
+    // Fallback: cut at last newline (paragraph break) for cleaner truncation
+    const lastNewline = truncated.lastIndexOf('\n');
+    if (lastNewline > maxLen * 0.5) return truncated.slice(0, lastNewline);
     return truncated + '...';
 }
 
@@ -175,7 +181,7 @@ export async function executeAgentSession(session: AgentSession): Promise<void> 
             const result = await llmGenerateWithTools({
                 messages,
                 temperature: 0.7,
-                maxTokens: 2000,
+                maxTokens: 16_000,
                 model: session.model ?? undefined,
                 tools: tools.length > 0 ? tools : undefined,
                 maxToolRounds: 1, // We handle the outer loop ourselves
@@ -226,7 +232,7 @@ export async function executeAgentSession(session: AgentSession): Promise<void> 
         }, allToolCalls, llmRounds, totalTokens, totalCost);
 
         // Emit completion event — short preview only, full artifact posts separately
-        const summaryPreview = truncateToFirstSentences(cleanedText, 200);
+        const summaryPreview = truncateToFirstSentences(cleanedText, 2000);
         await emitEvent({
             agent_id: agentId,
             kind: 'agent_session_completed',

@@ -882,7 +882,21 @@ export function useContent(filters?: ContentFilters) {
 
     const refetch = useCallback(() => setRefreshKey(k => k + 1), []);
 
-    return { drafts, loading, error, refetch };
+    const updateStatus = useCallback(async (id: string, status: ContentStatus) => {
+        const res = await fetch('/api/ops/content', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, status }),
+        });
+        if (!res.ok) {
+            const data = await res.json();
+            throw new Error(data.error || `Failed to update status (${res.status})`);
+        }
+        // Refresh the list
+        await fetchDrafts();
+    }, [fetchDrafts]);
+
+    return { drafts, loading, error, refetch, updateStatus };
 }
 
 // ─── useGovernance — fetch + poll governance proposals ───

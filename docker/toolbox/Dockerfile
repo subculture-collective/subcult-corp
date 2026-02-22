@@ -38,7 +38,12 @@ RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install --no-cache-dir requests feedparser beautifulsoup4 html2text
 
-COPY init-workspace.sh /usr/local/bin/init-workspace.sh
+# Copy repo source into the image (excludes .env, .git, node_modules via .dockerignore)
+# init-workspace.sh will set this up as a git repo on the agents/workspace branch
+COPY . /opt/subcult-repo
+
+# Build context changed to repo root — init script is now at docker/toolbox/
+COPY docker/toolbox/init-workspace.sh /usr/local/bin/init-workspace.sh
 RUN chmod +x /usr/local/bin/init-workspace.sh
 
 RUN echo 'umask 0000' > /etc/workspace-env.sh

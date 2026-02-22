@@ -8,6 +8,7 @@ import { AGENTS } from '@/lib/agents';
 import { ChevronDownIcon } from '@/lib/icons';
 import type { AgentId } from '@/lib/types';
 import { AgentAvatar } from './AgentAvatar';
+import { MarkdownContent } from '@/components/MarkdownContent';
 
 // ─── Formatting helpers ───
 
@@ -109,8 +110,8 @@ function DigestContent({ digest }: { digest: DigestEntry }) {
             </div>
 
             {/* Summary text */}
-            <div className='text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap'>
-                {digest.summary}
+            <div className='text-sm text-zinc-300'>
+                <MarkdownContent>{digest.summary}</MarkdownContent>
             </div>
 
             {/* Highlights */}

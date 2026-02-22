@@ -330,8 +330,23 @@ async function pollRoundtables(): Promise<boolean> {
     try {
         await orchestrateConversation(session, true);
 
-        // Content Pipeline: writing_room and content_review extraction now happens
-        // post-synthesis in pollAgentSessions() — not here on the raw transcript.
+        // Content Pipeline: process completed content_review sessions
+        if (session.format === 'content_review') {
+            try {
+                const { processReviewSession } =
+                    await import('../../src/lib/ops/content-pipeline');
+                await processReviewSession(session.id);
+                log.info('Content review processed', {
+                    sessionId: session.id,
+                });
+            } catch (reviewErr) {
+                // Non-fatal — review processing should never stall the worker
+                log.error('Content review processing failed (non-fatal)', {
+                    error: reviewErr,
+                    sessionId: session.id,
+                });
+            }
+        }
 
         // Governance: extract votes from debate sessions tied to a governance proposal
         const proposalId = (session.metadata as Record<string, unknown>)
@@ -592,6 +607,53 @@ async function pollMissionSteps(): Promise<boolean> {
             return true;
         }
 
+        // ── Special case: convene_roundtable — INSERT a roundtable session directly ──
+        if (step.kind === 'convene_roundtable') {
+            const payload = (step.payload ?? {}) as Record<string, unknown>;
+            const format = (payload.format as string) ?? 'brainstorm';
+            const topic = (payload.topic as string) ?? mission?.title ?? 'Roundtable';
+            const participants = (payload.participants as string[]) ?? ['chora', 'subrosa', 'thaum', 'praxis', 'mux'];
+
+            await sql`
+                INSERT INTO ops_roundtable_sessions (
+                    format, topic, participants, status, scheduled_for, source, metadata
+                ) VALUES (
+                    ${format},
+                    ${topic},
+                    ${participants},
+                    'pending',
+                    NOW(),
+                    'mission',
+                    ${sql.json({ mission_id: step.mission_id, step_id: step.id })}::jsonb
+                )
+            `;
+
+            await sql`
+                UPDATE ops_mission_steps
+                SET status = 'succeeded',
+                    result = ${sql.json({ action: 'roundtable_enqueued', format, topic })}::jsonb,
+                    completed_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = ${step.id}
+            `;
+
+            await emitEvent({
+                agent_id: agentId,
+                kind: 'roundtable_enqueued',
+                title: `Roundtable enqueued: ${format} — ${topic.slice(0, 80)}`,
+                tags: ['mission', 'roundtable', 'enqueued'],
+                metadata: {
+                    missionId: step.mission_id,
+                    stepId: step.id,
+                    format,
+                    topic,
+                },
+            });
+
+            await finalizeMissionIfComplete(step.mission_id);
+            return true;
+        }
+
         const { buildStepPrompt } =
             await import('../../src/lib/ops/step-prompts');
 
@@ -653,10 +715,11 @@ async function pollMissionSteps(): Promise<boolean> {
             RETURNING id
         `;
 
-        // Mark step with the agent session reference
+        // Mark step with the agent session reference and persist resolved agent
         await sql`
             UPDATE ops_mission_steps
             SET result = ${sql.json({ agent_session_id: session.id, agent: agentId })}::jsonb,
+                assigned_agent = COALESCE(assigned_agent, ${agentId}),
                 updated_at = NOW()
             WHERE id = ${step.id}
         `;
@@ -717,6 +780,18 @@ async function pollMissionSteps(): Promise<boolean> {
     return true;
 }
 
+// Step kinds that produce research output → 'research' channel
+const RESEARCH_STEP_KINDS = new Set([
+    'research_topic', 'scan_signals', 'analyze_discourse',
+    'classify_pattern', 'trace_incentive', 'identify_assumption',
+]);
+
+// Step kinds that produce insight/synthesis output → 'insights' channel
+const INSIGHT_STEP_KINDS = new Set([
+    'distill_insight', 'consolidate_memory', 'document_lesson',
+    'memory_archaeology',
+]);
+
 /** Finalize mission steps based on their agent session status */
 async function finalizeMissionSteps(): Promise<boolean> {
     // Find running steps with their associated agent session status in a single query
@@ -724,15 +799,26 @@ async function finalizeMissionSteps(): Promise<boolean> {
         Array<{
             id: string;
             mission_id: string;
+            kind: string;
+            assigned_agent: string | null;
+            session_agent_id: string | null;
             session_status: string | null;
             session_error: string | null;
+            session_summary: string | null;
         }>
     >`
         SELECT
             s.id,
             s.mission_id,
+            s.kind,
+            s.assigned_agent,
+            sess.agent_id as session_agent_id,
             sess.status as session_status,
-            sess.error as session_error
+            sess.error as session_error,
+            CASE WHEN sess.status = 'succeeded'
+                THEN LEFT(sess.result->>'summary', 2000)
+                ELSE NULL
+            END as session_summary
         FROM ops_mission_steps s
         LEFT JOIN ops_agent_sessions sess ON sess.id = (s.result->>'agent_session_id')::uuid
         WHERE s.status = 'running'
@@ -755,12 +841,38 @@ async function finalizeMissionSteps(): Promise<boolean> {
                 WHERE id = ${step.id}
             `;
             finalized++;
+
+            // Emit step-kind-specific events for research/insights channels
+            const resolvedAgent = step.assigned_agent || step.session_agent_id;
+            if (resolvedAgent) {
+                const { emitEvent: emitStepEvent } = await import('../../src/lib/ops/events');
+                if (RESEARCH_STEP_KINDS.has(step.kind)) {
+                    await emitStepEvent({
+                        agent_id: resolvedAgent,
+                        kind: 'research_completed',
+                        title: `Research completed: ${step.kind}`,
+                        summary: step.session_summary || undefined,
+                        tags: ['research', step.kind, 'completed'],
+                        metadata: { missionId: step.mission_id, stepId: step.id, stepKind: step.kind },
+                    });
+                } else if (INSIGHT_STEP_KINDS.has(step.kind)) {
+                    await emitStepEvent({
+                        agent_id: resolvedAgent,
+                        kind: 'insight_generated',
+                        title: `Insight generated: ${step.kind}`,
+                        summary: step.session_summary || undefined,
+                        tags: ['insight', step.kind, 'completed'],
+                        metadata: { missionId: step.mission_id, stepId: step.id, stepKind: step.kind },
+                    });
+                }
+            }
+
             await finalizeMissionIfComplete(step.mission_id);
-        } else if (step.session_status === 'failed') {
+        } else if (step.session_status === 'failed' || step.session_status === 'timed_out') {
             await sql`
                 UPDATE ops_mission_steps
                 SET status = 'failed',
-                    failure_reason = ${step.session_error ?? 'Agent session failed'},
+                    failure_reason = ${step.session_error ?? (step.session_status === 'timed_out' ? 'Agent session timed out' : 'Agent session failed')},
                     completed_at = NOW(),
                     updated_at = NOW()
                 WHERE id = ${step.id}
@@ -951,6 +1063,28 @@ async function pollInitiatives(): Promise<boolean> {
     return true;
 }
 
+/** Sweep agent sessions stuck in 'running' past their timeout */
+async function sweepStaleAgentSessions(): Promise<boolean> {
+    const stale = await sql<{ id: string; agent_id: string; source: string }[]>`
+        UPDATE ops_agent_sessions
+        SET status = 'timed_out',
+            error = 'Swept by worker — session exceeded timeout while running',
+            completed_at = NOW()
+        WHERE status = 'running'
+          AND started_at < NOW() - COALESCE(timeout_seconds, 300) * INTERVAL '1 second' - INTERVAL '5 minutes'
+        RETURNING id, agent_id, source
+    `;
+
+    if (stale.length > 0) {
+        log.warn('Swept stale agent sessions', {
+            count: stale.length,
+            sessions: stale.map(s => ({ id: s.id, agent: s.agent_id, source: s.source })),
+        });
+    }
+
+    return stale.length > 0;
+}
+
 /** Check if all steps in a mission are done, finalize if so */
 async function finalizeMissionIfComplete(missionId: string): Promise<void> {
     const [counts] = await sql<
@@ -982,7 +1116,7 @@ async function finalizeMissionIfComplete(missionId: string): Promise<void> {
             completed_at = NOW(),
             updated_at = NOW()
         WHERE id = ${missionId}
-        AND status = 'running'
+        AND status IN ('running', 'approved')
     `;
 }
 
@@ -1008,8 +1142,89 @@ async function waitForDb(maxRetries = 30, intervalMs = 2000): Promise<void> {
 
 let running = true;
 
+/** One-time: process content_review sessions that completed but were never processed */
+async function catchUpStuckReviews(): Promise<void> {
+    const stuck = await sql<{ id: string; review_session_id: string; title: string }[]>`
+        SELECT d.id, d.review_session_id, d.title
+        FROM ops_content_drafts d
+        JOIN ops_roundtable_sessions rs ON rs.id = d.review_session_id
+        WHERE d.status = 'review'
+          AND rs.status = 'completed'
+    `;
+
+    if (stuck.length === 0) return;
+
+    log.info('Catching up stuck content reviews', { count: stuck.length });
+
+    const { processReviewSession } =
+        await import('../../src/lib/ops/content-pipeline');
+
+    for (const draft of stuck) {
+        try {
+            await processReviewSession(draft.review_session_id);
+            log.info('Stuck review processed', {
+                draftId: draft.id,
+                title: draft.title,
+            });
+        } catch (err) {
+            log.error('Failed to process stuck review', {
+                error: err,
+                draftId: draft.id,
+            });
+        }
+    }
+}
+
+/** One-time: finalize missions stuck in 'approved' with all steps completed */
+async function catchUpOrphanedMissions(): Promise<void> {
+    // Find missions in 'approved' where all steps are either succeeded or failed (none queued/running)
+    const orphaned = await sql<{ id: string; title: string; total: number; succeeded: number; failed: number }[]>`
+        SELECT m.id, m.title,
+            COUNT(s.id)::int as total,
+            COUNT(s.id) FILTER (WHERE s.status = 'succeeded')::int as succeeded,
+            COUNT(s.id) FILTER (WHERE s.status = 'failed')::int as failed
+        FROM ops_missions m
+        LEFT JOIN ops_mission_steps s ON s.mission_id = m.id
+        WHERE m.status = 'approved'
+        GROUP BY m.id
+        HAVING COUNT(s.id) > 0
+           AND COUNT(s.id) = COUNT(s.id) FILTER (WHERE s.status IN ('succeeded', 'failed'))
+    `;
+
+    if (orphaned.length === 0) return;
+
+    log.info('Catching up orphaned missions', { count: orphaned.length });
+
+    for (const mission of orphaned) {
+        const finalStatus = mission.failed > 0 ? 'failed' : 'succeeded';
+        const failReason = mission.failed > 0
+            ? `${mission.failed} of ${mission.total} step(s) failed`
+            : null;
+        await sql`
+            UPDATE ops_missions
+            SET status = ${finalStatus},
+                failure_reason = ${failReason},
+                completed_at = NOW(),
+                updated_at = NOW()
+            WHERE id = ${mission.id}
+            AND status = 'approved'
+        `;
+        log.info('Orphaned mission finalized', {
+            missionId: mission.id,
+            title: mission.title,
+            status: finalStatus,
+        });
+    }
+}
+
 async function pollLoop(): Promise<void> {
     await waitForDb();
+
+    // Catch up on any stuck reviews from before the fix
+    await catchUpStuckReviews();
+
+    // Finalize any orphaned missions stuck in 'approved' with all steps done
+    await catchUpOrphanedMissions();
 
     while (running) {
         try {
@@ -1025,6 +1240,9 @@ async function pollLoop(): Promise<void> {
 
             // Finalize mission steps based on agent session completion
             await finalizeMissionSteps();
+
+            // Sweep stale agent sessions stuck in 'running' past their timeout
+            await sweepStaleAgentSessions();
 
             // Initiatives — check every other loop
             await pollInitiatives();

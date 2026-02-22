@@ -7,6 +7,7 @@ import { useNewsDigests, type NewsDigestEntry } from './hooks';
 import { ChevronDownIcon, NewspaperIcon } from '@/lib/icons';
 import { AgentAvatar } from './AgentAvatar';
 import { AGENTS } from '@/lib/agents';
+import { MarkdownContent } from '@/components/MarkdownContent';
 
 // ─── Formatting helpers ───
 
@@ -42,34 +43,6 @@ function NewsDigestSkeleton() {
     );
 }
 
-// ─── Simple markdown renderer (no deps) ───
-
-function renderMarkdown(text: string): string {
-    let html = text
-        // Escape HTML
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        // Headers
-        .replace(/^### (.+)$/gm, '<h3 class="text-sm font-semibold text-zinc-200 mt-4 mb-1">$1</h3>')
-        .replace(/^## (.+)$/gm, '<h2 class="text-base font-semibold text-zinc-100 mt-5 mb-2">$1</h2>')
-        .replace(/^# (.+)$/gm, '<h1 class="text-lg font-bold text-zinc-100 mt-6 mb-2">$1</h1>')
-        // Bold & italic
-        .replace(/\*\*(.+?)\*\*/g, '<strong class="text-zinc-200">$1</strong>')
-        .replace(/\*(.+?)\*/g, '<em>$1</em>')
-        // Inline code
-        .replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 rounded bg-zinc-800 text-zinc-300 text-xs">$1</code>')
-        // Unordered lists
-        .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc text-zinc-400">$1</li>')
-        // Horizontal rule
-        .replace(/^---$/gm, '<hr class="border-zinc-700/50 my-3" />')
-        // Line breaks (preserve paragraphs)
-        .replace(/\n\n/g, '</p><p class="mb-2">')
-        .replace(/\n/g, '<br />');
-
-    return `<p class="mb-2">${html}</p>`;
-}
-
 // ─── Digest Content ───
 
 function DigestBody({ digest }: { digest: NewsDigestEntry }) {
@@ -86,10 +59,9 @@ function DigestBody({ digest }: { digest: NewsDigestEntry }) {
     return (
         <div className='space-y-3'>
             {/* Summary text — rendered as markdown */}
-            <div
-                className='text-sm text-zinc-300 leading-relaxed prose prose-invert prose-sm max-w-none'
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(digest.summary) }}
-            />
+            <div className='text-sm text-zinc-300'>
+                <MarkdownContent>{digest.summary}</MarkdownContent>
+            </div>
 
             {/* Source count + toggle */}
             <button

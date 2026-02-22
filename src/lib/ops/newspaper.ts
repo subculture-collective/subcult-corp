@@ -31,6 +31,7 @@ export interface NewspaperEdition {
     summary: string;
     article_count: number;
     articles: NewspaperArticle[];
+    markdown_content: string | null;
     markdown_path: string | null;
     pdf_path: string | null;
     pdf_data: Buffer | null;
@@ -322,22 +323,62 @@ async function deliverToAgentInboxes(date: string, markdown: string): Promise<vo
     }
 }
 
-/** Post newspaper announcement to Discord. */
-async function postToDiscord(headline: string, articleCount: number, date: string): Promise<void> {
-    const webhookUrl = await getWebhookUrl('daily-digest');
+/** Split text into chunks that fit Discord's 2000-char limit, breaking at line boundaries. */
+function splitDiscordMessage(content: string): string[] {
+    const MAX = 2000;
+    if (content.length <= MAX) return [content];
+    const lines = content.split('\n');
+    const chunks: string[] = [];
+    let current = '';
+    for (const line of lines) {
+        const candidate = current.length === 0 ? line : `${current}\n${line}`;
+        if (candidate.length > MAX) {
+            if (current.length > 0) {
+                chunks.push(current);
+                current = line;
+            } else {
+                let remaining = line;
+                while (remaining.length > MAX) {
+                    chunks.push(remaining.slice(0, MAX));
+                    remaining = remaining.slice(MAX);
+                }
+                current = remaining;
+            }
+        } else {
+            current = candidate;
+        }
+    }
+    if (current.length > 0) chunks.push(current);
+    return chunks;
+}
+
+/** Post newspaper to Discord — embed header + markdown content in chunks. */
+async function postToDiscord(headline: string, articleCount: number, date: string, markdown: string): Promise<void> {
+    const webhookUrl = await getWebhookUrl('news-digest');
     if (!webhookUrl) return;
 
+    // Header embed
     await postToWebhook({
         webhookUrl,
         username: 'SUBCULT Daily',
         embeds: [{
             title: `SUBCULT Daily — ${date}`,
-            description: `**${headline}**\n\n${articleCount} articles curated from today's feeds.\n\n[Read the full edition](https://subcorp.subcult.tv/news/${date})`,
+            description: `**${headline}**\n\n${articleCount} articles curated from today's feeds.\n\n[Read the full PDF edition](https://subcorp.subcult.tv/news/${date})`,
             color: 0x1a1a2e,
             footer: { text: 'subcorp.subcult.tv/news' },
             timestamp: new Date().toISOString(),
         }],
     });
+
+    // Markdown content in chunks
+    const chunks = splitDiscordMessage(markdown);
+    for (const chunk of chunks) {
+        await postToWebhook({
+            webhookUrl,
+            username: 'SUBCULT Daily',
+            content: chunk,
+        });
+    }
 }
 
 // ─── Main pipeline ───
@@ -475,22 +516,22 @@ export async function generateDailyNewspaper(): Promise<string | null> {
         log.warn('PDF generation failed (non-fatal)', { error: (err as Error).message });
     }
 
-    // 13. Store in DB (including PDF binary for persistence across rebuilds)
+    // 13. Store in DB (including markdown content and PDF binary for persistence across rebuilds)
     const [inserted] = await sql<{ id: string }[]>`
         INSERT INTO ops_newspaper_editions (
             edition_date, headline, summary, article_count, articles,
-            markdown_path, pdf_path, pdf_data, generated_by
+            markdown_content, markdown_path, pdf_path, pdf_data, generated_by
         )
         VALUES (
             ${today}, ${headline}, ${editionSummary}, ${articles.length},
-            ${jsonb(articles)}, ${markdownPath}, ${pdfPath},
+            ${jsonb(articles)}, ${markdown}, ${markdownPath}, ${pdfPath},
             ${pdfBuffer}, 'system'
         )
         RETURNING id
     `;
 
-    // 14. Discord announcement (fire-and-forget)
-    postToDiscord(headline, articles.length, today).catch((err) =>
+    // 14. Discord — embed header + full markdown edition (fire-and-forget)
+    postToDiscord(headline, articles.length, today, markdown).catch((err) =>
         log.warn('Discord newspaper post failed', { error: (err as Error).message }),
     );
 
@@ -551,7 +592,7 @@ export async function getEdition(date: string): Promise<Omit<NewspaperEdition, '
     const rows = await sql<(Omit<NewspaperEdition, 'pdf_data'> & { has_pdf: boolean })[]>`
         SELECT
             id, edition_date, headline, summary, article_count, articles,
-            markdown_path, pdf_path, generated_by, created_at,
+            markdown_content, markdown_path, pdf_path, generated_by, created_at,
             (pdf_data IS NOT NULL OR pdf_path IS NOT NULL) AS has_pdf
         FROM ops_newspaper_editions
         WHERE edition_date = ${date}

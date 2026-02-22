@@ -180,6 +180,14 @@ async function checkTrigger(
             return checkMemoryArchaeologyDue(conditions, targetAgent);
         case 'agent_design_review':
             return checkAgentDesignReview(conditions, targetAgent);
+        case 'code_sprint_ready':
+            return checkCodeSprintReady(conditions, targetAgent);
+        case 'product_discovery_due':
+            return checkProductDiscoveryDue(conditions, targetAgent);
+        case 'directive_update_needed':
+            return checkDirectiveUpdateNeeded(conditions, targetAgent);
+        case 'self_evolution_needed':
+            return checkSelfEvolutionNeeded(conditions, targetAgent);
         default:
             if (rule.trigger_event.startsWith('proactive_')) {
                 return checkProactiveGeneric(rule, targetAgent);
@@ -222,10 +230,8 @@ async function checkContentDraftCreated(
     conditions: Record<string, unknown>,
     targetAgent: string,
 ): Promise<TriggerCheckResult> {
-    const lookback = (conditions.lookback_minutes as number) ?? 30;
-    const cutoff = new Date(Date.now() - lookback * 60_000).toISOString();
-
-    // Find drafts in 'draft' status created recently that don't have a review session yet
+    // No lookback window — drafts needing review should be caught regardless of age.
+    // The review_session_id IS NULL filter is the real gate.
     const drafts = await sql<
         { id: string; title: string; author_agent: string; body: string }[]
     >`
@@ -233,7 +239,6 @@ async function checkContentDraftCreated(
         FROM ops_content_drafts
         WHERE status = 'draft'
           AND review_session_id IS NULL
-          AND created_at >= ${cutoff}
         ORDER BY created_at ASC
         LIMIT 1
     `;
@@ -456,32 +461,39 @@ async function checkProposalReady(
     conditions: Record<string, unknown>,
     targetAgent: string,
 ): Promise<TriggerCheckResult> {
-    const lookback = (conditions.lookback_minutes as number) ?? 30;
-    const cutoff = new Date(Date.now() - lookback * 60_000).toISOString();
-
+    // No lookback window — pending proposals should be visible regardless of age.
+    // The trigger's own cooldown prevents it from firing too frequently.
     const pending = await sql<{ id: string; title: string }[]>`
         SELECT id, title FROM ops_mission_proposals
-        WHERE status = 'pending' AND created_at >= ${cutoff}
+        WHERE status = 'pending'
         ORDER BY created_at ASC
         LIMIT 5
     `;
 
-    if (pending.length > 0) {
-        return {
-            fired: true,
-            reason: `${pending.length} pending proposal(s) awaiting review`,
-            proposal: {
-                agent_id: targetAgent,
-                title: `Review and action pending proposals`,
-                description: `${pending.length} proposal(s) waiting: ${pending.map(p => p.title).join(', ')}. Review each proposal, approve actionable ones, reject stale ones.`,
-                proposed_steps: [
-                    { kind: 'audit_system', payload: { scope: 'pending_proposals' } },
-                ],
-                source: 'trigger',
-            },
-        };
-    }
-    return { fired: false };
+    if (pending.length === 0) return { fired: false };
+
+    // Dedup: skip if a review mission already exists in approved/queued state
+    const [existing] = await sql<[{ count: number }]>`
+        SELECT COUNT(*)::int as count FROM ops_missions
+        WHERE title = 'Review and action pending proposals'
+        AND status IN ('approved')
+        AND created_at > NOW() - INTERVAL '1 hour'
+    `;
+    if (existing.count > 0) return { fired: false };
+
+    return {
+        fired: true,
+        reason: `${pending.length} pending proposal(s) awaiting review`,
+        proposal: {
+            agent_id: targetAgent,
+            title: `Review and action pending proposals`,
+            description: `${pending.length} proposal(s) waiting: ${pending.map(p => p.title).join(', ')}. Review each proposal, approve actionable ones, reject stale ones.`,
+            proposed_steps: [
+                { kind: 'audit_system', payload: { scope: 'pending_proposals' } },
+            ],
+            source: 'trigger',
+        },
+    };
 }
 
 async function checkDailyRoundtable(
@@ -990,4 +1002,219 @@ async function checkAgentDesignReview(
             reason: `Agent design failed: ${(err as Error).message}`,
         };
     }
+}
+
+// ─── Code Sprint Ready ───
+
+async function checkCodeSprintReady(
+    conditions: Record<string, unknown>,
+    targetAgent: string,
+): Promise<TriggerCheckResult> {
+    const lookbackHours = (conditions.lookback_hours as number) ?? 48;
+    const maxActiveMissions = (conditions.max_active_code_missions as number) ?? 2;
+    const cutoff = new Date(Date.now() - lookbackHours * 60 * 60_000).toISOString();
+
+    // Check for recent completed planning/strategy/shipping roundtables
+    const [{ count: planningCount }] = await sql<[{ count: number }]>`
+        SELECT COUNT(*)::int as count FROM ops_roundtable_sessions
+        WHERE status = 'completed'
+          AND format IN ('planning', 'strategy', 'shipping')
+          AND completed_at >= ${cutoff}
+    `;
+
+    if (planningCount === 0) {
+        return { fired: false, reason: 'No recent planning sessions' };
+    }
+
+    // Check active code missions (running missions with patch_code steps)
+    const [{ count: activeMissions }] = await sql<[{ count: number }]>`
+        SELECT COUNT(DISTINCT m.id)::int as count
+        FROM ops_missions m
+        JOIN ops_mission_steps s ON s.mission_id = m.id
+        WHERE m.status IN ('approved', 'running')
+          AND s.kind = 'patch_code'
+    `;
+
+    if (activeMissions >= maxActiveMissions) {
+        return { fired: false, reason: `${activeMissions} active code missions (max ${maxActiveMissions})` };
+    }
+
+    return {
+        fired: true,
+        reason: `${planningCount} planning session(s) completed, ${activeMissions} active code missions`,
+        proposal: {
+            agent_id: targetAgent,
+            title: 'Code sprint: implement planning outcomes',
+            description: `Recent planning sessions produced actionable tasks. Sprint to implement them.`,
+            proposed_steps: [
+                { kind: 'research_topic', assigned_agent: 'chora', payload: { topic: 'Review recent planning artifacts for actionable code tasks' } },
+                { kind: 'patch_code', assigned_agent: 'praxis', payload: { topic: 'Implement highest-priority task from planning session' } },
+                { kind: 'audit_system', assigned_agent: 'subrosa', payload: { scope: 'code_review', topic: 'Review code changes from sprint' } },
+            ],
+            source: 'trigger',
+        },
+    };
+}
+
+// ─── Product Discovery Due ───
+
+async function checkProductDiscoveryDue(
+    conditions: Record<string, unknown>,
+    targetAgent: string,
+): Promise<TriggerCheckResult> {
+    const inactivityDays = (conditions.inactivity_days as number) ?? 7;
+    const cutoff = new Date(Date.now() - inactivityDays * 86_400_000).toISOString();
+
+    // Check for any product-related roundtable or mission in the lookback window
+    const [{ count: productSessions }] = await sql<[{ count: number }]>`
+        SELECT COUNT(*)::int as count FROM ops_roundtable_sessions
+        WHERE created_at >= ${cutoff}
+          AND (format IN ('brainstorm', 'strategy', 'planning', 'shipping')
+               OR topic ILIKE '%product%')
+    `;
+
+    const [{ count: productMissions }] = await sql<[{ count: number }]>`
+        SELECT COUNT(*)::int as count FROM ops_missions
+        WHERE created_at >= ${cutoff}
+          AND (title ILIKE '%product%' OR title ILIKE '%spec%' OR title ILIKE '%feature%')
+    `;
+
+    if (productSessions > 0 || productMissions > 0) {
+        return { fired: false, reason: 'Recent product activity found' };
+    }
+
+    return {
+        fired: true,
+        reason: `No product-related activity in ${inactivityDays} days`,
+        proposal: {
+            agent_id: targetAgent,
+            title: 'Product discovery: research and spec',
+            description: `No product work in ${inactivityDays} days. Time to explore opportunities and draft a product spec.`,
+            proposed_steps: [
+                { kind: 'research_topic', assigned_agent: 'chora', payload: { topic: 'Research product opportunities based on project capabilities and market signals' } },
+                { kind: 'scan_signals', assigned_agent: 'thaum', payload: { topic: 'Scan for product-market fit signals and emerging opportunities' } },
+                { kind: 'convene_roundtable', payload: { format: 'brainstorm', topic: 'Product discovery: what should we build next?', participants: ['chora', 'thaum', 'praxis', 'mux'] } },
+                { kind: 'draft_product_spec', assigned_agent: 'praxis', payload: { topic: 'Draft product specification from discovery findings' } },
+            ],
+            source: 'trigger',
+        },
+    };
+}
+
+// ─── Directive Update Needed ───
+
+async function checkDirectiveUpdateNeeded(
+    conditions: Record<string, unknown>,
+    targetAgent: string,
+): Promise<TriggerCheckResult> {
+    const lookbackDays = (conditions.lookback_days as number) ?? 14;
+    const cutoff = new Date(Date.now() - lookbackDays * 86_400_000).toISOString();
+
+    // Check for a recently succeeded product spec mission
+    const [{ count: specCount }] = await sql<[{ count: number }]>`
+        SELECT COUNT(*)::int as count FROM ops_missions
+        WHERE status = 'succeeded'
+          AND created_at >= ${cutoff}
+          AND (title ILIKE '%product spec%' OR title ILIKE '%product discovery%')
+    `;
+
+    if (specCount === 0) {
+        return { fired: false, reason: 'No recent product spec mission' };
+    }
+
+    // Check if directive was already updated recently
+    const [{ count: directiveEvents }] = await sql<[{ count: number }]>`
+        SELECT COUNT(*)::int as count FROM ops_agent_events
+        WHERE kind = 'directive_updated'
+          AND created_at >= ${cutoff}
+    `;
+
+    if (directiveEvents > 0) {
+        return { fired: false, reason: 'Directive already updated recently' };
+    }
+
+    return {
+        fired: true,
+        reason: `Product spec completed but directive not updated in ${lookbackDays} days`,
+        proposal: {
+            agent_id: targetAgent,
+            title: 'Update prime directive based on product spec',
+            description: `A product spec was completed recently. The prime directive should be updated to reflect the new direction.`,
+            proposed_steps: [
+                { kind: 'convene_roundtable', payload: { format: 'strategy', topic: 'Strategic alignment: update directive based on product spec', participants: ['chora', 'subrosa', 'thaum', 'praxis', 'mux', 'primus'] } },
+                { kind: 'update_directive', assigned_agent: 'primus', payload: { topic: 'Write updated prime directive incorporating product spec and strategy discussion' } },
+            ],
+            source: 'trigger',
+        },
+    };
+}
+
+// ─── Self Evolution Needed ───
+
+async function checkSelfEvolutionNeeded(
+    conditions: Record<string, unknown>,
+    targetAgent: string,
+): Promise<TriggerCheckResult> {
+    const lookbackDays = (conditions.lookback_days as number) ?? 7;
+    const minSignals = (conditions.min_signals as number) ?? 2;
+    const cutoff = new Date(Date.now() - lookbackDays * 86_400_000).toISOString();
+
+    let signals = 0;
+    const signalDetails: string[] = [];
+
+    // Signal 1: Recent retro roundtable
+    const [{ count: retroCount }] = await sql<[{ count: number }]>`
+        SELECT COUNT(*)::int as count FROM ops_roundtable_sessions
+        WHERE status = 'completed'
+          AND format = 'retro'
+          AND completed_at >= ${cutoff}
+    `;
+    if (retroCount > 0) {
+        signals++;
+        signalDetails.push(`${retroCount} retro(s)`);
+    }
+
+    // Signal 2: 3+ mission failures
+    const [{ count: failureCount }] = await sql<[{ count: number }]>`
+        SELECT COUNT(*)::int as count FROM ops_missions
+        WHERE status = 'failed'
+          AND updated_at >= ${cutoff}
+    `;
+    if (failureCount >= 3) {
+        signals++;
+        signalDetails.push(`${failureCount} failures`);
+    }
+
+    // Signal 3: 2+ improvement-tagged memories
+    const [{ count: improvementMemories }] = await sql<[{ count: number }]>`
+        SELECT COUNT(*)::int as count FROM ops_agent_memory
+        WHERE created_at >= ${cutoff}
+          AND superseded_by IS NULL
+          AND (tags @> ARRAY['improvement'] OR tags @> ARRAY['lesson'] OR tags @> ARRAY['bug'])
+    `;
+    if (improvementMemories >= 2) {
+        signals++;
+        signalDetails.push(`${improvementMemories} improvement memories`);
+    }
+
+    if (signals < minSignals) {
+        return { fired: false, reason: `Only ${signals} signal(s), need ${minSignals}` };
+    }
+
+    return {
+        fired: true,
+        reason: `Self-evolution signals detected: ${signalDetails.join(', ')}`,
+        proposal: {
+            agent_id: targetAgent,
+            title: 'Self-evolution: analyze issues and implement fixes',
+            description: `Multiple improvement signals detected (${signalDetails.join(', ')}). Time to analyze and address systemic issues.`,
+            proposed_steps: [
+                { kind: 'audit_system', assigned_agent: 'chora', payload: { scope: 'self_evolution', topic: 'Analyze recent failures, retros, and improvement memories for actionable fixes' } },
+                { kind: 'convene_roundtable', payload: { format: 'planning', topic: 'Self-evolution planning: prioritize system improvements', participants: ['chora', 'praxis', 'mux'] } },
+                { kind: 'patch_code', assigned_agent: 'praxis', payload: { topic: 'Implement highest-priority system improvement from evolution analysis' } },
+                { kind: 'create_pull_request', assigned_agent: 'mux', payload: { topic: 'Create PR for self-evolution changes' } },
+            ],
+            source: 'trigger',
+        },
+    };
 }

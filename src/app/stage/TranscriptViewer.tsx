@@ -9,6 +9,7 @@ import { AGENTS } from '@/lib/agents';
 import type { AgentId, RoundtableSession, RoundtableTurn } from '@/lib/types';
 import type { TTSState, TTSControls } from './useTTS';
 import { AgentAvatar } from './AgentAvatar';
+import { MarkdownContent } from '@/components/MarkdownContent';
 
 // ─── Agent voice symbols ───
 
@@ -187,9 +188,9 @@ function TurnEntry({
                     </button>
                 )}
             </div>
-            <p className='turn-dialogue text-sm text-zinc-200 leading-relaxed mt-0.5 ml-8 pl-0.5'>
-                {turn.dialogue}
-            </p>
+            <div className='turn-dialogue text-sm text-zinc-200 mt-0.5 ml-8 pl-0.5'>
+                <MarkdownContent>{turn.dialogue}</MarkdownContent>
+            </div>
         </div>
     );
 }
